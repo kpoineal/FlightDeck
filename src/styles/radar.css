@@ -1,0 +1,161 @@
+/* ── FlightDeck Radar ── */
+
+#radarList {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+  width: 100%;
+}
+
+/* ── Radar card (viewport-style) ── */
+.radar-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 160px;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.radar-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+.radar-card.is-selected {
+  border-color: var(--border-active);
+  box-shadow: 0 12px 32px rgba(10, 132, 255, 0.2);
+}
+.radar-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 36px;
+}
+.radar-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+.radar-summary {
+  margin: 0;
+}
+.radar-people,
+.radar-link {
+  margin: 0;
+  font-size: 0.8rem;
+}
+.source-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.source-list li {
+  font-size: 0.8rem;
+}
+.radar-card .card-body {
+  height: 100%;
+  padding: 12px;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+.radar-card .action-row {
+  margin-top: auto;
+}
+
+/* ── Radar minimal rows ── */
+.radar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.radar-row:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
+}
+.radar-row.is-selected {
+  border-color: var(--border-active);
+  box-shadow: 0 8px 24px rgba(10, 132, 255, 0.15);
+}
+.radar-row.expanded {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+.radar-row .severity-select { flex-shrink: 0; }
+.radar-row-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--text);
+}
+.radar-row-summary {
+  flex: 2;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.radar-row-due {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.radar-row-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+.radar-row-detail {
+  display: none;
+  border: 1px solid var(--border-card);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--bg-inset);
+  padding: 16px;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  animation: fadeIn 0.3s ease;
+}
+.radar-row-detail.show {
+  display: flex;
+}
+.radar-row-detail .action-row {
+  margin-top: 8px;
+}
+
+/* ── Minimal (row) density ── */
+#radarList.list--minimal {
+  grid-template-columns: 1fr;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1400px) {
+  #radarList { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  #radarList { grid-template-columns: 1fr; }
+}

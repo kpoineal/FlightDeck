@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <title>FlightDeck</title>
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <link rel="stylesheet" href="styles/layout.css" />
+  <link rel="stylesheet" href="styles/components.css" />
+  <link rel="stylesheet" href="styles/radar.css" />
+  <link rel="stylesheet" href="styles/tracking.css" />
+  <link rel="stylesheet" href="styles/briefing.css" />
+  <link rel="stylesheet" href="styles/search.css" />
+  <link rel="stylesheet" href="styles/modal.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="icon.png" alt="FlightDeck logo" />
+      FLIGHTDECK
+      <span id="versionBadge" class="version-badge"></span>
+    </div>
+    <input id="commandInput" type="hidden" />
+    <div class="search-wrap">
+      <span class="search-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </span>
+      <input id="globalSearch" class="search-input" type="text" placeholder="Search items…" autocomplete="off" />
+      <span class="search-kbd">Ctrl+K</span>
+      <div id="searchResults" class="search-results"></div>
+    </div>
+    <div id="searchOverlay" class="search-overlay"></div>
+    <div class="topbar-tabs">
+      <button class="mode-btn active" data-mode="Radar">Radar</button>
+      <button class="mode-btn" data-mode="Tracking">Tracking</button>
+      <button class="mode-btn" data-mode="Briefings">Briefings</button>
+      <button class="mode-btn" data-mode="History">History</button>
+    </div>
+    <div class="topbar-controls">
+      <button id="themeToggle" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle theme">
+        <svg class="theme-icon sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg class="theme-icon moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <main class="main">
+      <div id="connectBanner" class="connect-banner">
+        <p><strong>Connect:</strong> Requires Node.js, Copilot license, and tenant admin consent for WorkIQ data access.</p>
+        <button id="enableBtn" class="btn">Enable WorkIQ</button>
+      </div>
+
+      <div class="toolbar">
+        <span class="status-pill" id="dashboardStatus">Ready</span>
+        <div class="toolbar-right">
+          <span id="storageSize" class="storage-pill" title="LocalStorage usage"></span>
+          <span id="dashboardUpdatedAt">Updated: --</span>
+          <button id="refreshBtn" class="btn">Refresh</button>
+        </div>
+      </div>
+
+      <section class="kpis">
+        <article class="kpi-card critical">
+          <div class="kpi-label">Critical</div>
+          <div class="kpi-value" id="kpiCritical">—</div>
+          <div class="kpi-sub">Needs action &lt; 24h</div>
+        </article>
+        <article class="kpi-card elevated">
+          <div class="kpi-label">Elevated</div>
+          <div class="kpi-value" id="kpiElevated">—</div>
+          <div class="kpi-sub">This week</div>
+        </article>
+        <article class="kpi-card observe">
+          <div class="kpi-label">Observe</div>
+          <div class="kpi-value" id="kpiMonitor">—</div>
+          <div class="kpi-sub">Watchlist</div>
+        </article>
+      </section>
+
+      <section class="kpi-visuals">
+        <article class="viz-card">
+          <div class="viz-head">
+            <div class="viz-title">Severity Mix</div>
+            <div class="viz-meta" id="kpiScopeLabel">Current View</div>
+          </div>
+          <div class="severity-stack" aria-label="Severity distribution">
+            <span class="stack-segment critical" id="severityBarCritical"></span>
+            <span class="stack-segment elevated" id="severityBarElevated"></span>
+            <span class="stack-segment observe" id="severityBarMonitor"></span>
+          </div>
+          <div class="viz-legend">
+            <span><i class="legend-dot critical"></i>Critical: <strong id="chartCriticalCount">0</strong></span>
+            <span><i class="legend-dot elevated"></i>Elevated: <strong id="chartElevatedCount">0</strong></span>
+            <span><i class="legend-dot observe"></i>Observe: <strong id="chartMonitorCount">0</strong></span>
+          </div>
+        </article>
+
+        <article class="viz-card">
+          <div class="viz-head">
+            <div class="viz-title">Load</div>
+            <div class="viz-total" id="chartTotalItems">0 items</div>
+          </div>
+          <div class="severity-donut-wrap">
+            <div class="severity-donut" id="severityDonut" data-total="0" aria-label="Total classified items"></div>
+            <div class="viz-insight" id="severityInsight">No classified items in current view.</div>
+          </div>
+        </article>
+      </section>
+
+      <section id="viewRadar" class="mode-view active">
+        <div class="cockpit-grid">
+          <article class="panel">
+            <div class="tracking-heading-row">
+              <h2>Radar (Inbound)</h2>
+              <button class="density-toggle" id="radarDensityToggleBtn" title="Switch view">
+                <svg class="density-icon-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="3" x2="15" y2="3"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="13" x2="15" y2="13"/></svg>
+                <svg class="density-icon-grid" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+              </button>
+            </div>
+            <div class="panel-sub">Prioritized signals from email, Teams, meetings, docs</div>
+            <button class="prompt-editor-toggle" id="promptEditorToggle">
+              <span class="chevron">&#9654;</span> Edit Radar Prompt
+            </button>
+            <div class="prompt-editor-body" id="promptEditorBody">
+              <textarea id="radarPromptEditor" spellcheck="false" placeholder="Loading prompt..."></textarea>
+              <div class="prompt-editor-actions">
+                <button class="small-btn primary" id="promptEditorApply">Apply</button>
+                <button class="small-btn" id="promptEditorReset">Reset to Default</button>
+                <span class="prompt-status" id="promptEditorStatus"></span>
+              </div>
+            </div>
+            <div class="list" id="radarList"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="viewTracking" class="mode-view">
+        <div class="add-task-bar">
+          <button class="add-task-toggle" id="addTaskToggle">
+            <svg class="add-task-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>
+            Add Monitored Task
+          </button>
+          <div class="add-task-panel" id="addTaskPanel">
+            <div class="add-task-form">
+              <div class="add-task-row">
+                <div class="add-task-field add-task-field-grow">
+                  <label class="add-task-label" for="customTaskTitle">Title</label>
+                  <input id="customTaskTitle" class="tracking-input" type="text" placeholder="e.g., Customer agreement for Project X" />
+                </div>
+                <div class="add-task-field">
+                  <label class="add-task-label" for="customTaskSeverity">Severity</label>
+                  <select id="customTaskSeverity" class="tracking-select">
+                    <option value="Observe" selected>Observe</option>
+                    <option value="Elevated">Elevated</option>
+                    <option value="Critical">Critical</option>
+                  </select>
+                </div>
+                <div class="add-task-field">
+                  <label class="add-task-label" for="customTaskScheduleType">Schedule</label>
+                  <select id="customTaskScheduleType" class="tracking-select">
+                    <option value="interval">Interval</option>
+                    <option value="weekly">Scheduled</option>
+                    <option value="one-time">One-time</option>
+                  </select>
+                </div>
+                <div class="add-task-field">
+                  <label class="add-task-label" for="customTaskScheduleValue">Interval</label>
+                  <select id="customTaskScheduleValue" class="tracking-select">
+                    <option value="15m">Every 15m</option>
+                    <option value="30m" selected>Every 30m</option>
+                    <option value="1h">Every 1h</option>
+                    <option value="2h">Every 2h</option>
+                    <option value="4h">Every 4h</option>
+                  </select>
+                  <input id="customTaskOneTimeAt" class="tracking-input d-none" type="datetime-local" />
+                </div>
+                <div class="add-task-field d-none" id="customTaskWeeklyPanel">
+                  <label class="add-task-label">Days &amp; Times</label>
+                  <div class="weekly-days-row">
+                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="mon" checked />Mon</label>
+                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="tue" checked />Tue</label>
+                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="wed" checked />Wed</label>
+                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="thu" checked />Thu</label>
+                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="fri" checked />Fri</label>
+                    <label class="weekly-day-label"><input type="checkbox" class="weekly-day-cb" value="sat" />Sat</label>
+                    <label class="weekly-day-label"><input type="checkbox" class="weekly-day-cb" value="sun" />Sun</label>
+                  </div>
+                  <div class="weekly-times-row">
+                    <label class="add-task-label">Times</label>
+                    <div class="weekly-time-slots" id="customTaskTimeSlots">
+                      <div class="weekly-time-slot">
+                        <input type="time" class="tracking-input weekly-time-picker" value="08:00" />
+                      </div>
+                      <div class="weekly-time-slot">
+                        <input type="time" class="tracking-input weekly-time-picker" value="12:00" />
+                        <button type="button" class="weekly-time-remove" title="Remove">&times;</button>
+                      </div>
+                    </div>
+                    <button type="button" class="small-btn weekly-time-add" id="customTaskAddTime">+ Add</button>
+                  </div>
+                </div>
+                <div class="add-task-field add-task-field--end">
+                  <label class="add-task-label add-task-label--inline">
+                    <input id="customTaskNotify" type="checkbox" checked /> Notifications
+                  </label>
+                </div>
+              </div>
+              <div class="add-task-row">
+                <div class="signal-filter signal-filter--flush" id="customTaskSignals">
+                  <span class="signal-filter-label">Signals:</span>
+                  <label class="signal-checkbox active"><input type="checkbox" value="email" checked /><span class="signal-icon">✉️</span><span class="signal-label">Email</span></label>
+                  <label class="signal-checkbox active"><input type="checkbox" value="chat" checked /><span class="signal-icon">💬</span><span class="signal-label">Chat</span></label>
+                  <label class="signal-checkbox active"><input type="checkbox" value="meeting" checked /><span class="signal-icon">📅</span><span class="signal-label">Meetings</span></label>
+                  <label class="signal-checkbox active"><input type="checkbox" value="doc" checked /><span class="signal-icon">📄</span><span class="signal-label">Documents</span></label>
+                </div>
+              </div>
+              <div class="add-task-row">
+                <div class="add-task-field add-task-field-grow">
+                  <label class="add-task-label" for="customTaskContext">Monitoring Context</label>
+                  <textarea id="customTaskContext" class="tracking-textarea" placeholder="What should WorkIQ look for when refreshing this task? (new lines supported)"></textarea>
+                </div>
+              </div>
+              <div class="add-task-actions">
+                <button id="createTaskBtn" class="btn primary">Create Task</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel panel--full">
+          <div class="tracking-heading-row">
+            <h2>Tracked Items</h2>
+            <div class="tracking-header-controls">
+              <button class="density-toggle" id="densityToggleBtn" title="Switch view">
+                <svg class="density-icon-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="3" x2="15" y2="3"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="13" x2="15" y2="13"/></svg>
+                <svg class="density-icon-grid" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="list" id="trackingList"></div>
+        </div>
+      </section>
+
+      <section id="viewBriefings" class="mode-view">
+        <div class="panel panel--full">
+          <h2>Briefings</h2>
+          <div class="panel-sub">Upcoming meetings today; expand one and generate a focused briefing</div>
+          <button class="prompt-editor-toggle" id="briefingPromptEditorToggle">
+            <span class="chevron">&#9654;</span> Edit Briefing Prompt
+          </button>
+          <div class="prompt-editor-body" id="briefingPromptEditorBody">
+            <textarea id="briefingPromptEditor" spellcheck="false" placeholder="Loading prompt..."></textarea>
+            <div class="prompt-editor-actions">
+              <button class="small-btn primary" id="briefingPromptEditorApply">Apply</button>
+              <button class="small-btn" id="briefingPromptEditorReset">Reset to Default</button>
+              <span class="prompt-status" id="briefingPromptEditorStatus"></span>
+            </div>
+          </div>
+          <div id="briefingPane" class="empty">Run refresh to generate a briefing.</div>
+        </div>
+      </section>
+
+      <section id="viewHistory" class="mode-view">
+        <div class="panel panel--full">
+          <h2>History (Audit Trail)</h2>
+          <div class="panel-sub">Recommendations, confirmations, actions, and timestamps</div>
+          <div class="history-list" id="historyList"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="confirmModal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <h3>Confirm Action</h3>
+      <p id="confirmSummary" class="panel-sub">Bulk or high-risk action requires explicit confirmation.</p>
+      <div id="confirmTargets" class="empty"></div>
+      <div class="modal-actions">
+        <button id="confirmCancel" class="small-btn">Cancel</button>
+        <button id="confirmApply" class="small-btn warn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Demo mode (must load before foundation to intercept early) -->
+  <script src="renderer/demo.js"></script>
+
+  <!-- Foundation modules -->
+  <script src="renderer/theme.js"></script>
+  <script src="renderer/constants.js"></script>
+  <script src="renderer/utils.js"></script>
+  <script src="renderer/json-parser.js"></script>
+  <script src="renderer/state.js"></script>
+  <script src="renderer/prompts.js"></script>
+  <script src="renderer/models/tracking.js"></script>
+  <script src="renderer/models/radar.js"></script>
+  <script src="renderer/models/briefing.js"></script>
+  <script src="renderer/monitor-engine.js"></script>
+  <script src="renderer/search.js"></script>
+
+  <!-- Renderers -->
+  <script src="renderer/renderers/kpi.js"></script>
+  <script src="renderer/renderers/actions.js"></script>
+  <script src="renderer/renderers/radar.js"></script>
+  <script src="renderer/renderers/tracking.js"></script>
+  <script src="renderer/renderers/briefing.js"></script>
+  <script src="renderer/renderers/history.js"></script>
+
+  <!-- Events / popout / app entry point (loaded last) -->
+  <script src="renderer/events.js"></script>
+  <script src="renderer/popout.js"></script>
+  <script src="renderer/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+/* ── FlightDeck Briefing ── */
+/* Enhanced prose styles for briefing content within panels and buckets. */
+
+.bucket .card-body {
+  line-height: 1.6;
+}
+
+.bucket .card-body h3 {
+  font-size: 0.95rem;
+  color: var(--text);
+  margin: 12px 0 6px;
+  font-weight: 600;
+}
+
+.bucket .card-body code {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.82rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.bucket .card-body blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 8px 0;
+  padding: 8px 14px;
+  background: var(--bg-inset);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.bucket .card-body pre {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.bucket .card-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.bucket .card-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin: 8px 0;
+}
+
+.bucket .card-body th,
+.bucket .card-body td {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.bucket .card-body th {
+  background: var(--bg-raised);
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

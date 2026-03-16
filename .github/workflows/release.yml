@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.0.2). Must already exist.'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Resolve tag
+        id: tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ inputs.tag }}"
+          } else {
+            $tag = "${{ github.ref_name }}"
+          }
+          $version = $tag -replace '^v', ''
+          "tag=$tag" | Out-File -Append $env:GITHUB_OUTPUT
+          "version=$version" | Out-File -Append $env:GITHUB_OUTPUT
+          Write-Host "Building release for tag: $tag (version: $version)"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify package.json version matches tag
+        shell: pwsh
+        run: |
+          $pkgVersion = (Get-Content package.json | ConvertFrom-Json).version
+          $tagVersion = "${{ steps.tag.outputs.version }}"
+          if ($pkgVersion -ne $tagVersion) {
+            Write-Error "Version mismatch: package.json=$pkgVersion, tag=$tagVersion"
+            exit 1
+          }
+          Write-Host "Version verified: $pkgVersion"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: node --test test/*.test.js
+
+      - name: Build MSI
+        run: npm run dist
+
+      - name: Create GitHub Release with MSI
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ steps.tag.outputs.tag }}"
+          $msi = Get-ChildItem -Path dist -Filter "*.msi" | Select-Object -First 1
+          if (-not $msi) {
+            Write-Error "No MSI found in dist/"
+            exit 1
+          }
+          Write-Host "Uploading artifact: $($msi.FullName)"
+          gh release create $tag $msi.FullName `
+            --title $tag `
+            --generate-notes `
+            --latest
+
+      - name: Verify release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${{ steps.tag.outputs.tag }}"
+          Write-Host "Release ${{ steps.tag.outputs.tag }} created and verified."
