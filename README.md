@@ -1,6 +1,12 @@
 <div align="center">
-  <img src="src/icon.png" alt="FlightDeck Logo" width="120" />
-  <h1>FlightDeck</h1>
+  <p>
+    <img src="src/icon.png" alt="" height="48" />
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/flightdeck-title-dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset="docs/flightdeck-title-light.svg">
+      <img alt="FlightDeck" src="docs/flightdeck-title-dark.svg" height="28">
+    </picture>
+  </p>
   <p><strong>Air traffic control for your Microsoft 365 workload</strong></p>
 
   ![License: TBD](https://img.shields.io/badge/License-TBD-lightgrey)
