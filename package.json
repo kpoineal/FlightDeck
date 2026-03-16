@@ -1,7 +1,7 @@
 {
   "name": "flightdeck",
   "version": "1.0.3",
-  "description": "Air traffic control for your Microsoft 365 workload",
+  "description": "Your personal work-intelligence dashboard",
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",

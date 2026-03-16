@@ -7,7 +7,7 @@
       <img alt="FlightDeck" src="docs/flightdeck-title-dark.svg" height="28">
     </picture>
   </p>
-  <p><strong>Air traffic control for your Microsoft 365 workload</strong></p>
+  <p><strong>Your personal work-intelligence dashboard</strong></p>
 
   ![License: TBD](https://img.shields.io/badge/License-TBD-lightgrey)
   ![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=nodedotjs&logoColor=white)
