@@ -1,0 +1,75 @@
+/* ── FlightDeck Modal & Theme Toggle ── */
+
+/* ── Confirm modal ── */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-overlay);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 99;
+  animation: fadeIn 0.2s ease;
+}
+.modal.show { display: flex; }
+.modal-card {
+  width: min(620px, 100%);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-card);
+  background: var(--bg-surface);
+  backdrop-filter: blur(var(--blur-radius));
+  -webkit-backdrop-filter: blur(var(--blur-radius));
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--shadow);
+  transform: scale(0.95);
+  animation: modalPop 0.3s cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+@keyframes modalPop {
+  to { transform: scale(1); }
+}
+.modal-card h3 { font-size: 1.1rem; font-weight: 600; }
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* ── Theme toggle ── */
+.theme-toggle {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 7px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+  flex-shrink: 0;
+}
+.theme-toggle:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+  background: var(--bg-raised);
+}
+
+/* In dark mode (default), show sun icon (to switch to light) */
+.theme-icon.moon { display: none; }
+.theme-icon.sun { display: block; }
+
+/* In light mode, show moon icon (to switch to dark) */
+html[data-theme="light"] .theme-icon.sun { display: none; }
+html[data-theme="light"] .theme-icon.moon { display: block; }
+
+@media (prefers-color-scheme: light) {
+  html:not([data-theme="dark"]) .theme-icon.sun { display: none; }
+  html:not([data-theme="dark"]) .theme-icon.moon { display: block; }
+}

@@ -1,0 +1,1074 @@
+{
+  "persisted": {
+    "trackingItems": [
+      {
+        "id": "track_aurora_q2_deliverable",
+        "title": "Project Aurora — Q2 Deliverable Review",
+        "severity": "Critical",
+        "sourceType": "Meeting",
+        "dueAt": "2026-03-06T17:00:00.000Z",
+        "owner": "You",
+        "counterparties": ["Jordan Chen", "Alex Rivera", "Casey Nguyen"],
+        "summary": "Q2 deliverable timeline at risk — Jordan Chen flagged two backend dependencies unresolved. Revised milestone deck due by Friday EOD. VP Engineering escalation may be needed if blockers persist past Wednesday.",
+        "reason": "Deliverable deadline is Friday with two critical blockers unresolved and no fallback plan confirmed.",
+        "status": "At Risk",
+        "trackedAt": "2026-02-27T14:22:00.000Z",
+        "monitorPrompt": "Track progress on Project Aurora Q2 deliverables. Watch for updates from Jordan Chen, Alex Rivera, and Casey Nguyen regarding backend dependency resolution, milestone deck revisions, and any escalation signals to VP Engineering.",
+        "evidenceLinks": [
+          {"label": "Jordan Chen — escalation email re: backend blockers", "type": "email", "url": "https://demo.flightdeck.app/email/aurora-escalation-jordan"},
+          {"label": "Aurora Q2 milestone deck (v3 draft)", "type": "doc", "url": "https://demo.flightdeck.app/doc/aurora-q2-milestone-v3"},
+          {"label": "Alex Rivera — Teams thread on dependency resolution", "type": "chat", "url": "https://demo.flightdeck.app/chat/aurora-dependency-thread"},
+          {"label": "Q2 Deliverable Review — meeting recording", "type": "meeting", "url": "https://demo.flightdeck.app/meeting/aurora-q2-review-rec"}
+        ],
+        "monitorEnabled": true,
+        "monitorSignals": ["email", "chat", "meeting", "doc"],
+        "scheduleType": "interval",
+        "scheduleValue": "30m",
+        "oneTimeAt": null,
+        "weeklyDays": ["mon", "tue", "wed", "thu", "fri"],
+        "weeklyTimes": ["08:00", "12:00"],
+        "nextRunAt": "2026-03-02T14:30:00.000Z",
+        "lastRunAt": "2026-03-02T14:00:00.000Z",
+        "lastCheckSignature": "a3f7c9e1b2d4",
+        "lastNotifiedSignature": "a3f7c9e1b2d4",
+        "notifyEnabled": true,
+        "origin": "imported",
+        "updateHistory": [
+          {
+            "timestamp": "2026-03-02T14:00:00.000Z",
+            "changes": ["Status: In Progress → At Risk", "Links: +1 new"],
+            "summary": "Jordan Chen escalated backend dependency blockers via email. Two services remain unresolved and the revised milestone deck (v3) has not been approved. Friday deadline at risk without VP Engineering intervention.",
+            "status": "At Risk",
+            "severity": "Critical",
+            "seen": false,
+            "changesDescription": "Status escalated from In Progress to At Risk after Jordan Chen's email flagged unresolved backend dependencies.",
+            "suggestedNextSteps": ["Reply to Jordan Chen with revised timeline", "Escalate blockers to VP Engineering"],
+            "newLinks": [{"label": "Jordan Chen — escalation email re: backend blockers", "type": "email", "url": "https://demo.flightdeck.app/email/aurora-escalation-jordan"}]
+          },
+          {
+            "timestamp": "2026-03-01T19:30:00.000Z",
+            "changes": ["Summary updated"],
+            "summary": "Alex Rivera confirmed two of four backend dependencies are resolved. Remaining two blocked on infrastructure team sign-off. Casey Nguyen preparing fallback plan.",
+            "status": "In Progress",
+            "severity": "Critical",
+            "seen": false,
+            "changesDescription": "Alex Rivera provided a partial resolution update — two dependencies cleared, two still blocked."
+          },
+          {
+            "timestamp": "2026-02-28T10:15:00.000Z",
+            "changes": ["Initial tracking"],
+            "summary": "Q2 deliverable review meeting identified four backend dependencies. Jordan Chen assigned as DRI for resolution. Milestone deck v2 circulated for review.",
+            "status": "In Progress",
+            "severity": "Elevated",
+            "seen": true
+          }
+        ],
+        "hasNewUpdate": true,
+        "suggestedNextSteps": ["Reply to Jordan Chen with revised timeline", "Escalate blockers to VP Engineering"]
+      },
+      {
+        "id": "track_meridian_contract_renewal",
+        "title": "Meridian Partners — Contract Renewal",
+        "severity": "Elevated",
+        "sourceType": "Email",
+        "dueAt": "2026-03-13T23:59:00.000Z",
+        "owner": "You",
+        "counterparties": ["Sam Patel", "Riley Thompson"],
+        "summary": "Contract renewal terms revised after Sam Patel pushed back on SLA language in Section 4.2. Legal review in progress — Riley Thompson expects redline by Wednesday. Original deadline was March 10, extended to March 13.",
+        "reason": "Renewal deadline extended but legal review still pending. Delay risks Q2 billing cycle alignment.",
+        "status": "Under Review",
+        "trackedAt": "2026-02-25T09:00:00.000Z",
+        "monitorPrompt": "Monitor Meridian Partners contract renewal. Track email and document updates from Sam Patel and Riley Thompson regarding SLA revisions, legal redlines, and final approval.",
+        "evidenceLinks": [
+          {"label": "Sam Patel — SLA pushback email", "type": "email", "url": "https://demo.flightdeck.app/email/meridian-sla-pushback"},
+          {"label": "Meridian renewal contract (redline v2)", "type": "doc", "url": "https://demo.flightdeck.app/doc/meridian-contract-redline-v2"},
+          {"label": "Riley Thompson — legal review status in Teams", "type": "chat", "url": "https://demo.flightdeck.app/chat/meridian-legal-review"}
+        ],
+        "monitorEnabled": true,
+        "monitorSignals": ["email", "chat", "doc"],
+        "scheduleType": "weekly",
+        "scheduleValue": "30m",
+        "oneTimeAt": null,
+        "weeklyDays": ["mon", "wed", "fri"],
+        "weeklyTimes": ["09:00", "14:00"],
+        "nextRunAt": "2026-03-02T14:00:00.000Z",
+        "lastRunAt": "2026-03-02T09:00:00.000Z",
+        "lastCheckSignature": "b8e2d4f6a1c3",
+        "lastNotifiedSignature": null,
+        "notifyEnabled": true,
+        "origin": "imported",
+        "updateHistory": [
+          {
+            "timestamp": "2026-03-02T09:00:00.000Z",
+            "changes": ["Status: Negotiation → Under Review", "Links: +1 new"],
+            "summary": "Riley Thompson confirmed legal review is underway. Redline v2 expected by Wednesday. Sam Patel agreed to extended deadline of March 13.",
+            "status": "Under Review",
+            "severity": "Elevated",
+            "seen": false,
+            "changesDescription": "Status moved to Under Review after legal began redline process. Deadline extended from March 10 to March 13.",
+            "suggestedNextSteps": ["Send updated terms to Sam Patel"],
+            "newLinks": [{"label": "Riley Thompson — legal review status in Teams", "type": "chat", "url": "https://demo.flightdeck.app/chat/meridian-legal-review"}]
+          },
+          {
+            "timestamp": "2026-02-28T14:30:00.000Z",
+            "changes": ["Initial tracking"],
+            "summary": "Sam Patel raised concerns about SLA language in Section 4.2. Sent revised terms for internal legal review.",
+            "status": "Negotiation",
+            "severity": "Elevated",
+            "seen": true
+          }
+        ],
+        "hasNewUpdate": true,
+        "suggestedNextSteps": ["Send updated terms to Sam Patel"]
+      },
+      {
+        "id": "track_keystone_arch_decision",
+        "title": "Initiative Keystone — Architecture Decision",
+        "severity": "Elevated",
+        "sourceType": "Meeting",
+        "dueAt": "2026-03-09T17:00:00.000Z",
+        "owner": "Morgan Kelly",
+        "counterparties": ["Dakota Kim", "Avery Brooks", "Quinn Foster"],
+        "summary": "Architecture review board met Friday — two competing proposals on the table (event-driven vs. request-reply). Morgan Kelly collecting final input from platform team before Monday decision. Dakota Kim's performance benchmarks expected today.",
+        "reason": "Decision deadline is next Monday. Both proposals have trade-offs that affect Q3 roadmap sequencing.",
+        "status": "Awaiting Decision",
+        "trackedAt": "2026-02-24T11:00:00.000Z",
+        "monitorPrompt": "Track Initiative Keystone architecture decision. Monitor for updates from Morgan Kelly, Dakota Kim, Avery Brooks, and Quinn Foster regarding architecture proposals, benchmark results, and final decision.",
+        "evidenceLinks": [
+          {"label": "Architecture review board — meeting notes", "type": "meeting", "url": "https://demo.flightdeck.app/meeting/keystone-arch-review"},
+          {"label": "Dakota Kim — benchmark comparison doc", "type": "doc", "url": "https://demo.flightdeck.app/doc/keystone-benchmark-comparison"},
+          {"label": "Morgan Kelly — decision timeline email", "type": "email", "url": "https://demo.flightdeck.app/email/keystone-decision-timeline"},
+          {"label": "Quinn Foster — platform team constraints chat", "type": "chat", "url": "https://demo.flightdeck.app/chat/keystone-platform-constraints"}
+        ],
+        "monitorEnabled": true,
+        "monitorSignals": ["email", "chat", "meeting", "doc"],
+        "scheduleType": "interval",
+        "scheduleValue": "1h",
+        "oneTimeAt": null,
+        "weeklyDays": ["mon", "tue", "wed", "thu", "fri"],
+        "weeklyTimes": ["08:00", "12:00"],
+        "nextRunAt": "2026-03-02T15:00:00.000Z",
+        "lastRunAt": "2026-03-02T14:00:00.000Z",
+        "lastCheckSignature": "c5d1e7f3a9b2",
+        "lastNotifiedSignature": "c5d1e7f3a9b2",
+        "notifyEnabled": true,
+        "origin": "imported",
+        "updateHistory": [
+          {
+            "timestamp": "2026-03-02T14:00:00.000Z",
+            "changes": ["Summary updated"],
+            "summary": "No new signals since last check. Morgan Kelly's decision still expected by Monday. Dakota Kim's benchmarks not yet shared.",
+            "status": "Awaiting Decision",
+            "severity": "Elevated",
+            "seen": true
+          },
+          {
+            "timestamp": "2026-03-01T11:00:00.000Z",
+            "changes": ["Links: +1 new"],
+            "summary": "Quinn Foster raised platform team constraints in Teams chat — memory limits may rule out event-driven approach without infrastructure upgrade.",
+            "status": "Awaiting Decision",
+            "severity": "Elevated",
+            "seen": true,
+            "newLinks": [{"label": "Quinn Foster — platform team constraints chat", "type": "chat", "url": "https://demo.flightdeck.app/chat/keystone-platform-constraints"}]
+          },
+          {
+            "timestamp": "2026-02-28T16:00:00.000Z",
+            "changes": ["Status: Under Discussion → Awaiting Decision"],
+            "summary": "Architecture review board narrowed to two proposals. Morgan Kelly to make final call after collecting platform team input.",
+            "status": "Awaiting Decision",
+            "severity": "Elevated",
+            "seen": true,
+            "changesDescription": "Status changed after review board narrowed options to two proposals."
+          },
+          {
+            "timestamp": "2026-02-24T11:00:00.000Z",
+            "changes": ["Initial tracking"],
+            "summary": "Initiative Keystone architecture decision initiated. Three proposals under consideration. Review board scheduled for Friday.",
+            "status": "Under Discussion",
+            "severity": "Observe",
+            "seen": true
+          }
+        ],
+        "hasNewUpdate": false,
+        "suggestedNextSteps": []
+      },
+      {
+        "id": "track_contoso_escalation_4471",
+        "title": "Contoso Ltd — Support Escalation #4471",
+        "severity": "Critical",
+        "sourceType": "Email",
+        "dueAt": "2026-03-03T17:00:00.000Z",
+        "owner": "You",
+        "counterparties": ["Taylor Okafor", "Casey Nguyen"],
+        "summary": "P1 support ticket escalated after Contoso's production environment hit data sync failures. Casey Nguyen applied hotfix patch Saturday — monitoring for recurrence. Taylor Okafor coordinating customer comms.",
+        "reason": "Production-impacting issue with SLA clock running. Customer exec visibility makes this high-stakes.",
+        "status": "Escalated",
+        "trackedAt": "2026-02-28T22:15:00.000Z",
+        "monitorPrompt": "Monitor Contoso Ltd support escalation #4471. Track production data sync failure status, hotfix patch stability from Casey Nguyen, and customer communications from Taylor Okafor.",
+        "evidenceLinks": [
+          {"label": "Contoso escalation — original P1 ticket email", "type": "email", "url": "https://demo.flightdeck.app/email/contoso-p1-escalation"},
+          {"label": "Casey Nguyen — hotfix deployment confirmation", "type": "chat", "url": "https://demo.flightdeck.app/chat/contoso-hotfix-deploy"},
+          {"label": "Taylor Okafor — customer status update email", "type": "email", "url": "https://demo.flightdeck.app/email/contoso-customer-update"}
+        ],
+        "monitorEnabled": true,
+        "monitorSignals": ["email", "chat"],
+        "scheduleType": "interval",
+        "scheduleValue": "15m",
+        "oneTimeAt": null,
+        "weeklyDays": ["mon", "tue", "wed", "thu", "fri"],
+        "weeklyTimes": ["08:00", "12:00"],
+        "nextRunAt": "2026-03-02T14:15:00.000Z",
+        "lastRunAt": "2026-03-02T14:00:00.000Z",
+        "lastCheckSignature": "d2a8b6c4e0f5",
+        "lastNotifiedSignature": "d2a8b6c4e0f5",
+        "notifyEnabled": true,
+        "origin": "imported",
+        "updateHistory": [
+          {
+            "timestamp": "2026-03-01T10:00:00.000Z",
+            "changes": ["Status: Investigating → Escalated", "Links: +1 new"],
+            "summary": "Casey Nguyen deployed hotfix Saturday morning. Initial telemetry shows sync failures resolved but monitoring window is 48 hours. Taylor Okafor sent interim status to Contoso VP.",
+            "status": "Escalated",
+            "severity": "Critical",
+            "seen": true,
+            "changesDescription": "Hotfix deployed; status upgraded to Escalated pending 48-hour monitoring window.",
+            "newLinks": [{"label": "Casey Nguyen — hotfix deployment confirmation", "type": "chat", "url": "https://demo.flightdeck.app/chat/contoso-hotfix-deploy"}]
+          },
+          {
+            "timestamp": "2026-02-28T22:15:00.000Z",
+            "changes": ["Initial tracking"],
+            "summary": "P1 support ticket received — Contoso production environment experiencing intermittent data sync failures affecting 200+ users.",
+            "status": "Investigating",
+            "severity": "Critical",
+            "seen": true
+          }
+        ],
+        "hasNewUpdate": false,
+        "suggestedNextSteps": []
+      },
+      {
+        "id": "track_horizon_budget_approval",
+        "title": "Program Horizon — Budget Approval",
+        "severity": "Observe",
+        "sourceType": "Doc",
+        "dueAt": "2026-03-20T17:00:00.000Z",
+        "owner": "Taylor Okafor",
+        "counterparties": ["Avery Brooks", "Morgan Kelly"],
+        "summary": "Budget proposal submitted to finance committee. Taylor Okafor confirmed review is on the March 16 agenda. No blockers identified — awaiting standard approval cycle.",
+        "reason": "Budget approval is on track with standard timeline. No escalation triggers detected.",
+        "status": "Submitted",
+        "trackedAt": "2026-02-26T10:00:00.000Z",
+        "monitorPrompt": "Track Program Horizon budget approval. Watch for updates from Taylor Okafor and Avery Brooks regarding finance committee review, approval status, and any budget revision requests.",
+        "evidenceLinks": [
+          {"label": "Program Horizon — budget proposal (final)", "type": "doc", "url": "https://demo.flightdeck.app/doc/horizon-budget-proposal"},
+          {"label": "Taylor Okafor — submission confirmation email", "type": "email", "url": "https://demo.flightdeck.app/email/horizon-budget-submitted"}
+        ],
+        "monitorEnabled": false,
+        "monitorSignals": ["email", "doc"],
+        "scheduleType": "weekly",
+        "scheduleValue": "30m",
+        "oneTimeAt": null,
+        "weeklyDays": ["mon", "tue", "wed", "thu", "fri"],
+        "weeklyTimes": ["08:00"],
+        "nextRunAt": null,
+        "lastRunAt": "2026-02-28T08:00:00.000Z",
+        "lastCheckSignature": "e9f3a7b1c8d6",
+        "lastNotifiedSignature": null,
+        "notifyEnabled": true,
+        "origin": "imported",
+        "updateHistory": [
+          {
+            "timestamp": "2026-02-26T10:00:00.000Z",
+            "changes": ["Initial tracking"],
+            "summary": "Budget proposal submitted to finance committee. Review scheduled for March 16 agenda.",
+            "status": "Submitted",
+            "severity": "Observe",
+            "seen": true
+          }
+        ],
+        "hasNewUpdate": false,
+        "suggestedNextSteps": []
+      },
+      {
+        "id": "track_northwind_data_migration",
+        "title": "Northwind Traders — Data Migration",
+        "severity": "Elevated",
+        "sourceType": "Custom",
+        "dueAt": "2026-03-14T17:00:00.000Z",
+        "owner": "You",
+        "counterparties": ["Dakota Kim", "Riley Thompson"],
+        "summary": "Manual tracking item for Northwind Traders data migration project. Schema mapping phase begins this week — Dakota Kim leading ETL pipeline setup. Riley Thompson coordinating Northwind's IT for source system access.",
+        "reason": "Migration window is tight with hard cutover date March 14. Schema mapping must complete by March 7 to stay on track.",
+        "status": "Planning",
+        "trackedAt": "2026-03-01T16:00:00.000Z",
+        "monitorPrompt": "Monitor Northwind Traders data migration. Track schema mapping progress with Dakota Kim, source system access from Riley Thompson, and any blockers to the March 14 cutover date.",
+        "evidenceLinks": [
+          {"label": "Northwind migration — project plan", "type": "doc", "url": "https://demo.flightdeck.app/doc/northwind-migration-plan"},
+          {"label": "Dakota Kim — ETL pipeline design doc", "type": "doc", "url": "https://demo.flightdeck.app/doc/northwind-etl-design"}
+        ],
+        "monitorEnabled": true,
+        "monitorSignals": ["email", "chat", "meeting", "doc"],
+        "scheduleType": "one-time",
+        "scheduleValue": "30m",
+        "oneTimeAt": "2026-03-07T09:00:00.000Z",
+        "weeklyDays": ["mon", "tue", "wed", "thu", "fri"],
+        "weeklyTimes": ["08:00", "12:00"],
+        "nextRunAt": "2026-03-07T09:00:00.000Z",
+        "lastRunAt": null,
+        "lastCheckSignature": null,
+        "lastNotifiedSignature": null,
+        "notifyEnabled": true,
+        "origin": "custom",
+        "updateHistory": [],
+        "hasNewUpdate": false,
+        "suggestedNextSteps": []
+      }
+    ],
+    "briefingsByMeetingId": {
+      "__day_briefing__": {
+        "headline": "Busy day: 4 meetings, 2 Critical items need attention",
+        "topPriorities": [
+          "Resolve Project Aurora backend blockers before Friday deadline — reply to Jordan Chen with revised timeline",
+          "Monitor Contoso Ltd escalation #4471 — 48-hour hotfix monitoring window closes tomorrow",
+          "Prepare for Initiative Keystone architecture review — Dakota Kim's benchmarks expected today",
+          "Send updated contract terms to Sam Patel for Meridian Partners renewal"
+        ],
+        "meetingsRequiringPrep": [
+          {
+            "title": "Project Aurora — Sprint Review",
+            "startAt": "2026-03-02T15:30:00.000Z",
+            "whyPrepNeeded": "Q2 deliverable timeline is at risk — need to present revised milestones and escalation plan to stakeholders."
+          },
+          {
+            "title": "Initiative Keystone — Architecture Decision Sync",
+            "startAt": "2026-03-02T18:00:00.000Z",
+            "whyPrepNeeded": "Morgan Kelly expects final input before Monday decision. Review both proposals and platform constraints raised by Quinn Foster."
+          }
+        ],
+        "atRiskItems": [
+          {
+            "title": "Project Aurora — Q2 Deliverable Review",
+            "severity": "Critical",
+            "risk": "Friday deadline with two unresolved backend dependencies. VP Engineering escalation may be needed."
+          },
+          {
+            "title": "Contoso Ltd — Support Escalation #4471",
+            "severity": "Critical",
+            "risk": "Production hotfix deployed Saturday — 48-hour monitoring window closes tomorrow. Recurrence would trigger SLA breach."
+          }
+        ],
+        "suggestedTimeBlocks": [
+          {
+            "time": "8:00 – 8:30 AM",
+            "activity": "Review Contoso escalation telemetry",
+            "rationale": "Hotfix monitoring window is critical — check overnight sync data before morning meetings."
+          },
+          {
+            "time": "8:30 – 9:00 AM",
+            "activity": "Draft response to Jordan Chen on Aurora timeline",
+            "rationale": "Unblock the Q2 deliverable discussion before the sprint review meeting."
+          },
+          {
+            "time": "12:00 – 12:30 PM",
+            "activity": "Review Dakota Kim's architecture benchmarks",
+            "rationale": "Benchmarks expected this morning — review before the 1:00 PM Keystone sync."
+          },
+          {
+            "time": "3:30 – 4:00 PM",
+            "activity": "Prepare Meridian Partners contract update for Sam Patel",
+            "rationale": "Legal redline expected Wednesday — get ahead by preparing your response to SLA concerns."
+          }
+        ],
+        "todayFollowUps": [
+          "Reply to Jordan Chen with revised Project Aurora timeline and escalation options",
+          "Check Contoso production telemetry for data sync recurrence after Saturday hotfix",
+          "Follow up with Dakota Kim on architecture benchmark results for Initiative Keystone"
+        ],
+        "sources": [
+          {"label": "Jordan Chen — Aurora escalation email", "type": "email", "url": "https://demo.flightdeck.app/email/aurora-escalation-jordan"},
+          {"label": "Casey Nguyen — Contoso hotfix deployment", "type": "chat", "url": "https://demo.flightdeck.app/chat/contoso-hotfix-deploy"},
+          {"label": "Morgan Kelly — Keystone decision timeline", "type": "email", "url": "https://demo.flightdeck.app/email/keystone-decision-timeline"},
+          {"label": "Sam Patel — Meridian SLA pushback", "type": "email", "url": "https://demo.flightdeck.app/email/meridian-sla-pushback"}
+        ],
+        "generatedAt": "2026-03-02T12:00:00.000Z"
+      },
+      "mtg_aurora_sprint_review": {
+        "meetingId": "mtg_aurora_sprint_review",
+        "headline": "Sprint review amid Q2 deliverable risk — two backend blockers unresolved, Friday deadline looming",
+        "upcomingMeeting": {
+          "id": "mtg_aurora_sprint_review",
+          "title": "Project Aurora — Sprint Review",
+          "startAt": "2026-03-02T15:30:00.000Z",
+          "organizer": "Alex Rivera",
+          "joinUrl": "https://demo.flightdeck.app/meeting/aurora-sprint-review-join"
+        },
+        "bullets": [
+          "Two of four backend dependencies remain unresolved — infrastructure team sign-off pending",
+          "Jordan Chen escalated blockers via email; VP Engineering intervention may be needed",
+          "Casey Nguyen preparing fallback plan for delayed dependencies",
+          "Milestone deck v3 draft circulated but not yet approved"
+        ],
+        "keyUpdates": [
+          "Alex Rivera confirmed 2/4 backend dependencies resolved as of Saturday",
+          "Jordan Chen sent escalation email flagging remaining blockers to leadership",
+          "Milestone deck v3 uploaded to SharePoint — pending stakeholder review",
+          "Casey Nguyen's fallback plan covers 2-week delay scenario"
+        ],
+        "decisionsNeeded": [
+          "Approve revised Q2 milestone timeline or escalate to VP Engineering",
+          "Accept Casey Nguyen's fallback plan or push for accelerated infrastructure sign-off"
+        ],
+        "topRisks": [
+          "Friday deadline missed if infrastructure team doesn't sign off by Wednesday",
+          "Stakeholder confidence erosion if milestone deck v3 requires further revisions"
+        ],
+        "talkTrack": [
+          "Open with status: 2/4 dependencies resolved, 2 pending infrastructure sign-off — here's what changed since last sprint",
+          "Present the two paths: accelerated sign-off (preferred) vs. Casey's 2-week fallback plan",
+          "Ask for explicit go/no-go on VP Engineering escalation — we need a decision today",
+          "Close with revised timeline commit and next check-in cadence"
+        ],
+        "todayPlan": ["Get stakeholder alignment on escalation path and revised timeline by end of sprint review"],
+        "todayFollowUps": [
+          "Send revised timeline to Jordan Chen within 1 hour of meeting",
+          "Update milestone deck v3 with decisions from this review"
+        ],
+        "sources": [
+          {"label": "Jordan Chen — escalation email", "type": "email", "url": "https://demo.flightdeck.app/email/aurora-escalation-jordan"},
+          {"label": "Aurora Q2 milestone deck v3", "type": "doc", "url": "https://demo.flightdeck.app/doc/aurora-q2-milestone-v3"},
+          {"label": "Alex Rivera — dependency resolution thread", "type": "chat", "url": "https://demo.flightdeck.app/chat/aurora-dependency-thread"},
+          {"label": "Previous sprint review recording", "type": "meeting", "url": "https://demo.flightdeck.app/meeting/aurora-q2-review-rec"}
+        ],
+        "generatedAt": "2026-03-02T13:00:00.000Z"
+      },
+      "mtg_keystone_arch_sync": {
+        "meetingId": "mtg_keystone_arch_sync",
+        "headline": "Architecture decision sync — event-driven vs. request-reply, platform constraints may force the hand",
+        "upcomingMeeting": {
+          "id": "mtg_keystone_arch_sync",
+          "title": "Initiative Keystone — Architecture Decision Sync",
+          "startAt": "2026-03-02T18:00:00.000Z",
+          "organizer": "Morgan Kelly",
+          "joinUrl": "https://demo.flightdeck.app/meeting/keystone-arch-sync-join"
+        },
+        "bullets": [
+          "Two competing proposals: event-driven (Avery Brooks) vs. request-reply (Dakota Kim)",
+          "Quinn Foster raised memory limits that may rule out event-driven without infrastructure upgrade",
+          "Morgan Kelly collecting final input before Monday decision deadline",
+          "Dakota Kim's performance benchmarks expected before this meeting"
+        ],
+        "keyUpdates": [
+          "Quinn Foster flagged platform memory constraints in Teams chat — event-driven approach needs 3x current allocation",
+          "Avery Brooks submitted revised event-driven proposal with reduced memory footprint",
+          "Dakota Kim's benchmark comparison doc uploaded but results not yet shared with full team",
+          "Morgan Kelly confirmed Monday as hard deadline for architecture decision",
+          "Infrastructure team capacity for potential upgrade assessed at 4-6 weeks lead time"
+        ],
+        "decisionsNeeded": [
+          "Choose between event-driven (higher throughput, higher infra cost) and request-reply (simpler, fits current platform)",
+          "Determine if infrastructure upgrade budget is available for event-driven approach"
+        ],
+        "topRisks": [
+          "Choosing event-driven without infrastructure upgrade could cause production stability issues in Q3",
+          "Further delays in architecture decision push Q3 roadmap sequencing past the planning window"
+        ],
+        "talkTrack": [
+          "Start with Dakota Kim's benchmark results — let the data frame the discussion",
+          "Present Quinn Foster's platform constraints as the key decision factor",
+          "Walk through the infrastructure upgrade timeline and cost if event-driven is selected",
+          "Push for a conditional decision: event-driven IF infrastructure budget approved by March 9, otherwise request-reply"
+        ],
+        "todayPlan": ["Align on architecture direction and identify any remaining blockers before Morgan Kelly's Monday decision"],
+        "todayFollowUps": [
+          "Share meeting notes with architecture review board",
+          "Follow up with infrastructure team on upgrade timeline if event-driven is selected"
+        ],
+        "sources": [
+          {"label": "Architecture review board notes", "type": "meeting", "url": "https://demo.flightdeck.app/meeting/keystone-arch-review"},
+          {"label": "Dakota Kim — benchmark comparison", "type": "doc", "url": "https://demo.flightdeck.app/doc/keystone-benchmark-comparison"},
+          {"label": "Quinn Foster — platform constraints", "type": "chat", "url": "https://demo.flightdeck.app/chat/keystone-platform-constraints"},
+          {"label": "Morgan Kelly — decision timeline", "type": "email", "url": "https://demo.flightdeck.app/email/keystone-decision-timeline"}
+        ],
+        "generatedAt": "2026-03-02T13:30:00.000Z"
+      }
+    },
+    "briefingSeenAt": {
+      "mtg_aurora_sprint_review": "2026-03-02T13:15:00.000Z"
+    },
+    "history": [
+      {
+        "id": "h_1709384400_a1b2c",
+        "at": "2026-03-02T14:00:00.000Z",
+        "kind": "scan",
+        "summary": "Meaningful change detected: Project Aurora — Q2 Deliverable Review",
+        "payload": {
+          "itemId": "track_aurora_q2_deliverable",
+          "newLinks": [{"label": "Jordan Chen — escalation email re: backend blockers", "type": "email", "url": "https://demo.flightdeck.app/email/aurora-escalation-jordan"}],
+          "changesDescription": "Status escalated from In Progress to At Risk"
+        }
+      },
+      {
+        "id": "h_1709382600_b3c4d",
+        "at": "2026-03-02T13:30:00.000Z",
+        "kind": "recommendation",
+        "summary": "Briefing generation requested for: Initiative Keystone — Architecture Decision Sync",
+        "payload": {"meetingId": "mtg_keystone_arch_sync"}
+      },
+      {
+        "id": "h_1709381700_c5d6e",
+        "at": "2026-03-02T13:15:00.000Z",
+        "kind": "scan",
+        "summary": "Briefing generated for: Project Aurora — Sprint Review",
+        "payload": {"meetingId": "mtg_aurora_sprint_review"}
+      },
+      {
+        "id": "h_1709380800_d7e8f",
+        "at": "2026-03-02T13:00:00.000Z",
+        "kind": "recommendation",
+        "summary": "Briefing generation requested for: Project Aurora — Sprint Review",
+        "payload": {"meetingId": "mtg_aurora_sprint_review"}
+      },
+      {
+        "id": "h_1709377200_e9f0a",
+        "at": "2026-03-02T12:00:00.000Z",
+        "kind": "scan",
+        "summary": "Day briefing generated.",
+        "payload": {}
+      },
+      {
+        "id": "h_1709376300_f1a2b",
+        "at": "2026-03-02T11:45:00.000Z",
+        "kind": "recommendation",
+        "summary": "Day briefing generation requested",
+        "payload": {}
+      },
+      {
+        "id": "h_1709373600_a3b4c",
+        "at": "2026-03-02T11:00:00.000Z",
+        "kind": "scan",
+        "summary": "No meaningful change: Contoso Ltd — Support Escalation #4471",
+        "payload": {"itemId": "track_contoso_escalation_4471"}
+      },
+      {
+        "id": "h_1709370000_b5c6d",
+        "at": "2026-03-02T10:00:00.000Z",
+        "kind": "scan",
+        "summary": "Meaningful change detected: Meridian Partners — Contract Renewal",
+        "payload": {
+          "itemId": "track_meridian_contract_renewal",
+          "newLinks": [{"label": "Riley Thompson — legal review status in Teams", "type": "chat", "url": "https://demo.flightdeck.app/chat/meridian-legal-review"}]
+        }
+      },
+      {
+        "id": "h_1709366400_c7d8e",
+        "at": "2026-03-02T09:00:00.000Z",
+        "kind": "scan",
+        "summary": "No meaningful change: Initiative Keystone — Architecture Decision",
+        "payload": {"itemId": "track_keystone_arch_decision"}
+      },
+      {
+        "id": "h_1709362800_d9e0f",
+        "at": "2026-03-02T08:00:00.000Z",
+        "kind": "startup",
+        "summary": "FlightDeck started — 6 tracked items, 2 Critical, 3 Elevated, 1 Observe",
+        "payload": {}
+      },
+      {
+        "id": "h_1709359200_e1f2a",
+        "at": "2026-03-02T07:00:00.000Z",
+        "kind": "connect",
+        "summary": "WorkIQ connectivity enabled",
+        "payload": {}
+      },
+      {
+        "id": "h_1709308800_f3a4b",
+        "at": "2026-03-01T17:00:00.000Z",
+        "kind": "scan",
+        "summary": "Meaningful change detected: Project Aurora — Q2 Deliverable Review",
+        "payload": {
+          "itemId": "track_aurora_q2_deliverable",
+          "changesDescription": "Alex Rivera confirmed partial resolution — 2 of 4 dependencies cleared"
+        }
+      },
+      {
+        "id": "h_1709305200_a5b6c",
+        "at": "2026-03-01T16:00:00.000Z",
+        "kind": "confirmation",
+        "summary": "User confirmed action: Track Northwind Traders — Data Migration",
+        "payload": {"actionId": "track_northwind_data_migration"}
+      },
+      {
+        "id": "h_1709301600_b7c8d",
+        "at": "2026-03-01T15:00:00.000Z",
+        "kind": "scan",
+        "summary": "Meaningful change detected: Initiative Keystone — Architecture Decision",
+        "payload": {
+          "itemId": "track_keystone_arch_decision",
+          "newLinks": [{"label": "Quinn Foster — platform team constraints chat", "type": "chat", "url": "https://demo.flightdeck.app/chat/keystone-platform-constraints"}]
+        }
+      },
+      {
+        "id": "h_1709298000_c9d0e",
+        "at": "2026-03-01T14:00:00.000Z",
+        "kind": "failure",
+        "summary": "Task monitor failed for Program Horizon — Budget Approval: WorkIQ timeout after 30s",
+        "payload": {"itemId": "track_horizon_budget_approval"}
+      },
+      {
+        "id": "h_1709290800_d1e2f",
+        "at": "2026-03-01T12:00:00.000Z",
+        "kind": "scan",
+        "summary": "No meaningful change: Meridian Partners — Contract Renewal",
+        "payload": {"itemId": "track_meridian_contract_renewal"}
+      },
+      {
+        "id": "h_1709280000_e3f4a",
+        "at": "2026-03-01T09:00:00.000Z",
+        "kind": "startup",
+        "summary": "FlightDeck started — 5 tracked items, 2 Critical, 2 Elevated, 1 Observe",
+        "payload": {}
+      },
+      {
+        "id": "h_1709276400_f5a6b",
+        "at": "2026-03-01T08:00:00.000Z",
+        "kind": "connect",
+        "summary": "WorkIQ connectivity enabled",
+        "payload": {}
+      }
+    ],
+    "connected": true,
+    "trackingDensity": "full",
+    "radarDensity": "full"
+  },
+  "responses": {
+    "radar": {
+      "generatedAt": "2026-03-02T14:00:00.000Z",
+      "kpis": {"critical": 3, "elevated": 4, "observe": 3},
+      "radarItems": [
+        {
+          "id": "radar_aurora_budget_overrun",
+          "title": "Project Aurora — Budget Overrun Warning",
+          "severity": "Critical",
+          "sourceType": "Email",
+          "dueAt": "2026-03-04T17:00:00.000Z",
+          "owner": "You",
+          "counterparties": ["Alex Rivera", "Avery Brooks"],
+          "summary": "Finance flagged Project Aurora Q2 spend at 127% of approved budget. Alex Rivera requesting emergency reallocation approval by Wednesday. Avery Brooks preparing cost reduction options.",
+          "reason": "Budget overrun exceeds 25% threshold requiring VP-level approval. Wednesday deadline for reallocation request.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Finance alert — Aurora Q2 budget overrun", "type": "email", "url": "https://demo.flightdeck.app/email/aurora-budget-overrun"},
+            {"label": "Alex Rivera — reallocation request draft", "type": "doc", "url": "https://demo.flightdeck.app/doc/aurora-budget-reallocation"}
+          ],
+          "suggestedNextSteps": ["Review Avery Brooks' cost reduction options before Wednesday", "Send budget justification to VP Engineering"]
+        },
+        {
+          "id": "radar_contoso_sla_breach_risk",
+          "title": "Contoso Ltd — SLA Breach Risk (72-hour window)",
+          "severity": "Critical",
+          "sourceType": "Chat",
+          "dueAt": "2026-03-03T22:00:00.000Z",
+          "owner": "You",
+          "counterparties": ["Taylor Okafor", "Casey Nguyen"],
+          "summary": "Contoso SLA breach clock hits 72 hours tomorrow at 10 PM. Casey Nguyen's hotfix holding but secondary sync queue showing elevated error rates. Taylor Okafor flagged in Teams.",
+          "reason": "SLA breach imminent within 24 hours if secondary sync queue issues are not resolved.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Taylor Okafor — SLA breach risk alert", "type": "chat", "url": "https://demo.flightdeck.app/chat/contoso-sla-breach-risk"},
+            {"label": "Contoso sync queue monitoring dashboard", "type": "doc", "url": "https://demo.flightdeck.app/doc/contoso-sync-monitoring"}
+          ],
+          "suggestedNextSteps": ["Escalate secondary sync queue issue to Casey Nguyen immediately"]
+        },
+        {
+          "id": "radar_fabrikam_partnership",
+          "title": "Fabrikam Inc — Partnership Proposal Review",
+          "severity": "Critical",
+          "sourceType": "Meeting",
+          "dueAt": "2026-03-05T17:00:00.000Z",
+          "owner": "You",
+          "counterparties": ["Quinn Foster", "Sam Patel"],
+          "summary": "Fabrikam sent revised partnership terms after Friday's call. Quinn Foster flagged non-compete clause concerns. Sam Patel scheduled legal review for Thursday. Response expected by end of week.",
+          "reason": "Partnership terms include non-compete clause that could conflict with Meridian Partners agreement. Deadline Friday.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Fabrikam — revised partnership proposal", "type": "doc", "url": "https://demo.flightdeck.app/doc/fabrikam-partnership-v2"},
+            {"label": "Quinn Foster — non-compete concerns email", "type": "email", "url": "https://demo.flightdeck.app/email/fabrikam-noncompete-flag"},
+            {"label": "Friday partnership call recording", "type": "meeting", "url": "https://demo.flightdeck.app/meeting/fabrikam-partnership-call"}
+          ],
+          "suggestedNextSteps": ["Review non-compete clause with legal before Thursday", "Compare terms against Meridian Partners agreement"]
+        },
+        {
+          "id": "radar_summit_launch_delay",
+          "title": "Operation Summit — Launch Delay Risk",
+          "severity": "Elevated",
+          "sourceType": "Chat",
+          "dueAt": "2026-03-10T17:00:00.000Z",
+          "owner": "Riley Thompson",
+          "counterparties": ["Riley Thompson", "Dakota Kim"],
+          "summary": "Operation Summit launch timeline slipping. Riley Thompson reported QA discovered 3 P2 bugs in staging. Dakota Kim estimating 4-day fix cycle. Launch may push from March 10 to March 14.",
+          "reason": "QA bugs in staging threaten launch date. Fix cycle estimate overlaps with original launch window.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Riley Thompson — QA bug report in Teams", "type": "chat", "url": "https://demo.flightdeck.app/chat/summit-qa-bugs"},
+            {"label": "Operation Summit launch plan", "type": "doc", "url": "https://demo.flightdeck.app/doc/summit-launch-plan"}
+          ],
+          "suggestedNextSteps": ["Check if P2 bugs are blocking or can ship with known issues"]
+        },
+        {
+          "id": "radar_velocity_retro_action",
+          "title": "Sprint Velocity — Retrospective Action Items Overdue",
+          "severity": "Elevated",
+          "sourceType": "Meeting",
+          "dueAt": "2026-03-02T17:00:00.000Z",
+          "owner": "You",
+          "counterparties": ["Morgan Kelly", "Casey Nguyen"],
+          "summary": "Three action items from last sprint retrospective are overdue. Morgan Kelly pinged in standup about unresolved CI pipeline improvements. Casey Nguyen's test coverage task also pending.",
+          "reason": "Overdue retro action items signal team process debt. Due today.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Sprint Velocity retro notes", "type": "meeting", "url": "https://demo.flightdeck.app/meeting/velocity-retro-notes"},
+            {"label": "Morgan Kelly — CI pipeline discussion", "type": "chat", "url": "https://demo.flightdeck.app/chat/velocity-ci-pipeline"}
+          ],
+          "suggestedNextSteps": ["Close out CI pipeline action item or request extension from Morgan Kelly"]
+        },
+        {
+          "id": "radar_woodgrove_data_request",
+          "title": "Woodgrove Bank — Compliance Data Request",
+          "severity": "Elevated",
+          "sourceType": "Email",
+          "dueAt": "2026-03-07T17:00:00.000Z",
+          "owner": "Avery Brooks",
+          "counterparties": ["Avery Brooks", "Taylor Okafor"],
+          "summary": "Woodgrove Bank compliance team requested full audit trail export for Q4 2025 transactions. Avery Brooks investigating data extraction scope. Taylor Okafor coordinating with Woodgrove's compliance officer.",
+          "reason": "Compliance data request with regulatory implications. One-week deadline.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Woodgrove compliance request email", "type": "email", "url": "https://demo.flightdeck.app/email/woodgrove-compliance-request"},
+            {"label": "Avery Brooks — scope assessment doc", "type": "doc", "url": "https://demo.flightdeck.app/doc/woodgrove-audit-scope"}
+          ],
+          "suggestedNextSteps": ["Confirm data extraction scope with Avery Brooks by Wednesday"]
+        },
+        {
+          "id": "radar_adventure_works_onboard",
+          "title": "Adventure Works — Onboarding Kickoff Needed",
+          "severity": "Elevated",
+          "sourceType": "Email",
+          "dueAt": "2026-03-09T17:00:00.000Z",
+          "owner": "You",
+          "counterparties": ["Jordan Chen", "Quinn Foster"],
+          "summary": "Adventure Works contract signed last week. Jordan Chen sent welcome email but no kickoff scheduled yet. Quinn Foster prepared onboarding checklist. Customer expecting first touchpoint by March 9.",
+          "reason": "New customer onboarding at risk of poor first impression if kickoff meeting not scheduled this week.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Jordan Chen — Adventure Works welcome email", "type": "email", "url": "https://demo.flightdeck.app/email/adventure-works-welcome"},
+            {"label": "Quinn Foster — onboarding checklist", "type": "doc", "url": "https://demo.flightdeck.app/doc/adventure-works-onboarding"}
+          ],
+          "suggestedNextSteps": ["Schedule kickoff meeting with Adventure Works this week"]
+        },
+        {
+          "id": "radar_horizon_stakeholder_feedback",
+          "title": "Program Horizon — Stakeholder Feedback Round",
+          "severity": "Observe",
+          "sourceType": "Doc",
+          "dueAt": "2026-03-12T17:00:00.000Z",
+          "owner": "Taylor Okafor",
+          "counterparties": ["Taylor Okafor", "Morgan Kelly"],
+          "summary": "Stakeholder feedback survey for Program Horizon distributed Friday. 4 of 12 responses received. Taylor Okafor planning follow-up nudge mid-week. No concerning signals in early responses.",
+          "reason": "Feedback collection in progress with adequate response time remaining. No action needed yet.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Program Horizon stakeholder survey", "type": "doc", "url": "https://demo.flightdeck.app/doc/horizon-stakeholder-survey"},
+            {"label": "Taylor Okafor — survey distribution email", "type": "email", "url": "https://demo.flightdeck.app/email/horizon-survey-distributed"}
+          ],
+          "suggestedNextSteps": []
+        },
+        {
+          "id": "radar_team_offsite_planning",
+          "title": "Q2 Team Offsite — Venue and Agenda Planning",
+          "severity": "Observe",
+          "sourceType": "Chat",
+          "dueAt": "2026-03-21T17:00:00.000Z",
+          "owner": "Casey Nguyen",
+          "counterparties": ["Casey Nguyen", "Alex Rivera"],
+          "summary": "Casey Nguyen scouting venues for Q2 team offsite. Three options shortlisted in Teams thread. Alex Rivera drafting agenda outline. Target booking confirmation by March 21.",
+          "reason": "On track with adequate lead time. Informational only.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Casey Nguyen — venue options thread", "type": "chat", "url": "https://demo.flightdeck.app/chat/offsite-venue-options"},
+            {"label": "Alex Rivera — agenda outline draft", "type": "doc", "url": "https://demo.flightdeck.app/doc/offsite-agenda-draft"}
+          ],
+          "suggestedNextSteps": []
+        },
+        {
+          "id": "radar_northwind_security_review",
+          "title": "Northwind Traders — Security Review Pending",
+          "severity": "Observe",
+          "sourceType": "Doc",
+          "dueAt": "2026-03-11T17:00:00.000Z",
+          "owner": "Dakota Kim",
+          "counterparties": ["Dakota Kim", "Riley Thompson"],
+          "summary": "Security review form submitted for Northwind Traders data migration. Dakota Kim awaiting InfoSec team response. Typical turnaround is 5 business days. No blockers expected.",
+          "reason": "Standard security review in progress. Timeline allows buffer before migration cutover.",
+          "status": "Inbound",
+          "evidenceLinks": [
+            {"label": "Northwind security review submission", "type": "doc", "url": "https://demo.flightdeck.app/doc/northwind-security-review"},
+            {"label": "Dakota Kim — InfoSec submission confirmation", "type": "email", "url": "https://demo.flightdeck.app/email/northwind-infosec-submitted"}
+          ],
+          "suggestedNextSteps": []
+        }
+      ],
+      "iOwe": [
+        {
+          "id": "iowe_jordan_timeline",
+          "title": "Revised Q2 timeline reply to Jordan Chen",
+          "counterparties": ["Jordan Chen"],
+          "dueAt": "2026-03-03T17:00:00.000Z",
+          "lastSignalAt": "2026-03-02T10:30:00.000Z",
+          "daysSilent": 0,
+          "evidenceLinks": [{"label": "Jordan Chen — escalation email", "type": "email", "url": "https://demo.flightdeck.app/email/aurora-escalation-jordan"}],
+          "suggestedFollowUp": "Reply to Jordan Chen with the revised Project Aurora Q2 timeline and escalation options."
+        },
+        {
+          "id": "iowe_sam_contract_terms",
+          "title": "Updated contract terms for Sam Patel (Meridian)",
+          "counterparties": ["Sam Patel"],
+          "dueAt": "2026-03-05T17:00:00.000Z",
+          "lastSignalAt": "2026-03-01T14:00:00.000Z",
+          "daysSilent": 1,
+          "evidenceLinks": [{"label": "Sam Patel — SLA pushback email", "type": "email", "url": "https://demo.flightdeck.app/email/meridian-sla-pushback"}],
+          "suggestedFollowUp": "Send the updated contract terms to Sam Patel addressing SLA concerns in Section 4.2."
+        },
+        {
+          "id": "iowe_adventure_works_kickoff",
+          "title": "Adventure Works onboarding kickoff scheduling",
+          "counterparties": ["Jordan Chen", "Quinn Foster"],
+          "dueAt": "2026-03-09T17:00:00.000Z",
+          "lastSignalAt": "2026-02-28T11:00:00.000Z",
+          "daysSilent": 2,
+          "evidenceLinks": [{"label": "Jordan Chen — welcome email", "type": "email", "url": "https://demo.flightdeck.app/email/adventure-works-welcome"}],
+          "suggestedFollowUp": "Schedule the onboarding kickoff meeting with Adventure Works — customer expecting first touchpoint by March 9."
+        }
+      ],
+      "othersOweMe": [
+        {
+          "id": "owe_dakota_benchmarks",
+          "title": "Dakota Kim — architecture benchmark results",
+          "counterparties": ["Dakota Kim"],
+          "dueAt": "2026-03-02T17:00:00.000Z",
+          "lastSignalAt": "2026-02-28T16:00:00.000Z",
+          "daysSilent": 2,
+          "evidenceLinks": [{"label": "Dakota Kim — benchmark doc (incomplete)", "type": "doc", "url": "https://demo.flightdeck.app/doc/keystone-benchmark-comparison"}],
+          "suggestedFollowUp": "Follow up with Dakota Kim — benchmark results were expected before today's architecture sync."
+        },
+        {
+          "id": "owe_riley_northwind_access",
+          "title": "Riley Thompson — Northwind source system access",
+          "counterparties": ["Riley Thompson"],
+          "dueAt": "2026-03-04T17:00:00.000Z",
+          "lastSignalAt": "2026-03-01T09:00:00.000Z",
+          "daysSilent": 1,
+          "evidenceLinks": [{"label": "Riley Thompson — access request thread", "type": "chat", "url": "https://demo.flightdeck.app/chat/northwind-source-access"}],
+          "suggestedFollowUp": "Check with Riley Thompson on Northwind source system access credentials — needed before schema mapping can begin."
+        }
+      ],
+      "silentThreads": [
+        {
+          "id": "silent_woodgrove_followup",
+          "title": "Woodgrove Bank — post-audit follow-up",
+          "counterparties": ["Avery Brooks"],
+          "dueAt": null,
+          "lastSignalAt": "2026-02-25T15:00:00.000Z",
+          "daysSilent": 5,
+          "evidenceLinks": [{"label": "Avery Brooks — audit wrap-up email", "type": "email", "url": "https://demo.flightdeck.app/email/woodgrove-audit-wrapup"}],
+          "suggestedFollowUp": "No activity in 5 days on Woodgrove post-audit thread. Ping Avery Brooks to confirm all deliverables are closed."
+        },
+        {
+          "id": "silent_fabrikam_pricing",
+          "title": "Fabrikam Inc — pricing tier discussion",
+          "counterparties": ["Quinn Foster"],
+          "dueAt": null,
+          "lastSignalAt": "2026-02-24T10:00:00.000Z",
+          "daysSilent": 6,
+          "evidenceLinks": [{"label": "Quinn Foster — pricing proposal thread", "type": "chat", "url": "https://demo.flightdeck.app/chat/fabrikam-pricing-discussion"}],
+          "suggestedFollowUp": "Pricing discussion with Fabrikam stalled for 6 days. Follow up with Quinn Foster to see if they need updated numbers."
+        }
+      ]
+    },
+    "meetings": {
+      "generatedAt": "2026-03-02T13:00:00.000Z",
+      "meetings": [
+        {
+          "id": "mtg_aurora_sprint_review",
+          "title": "Project Aurora — Sprint Review",
+          "startAt": "2026-03-02T15:30:00.000Z",
+          "endAt": "2026-03-02T16:30:00.000Z",
+          "organizer": "Alex Rivera",
+          "joinUrl": "https://demo.flightdeck.app/meeting/aurora-sprint-review-join"
+        },
+        {
+          "id": "mtg_contoso_status",
+          "title": "Contoso Ltd — Escalation Status Check",
+          "startAt": "2026-03-02T17:00:00.000Z",
+          "endAt": "2026-03-02T17:30:00.000Z",
+          "organizer": "Taylor Okafor",
+          "joinUrl": "https://demo.flightdeck.app/meeting/contoso-status-check-join"
+        },
+        {
+          "id": "mtg_keystone_arch_sync",
+          "title": "Initiative Keystone — Architecture Decision Sync",
+          "startAt": "2026-03-02T18:00:00.000Z",
+          "endAt": "2026-03-02T19:00:00.000Z",
+          "organizer": "Morgan Kelly",
+          "joinUrl": "https://demo.flightdeck.app/meeting/keystone-arch-sync-join"
+        },
+        {
+          "id": "mtg_horizon_weekly",
+          "title": "Program Horizon — Weekly Standup",
+          "startAt": "2026-03-02T20:00:00.000Z",
+          "endAt": "2026-03-02T20:30:00.000Z",
+          "organizer": "Taylor Okafor",
+          "joinUrl": "https://demo.flightdeck.app/meeting/horizon-weekly-standup-join"
+        }
+      ]
+    },
+    "dayBriefing": {
+      "generatedAt": "2026-03-02T12:00:00.000Z",
+      "headline": "Busy day: 4 meetings, 2 Critical items need attention",
+      "topPriorities": [
+        "Resolve Project Aurora backend blockers before Friday deadline — reply to Jordan Chen with revised timeline",
+        "Monitor Contoso Ltd escalation #4471 — 48-hour hotfix monitoring window closes tomorrow",
+        "Prepare for Initiative Keystone architecture review — Dakota Kim's benchmarks expected today",
+        "Send updated contract terms to Sam Patel for Meridian Partners renewal"
+      ],
+      "meetingsRequiringPrep": [
+        {
+          "title": "Project Aurora — Sprint Review",
+          "startAt": "2026-03-02T15:30:00.000Z",
+          "whyPrepNeeded": "Q2 deliverable timeline is at risk — need to present revised milestones and escalation plan to stakeholders."
+        },
+        {
+          "title": "Initiative Keystone — Architecture Decision Sync",
+          "startAt": "2026-03-02T18:00:00.000Z",
+          "whyPrepNeeded": "Morgan Kelly expects final input before Monday decision. Review both proposals and platform constraints."
+        },
+        {
+          "title": "Contoso Ltd — Escalation Status Check",
+          "startAt": "2026-03-02T17:00:00.000Z",
+          "whyPrepNeeded": "Customer-facing meeting during active P1 escalation — need latest telemetry and SLA breach timeline."
+        }
+      ],
+      "atRiskItems": [
+        {
+          "title": "Project Aurora — Q2 Deliverable Review",
+          "severity": "Critical",
+          "risk": "Friday deadline with two unresolved backend dependencies. VP Engineering escalation may be needed."
+        },
+        {
+          "title": "Contoso Ltd — Support Escalation #4471",
+          "severity": "Critical",
+          "risk": "Production hotfix deployed Saturday — 48-hour monitoring window closes tomorrow. Recurrence triggers SLA breach."
+        }
+      ],
+      "suggestedTimeBlocks": [
+        {
+          "time": "8:00 – 8:30 AM",
+          "activity": "Review Contoso escalation telemetry",
+          "rationale": "Hotfix monitoring window is critical — check overnight sync data before morning meetings."
+        },
+        {
+          "time": "8:30 – 9:00 AM",
+          "activity": "Draft response to Jordan Chen on Aurora timeline",
+          "rationale": "Unblock the Q2 deliverable discussion before the sprint review meeting."
+        },
+        {
+          "time": "12:00 – 12:30 PM",
+          "activity": "Review Dakota Kim's architecture benchmarks",
+          "rationale": "Benchmarks expected this morning — review before the 1:00 PM Keystone sync."
+        },
+        {
+          "time": "3:30 – 4:00 PM",
+          "activity": "Prepare Meridian Partners contract update for Sam Patel",
+          "rationale": "Legal redline expected Wednesday — get ahead by preparing your response to SLA concerns."
+        }
+      ],
+      "todayFollowUps": [
+        "Reply to Jordan Chen with revised Project Aurora timeline and escalation options",
+        "Check Contoso production telemetry for data sync recurrence after Saturday hotfix",
+        "Follow up with Dakota Kim on architecture benchmark results for Initiative Keystone"
+      ],
+      "sources": [
+        {"label": "Jordan Chen — Aurora escalation email", "type": "email", "url": "https://demo.flightdeck.app/email/aurora-escalation-jordan"},
+        {"label": "Casey Nguyen — Contoso hotfix deployment", "type": "chat", "url": "https://demo.flightdeck.app/chat/contoso-hotfix-deploy"},
+        {"label": "Morgan Kelly — Keystone decision timeline", "type": "email", "url": "https://demo.flightdeck.app/email/keystone-decision-timeline"},
+        {"label": "Sam Patel — Meridian SLA pushback", "type": "email", "url": "https://demo.flightdeck.app/email/meridian-sla-pushback"}
+      ]
+    },
+    "meetingBriefing": {
+      "generatedAt": "2026-03-02T14:30:00.000Z",
+      "meetingId": "mtg_contoso_status",
+      "headline": "Escalation status check — hotfix holding but secondary sync queue showing elevated errors",
+      "upcomingMeeting": {
+        "id": "mtg_contoso_status",
+        "title": "Contoso Ltd — Escalation Status Check",
+        "startAt": "2026-03-02T17:00:00.000Z",
+        "organizer": "Taylor Okafor",
+        "joinUrl": "https://demo.flightdeck.app/meeting/contoso-status-check-join"
+      },
+      "bullets": [
+        "P1 escalation ticket #4471 — production data sync failures affecting 200+ Contoso users",
+        "Casey Nguyen deployed hotfix Saturday — primary sync queue stabilized within 2 hours",
+        "Secondary sync queue showing elevated error rates (3.2% vs. baseline 0.1%) since Sunday evening",
+        "SLA breach window: 72 hours from initial report, expires tomorrow at 10 PM ET"
+      ],
+      "keyUpdates": [
+        "Casey Nguyen's hotfix resolved primary data sync failures — 98% of affected users restored",
+        "Secondary sync queue error rate elevated to 3.2% since Sunday — Casey investigating root cause",
+        "Taylor Okafor sent interim status update to Contoso VP on Saturday",
+        "Contoso IT team confirmed no changes on their end that could explain secondary queue issues",
+        "SLA breach clock at 48 of 72 hours — 24 hours remaining"
+      ],
+      "decisionsNeeded": [
+        "Approve deploying targeted fix for secondary sync queue or wait for root cause analysis",
+        "Determine if proactive customer communication is needed about secondary queue issues"
+      ],
+      "topRisks": [
+        "Secondary sync queue degradation could cascade into primary queue if left unaddressed",
+        "SLA breach tomorrow triggers contractual penalty clause and executive review"
+      ],
+      "talkTrack": [
+        "Open with the good news: primary sync restored, 98% of users back to normal operations",
+        "Flag the secondary queue concern — 3.2% error rate is 32x baseline, needs attention even though it's not customer-visible yet",
+        "Present the timeline: 24 hours to SLA breach, recommend deploying targeted fix today as insurance",
+        "Close with ask: approve the targeted fix and align on customer communication if secondary issues persist past 6 PM"
+      ],
+      "todayPlan": ["Get approval for secondary sync queue fix and align on SLA breach contingency plan"],
+      "todayFollowUps": [
+        "Send meeting summary to Contoso VP with updated status and remediation plan",
+        "Schedule follow-up check with Casey Nguyen at 6 PM to review secondary queue telemetry"
+      ],
+      "sources": [
+        {"label": "Contoso P1 escalation ticket", "type": "email", "url": "https://demo.flightdeck.app/email/contoso-p1-escalation"},
+        {"label": "Casey Nguyen — hotfix deployment", "type": "chat", "url": "https://demo.flightdeck.app/chat/contoso-hotfix-deploy"},
+        {"label": "Taylor Okafor — customer status update", "type": "email", "url": "https://demo.flightdeck.app/email/contoso-customer-update"},
+        {"label": "Contoso sync queue monitoring", "type": "doc", "url": "https://demo.flightdeck.app/doc/contoso-sync-monitoring"}
+      ]
+    },
+    "taskMonitor": {
+      "hasNewInfo": true,
+      "status": "At Risk",
+      "summary": "Jordan Chen escalated unresolved backend dependencies via email this morning. Two of four blockers remain — infrastructure team has not signed off. Casey Nguyen's fallback plan covers a 2-week delay scenario but requires VP Engineering approval. Friday deadline at serious risk.",
+      "reason": "Two critical backend dependencies unresolved with 4 days remaining. Escalation path requires VP-level intervention that has not been initiated.",
+      "severity": "Critical",
+      "dueAt": "2026-03-06T17:00:00.000Z",
+      "owner": "You",
+      "counterparties": ["Jordan Chen", "Alex Rivera", "Casey Nguyen"],
+      "evidenceLinks": [
+        {"label": "Jordan Chen — escalation email re: backend blockers", "type": "email", "url": "https://demo.flightdeck.app/email/aurora-escalation-jordan"},
+        {"label": "Aurora Q2 milestone deck (v3 draft)", "type": "doc", "url": "https://demo.flightdeck.app/doc/aurora-q2-milestone-v3"},
+        {"label": "Alex Rivera — dependency resolution thread", "type": "chat", "url": "https://demo.flightdeck.app/chat/aurora-dependency-thread"},
+        {"label": "Casey Nguyen — fallback plan outline", "type": "doc", "url": "https://demo.flightdeck.app/doc/aurora-fallback-plan"}
+      ],
+      "suggestedNextSteps": ["Reply to Jordan Chen with revised timeline", "Escalate blockers to VP Engineering"]
+    }
+  }
+}

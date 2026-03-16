@@ -1,0 +1,46 @@
+{
+  "name": "flightdeck",
+  "version": "1.0.3",
+  "description": "Air traffic control for your Microsoft 365 workload",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "demo": "electron . --demo",
+    "test": "node --test test/main-utils.test.js test/main-window-state.test.js test/main-pty-bridge.test.js test/main-ipc-handlers.test.js test/main-ipc-tracker-popout.test.js test/renderer-utils.test.js test/renderer-json-parser.test.js test/renderer-models-tracking.test.js test/renderer-models-radar.test.js test/renderer-models-briefing.test.js test/renderer-day-briefing.test.js test/renderer-tracking-renderers.test.js test/renderer-popout.test.js test/renderer-state.test.js test/renderer-prompts.test.js",
+    "dist": "electron-builder --win msi",
+    "dist:dir": "electron-builder --win dir",
+    "version:patch": "npm version patch --no-git-tag-version"
+  },
+  "build": {
+    "appId": "com.flightdeck.app",
+    "productName": "FlightDeck",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/@microsoft/workiq/**"
+    ],
+    "win": {
+      "icon": "src/icon.png",
+      "target": [
+        "msi"
+      ]
+    },
+    "msi": {
+      "perMachine": true,
+      "warningsAsErrors": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.7.5",
+    "electron-builder": "^26.8.1"
+  },
+  "dependencies": {
+    "@microsoft/workiq": "^0.2.8",
+    "electron-store": "^8.2.0",
+    "node-pty": "^1.1.0"
+  }
+}

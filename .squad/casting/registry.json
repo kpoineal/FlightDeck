@@ -1,0 +1,50 @@
+[
+  {
+    "persistent_name": "Maverick",
+    "role": "Lead",
+    "universe": "top-gun",
+    "created_at": "2026-02-25T00:00:00.000Z",
+    "legacy_named": false,
+    "status": "active"
+  },
+  {
+    "persistent_name": "Goose",
+    "role": "Frontend Dev",
+    "universe": "top-gun",
+    "created_at": "2026-02-25T00:00:00.000Z",
+    "legacy_named": false,
+    "status": "active"
+  },
+  {
+    "persistent_name": "Viper",
+    "role": "Backend Dev",
+    "universe": "top-gun",
+    "created_at": "2026-02-25T00:00:00.000Z",
+    "legacy_named": false,
+    "status": "active"
+  },
+  {
+    "persistent_name": "Merlin",
+    "role": "Tester",
+    "universe": "top-gun",
+    "created_at": "2026-02-25T00:00:00.000Z",
+    "legacy_named": false,
+    "status": "active"
+  },
+  {
+    "persistent_name": "Jester",
+    "role": "DevOps Engineer",
+    "universe": "top-gun",
+    "created_at": "2026-02-27T00:00:00.000Z",
+    "legacy_named": false,
+    "status": "active"
+  },
+  {
+    "persistent_name": "Iceman",
+    "role": "Product Owner",
+    "universe": "top-gun",
+    "created_at": "2026-02-27T00:00:00.000Z",
+    "legacy_named": false,
+    "status": "active"
+  }
+]
