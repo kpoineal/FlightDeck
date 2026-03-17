@@ -40,6 +40,10 @@ body {
   color: var(--text);
 }
 
+.brand-accent {
+  color: var(--accent-blue);
+}
+
 .brand-logo {
   width: 32px;
   height: 32px;
