@@ -98,6 +98,26 @@
 
 ### 2026-03-03 — Ticket 4 Slice 1: IPC Domain Split (Tracker Popout/Sync)
 
+### 2026-03-17 — Logging Integration Point Assessment
+
+**Scope reviewed:** All backend I/O surfaces across `src/main/`, `src/shared/ipc-contract.js`, `src/preload.js`.
+
+**Key findings:**
+- 16 distinct IPC channels identified in `ipc-contract.js`; 6 carry PII-sensitive payloads (`ASK_WORKIQ`, `STORE_GET`, `STORE_SET`, `STORE_GET_ALL`, `STORE_MIGRATE_FROM_LOCALSTORAGE`, `OPEN_MARKDOWN_WINDOW`).
+- Current logging is console-only via `utils.js` `log()`/`logError()` — no file output, no levels, no structure. All logs lost on app close.
+- `pty-bridge.js` already logs raw WorkIQ output to console at `runWorkiqCommand()` lines 119–122 — this includes full M365-derived JSON with names/emails.
+- 2 PTY spawn sites (`runWorkiqCommand`, `runWorkiqAcceptEula`) both pass `...process.env` to child — functional requirement for WorkIQ auth but must not be logged.
+- 3 file I/O paths: prompt reads (static, safe), window-state JSON (`{userData}/window-state.json`), electron-store (`{userData}/flightdeck-data.json` — contains PII).
+- `shell.openExternal()` called from 2 code paths: IPC `OPEN_EXTERNAL` handler and `attachExternalNavigationGuards` in `utils.js`.
+- Assessment delivered to `.squad/decisions/inbox/viper-logging-integration-points.md` with full catalog and sensitivity classification.
+
+**Key file paths for logging work:**
+- Logger functions: `src/main/utils.js` (lines 7–13) — `log()`, `logError()` are the only injection points
+- IPC registration: `src/main/ipc-handlers.js` — all 13 `ipcMain.handle()` calls + 1 `ipcMain.on()`
+- PTY I/O: `src/main/pty-bridge.js` — `runWorkiqCommand()` L72, `runWorkiqAcceptEula()` L169
+- Store I/O: `src/main/store.js` — 5 exported functions wrapping electron-store
+- Window state I/O: `src/main/window-state.js` — `loadWindowState()`, `saveWindowState()`
+
 **Scope completed:** extracted tracker popout/sync IPC domain from `src/main/ipc-handlers.js` into `src/main/ipc/tracker-popout.js` with behavior-preserving orchestration in `registerIpcHandlers`.
 
 **Implementation learnings:**
