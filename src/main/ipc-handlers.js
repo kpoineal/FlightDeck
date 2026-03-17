@@ -9,6 +9,10 @@ const { storeGet, storeSet, storeDelete, storeGetAll, storeGetSize } = require('
 
 const APP_ROOT = path.join(__dirname, '..');
 
+// Hold references to active notifications to prevent garbage collection
+// before the user clicks them (Windows toast notifications).
+const activeNotifications = new Set();
+
 function registerIpcHandlers(getMainWindow, popoutWindows) {
 
   ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => app.getVersion());
@@ -248,6 +252,7 @@ function registerIpcHandlers(getMainWindow, popoutWindows) {
     });
 
     notification.on('click', () => {
+      activeNotifications.delete(notification);
       const mainWindow = getMainWindow();
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore();
@@ -259,6 +264,11 @@ function registerIpcHandlers(getMainWindow, popoutWindows) {
       }
     });
 
+    notification.on('close', () => {
+      activeNotifications.delete(notification);
+    });
+
+    activeNotifications.add(notification);
     notification.show();
     return { success: true };
   });
