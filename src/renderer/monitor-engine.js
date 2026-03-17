@@ -116,6 +116,7 @@ async function monitorTaskItem(item, { manual = false } = {}) {
   item.lastCheckSignature = nextSignature;
 
   if (changed) {
+    item.lastChangedAt = nowIso();
     // Build a list of what changed for the history entry
     const changes = [];
     const statusChanged = prevStatus !== item.status;
