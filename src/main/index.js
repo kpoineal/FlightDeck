@@ -7,6 +7,8 @@ const { registerIpcHandlers } = require('./ipc-handlers');
 const APP_ROOT = path.join(__dirname, '..');
 const IS_DEMO = process.argv.includes('--demo');
 
+app.setAppUserModelId('com.flightdeck.app');
+
 // Start writing logs to file in userData/logs/
 initLogFile(path.join(app.getPath('userData'), 'logs'));
 
