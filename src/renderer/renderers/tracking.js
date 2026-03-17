@@ -189,7 +189,8 @@ function updateCustomTaskScheduleInput() {
 function createCustomTrackingItem() {
   const title = cleanDisplayText(elements.customTaskTitle?.value || '');
   if (!title) {
-    alert('Enter a custom task title before adding.');
+    showToast('Enter a task title before adding.', { icon: '\u26A0' });
+    elements.customTaskTitle?.focus();
     return;
   }
 
@@ -200,7 +201,8 @@ function createCustomTrackingItem() {
   const oneTimeAtRaw = elements.customTaskOneTimeAt?.value || '';
   const oneTimeAt = toIsoOrNull(oneTimeAtRaw);
   if (scheduleType === 'one-time' && !oneTimeAt) {
-    alert('Select a one-time run date and time.');
+    showToast('Select a one-time run date and time.', { icon: '\u26A0' });
+    elements.customTaskOneTimeAt?.focus();
     return;
   }
 
@@ -213,11 +215,11 @@ function createCustomTrackingItem() {
       weeklyTimes = [...weeklyPanel.querySelectorAll('.weekly-time-picker')].map((inp) => inp.value).filter(Boolean);
     }
     if (!weeklyDays.length) {
-      alert('Select at least one day of the week.');
+      showToast('Select at least one day of the week.', { icon: '\u26A0' });
       return;
     }
     if (!weeklyTimes.length) {
-      alert('Add at least one time slot.');
+      showToast('Add at least one time slot.', { icon: '\u26A0' });
       return;
     }
   }
@@ -231,7 +233,7 @@ function createCustomTrackingItem() {
     : [...ALL_SIGNAL_TYPES];
 
   if (!selectedSignals.length) {
-    alert('Select at least one signal type to monitor.');
+    showToast('Select at least one signal type to monitor.', { icon: '\u26A0' });
     return;
   }
 
