@@ -279,3 +279,15 @@
 **package.json `scripts.test` updated** — added `test/main-ipc-context-file.test.js` and `test/renderer-models-context-file.test.js` to the explicit file list.
 
 **Final suite result:** 451 tests, 97 suites — **450 pass, 1 intentional fail** (dismissed-item reappearance test, awaiting implementation).
+
+### 2026-03-17 — Cross-Agent Context: Logging Test Assignment (from Maverick DEC-045)
+
+**Upcoming work:** Step 5 of the logging implementation plan (DEC-045) is assigned to Merlin. Tests should verify:
+- `logIpc` is called with correct summary shape (channel name + safe metadata, no raw content)
+- Redaction enforcement: no raw WorkIQ question/answer text, store values, or external URLs appear in log output
+- `handleWithLogging` decorator calls handler correctly and logs in/out/error transitions
+- Tests can start after Step 1 (Viper creates `src/main/logger.js`)
+
+**Key context from Viper's catalog (DEC-046):**
+- 6 PII-sensitive IPC channels must be verified as redacted: `ASK_WORKIQ`, `OPEN_MARKDOWN_WINDOW`, `SHOW_DESKTOP_NOTIFICATION`, `STORE_GET`, `STORE_SET`/`GET_ALL`/`MIGRATE`
+- PTY bridge currently logs raw WorkIQ output to console — new logger must not propagate this to file
