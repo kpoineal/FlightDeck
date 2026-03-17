@@ -1,15 +1,33 @@
 const { shell } = require('electron');
+const fs = require('fs');
+const path = require('path');
+
+let logStream = null;
+
+function initLogFile(logDir) {
+  fs.mkdirSync(logDir, { recursive: true });
+  const logPath = path.join(logDir, 'flightdeck.log');
+  logStream = fs.createWriteStream(logPath, { flags: 'a' });
+}
 
 function ts() {
   return new Date().toISOString();
 }
 
+function formatArgs(args) {
+  return args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+}
+
 function log(...args) {
-  console.log(`[${ts()}]`, ...args);
+  const line = `[${ts()}] ${formatArgs(args)}`;
+  console.log(line);
+  if (logStream) logStream.write(line + '\n');
 }
 
 function logError(...args) {
-  console.error(`[${ts()}]`, ...args);
+  const line = `[${ts()}] [ERROR] ${formatArgs(args)}`;
+  console.error(line);
+  if (logStream) logStream.write(line + '\n');
 }
 
 function normalizeExternalUrl(url) {
@@ -124,6 +142,7 @@ module.exports = {
   ts,
   log,
   logError,
+  initLogFile,
   normalizeExternalUrl,
   isSafeExternalUrl,
   attachExternalNavigationGuards,
