@@ -208,7 +208,9 @@ function normalizeTrackingItem(item) {
       : [...DEFAULT_WEEKLY_TIMES],
     nextRunAt: item?.nextRunAt || null,
     lastRunAt: item?.lastRunAt || null,
-    lastChangedAt: item?.lastChangedAt || null,
+    lastChangedAt: item?.lastChangedAt
+      || (Array.isArray(item?.updateHistory) && item.updateHistory.length > 0 ? item.updateHistory[0].timestamp : null)
+      || null,
     lastCheckSignature: item?.lastCheckSignature || null,
     lastNotifiedSignature: item?.lastNotifiedSignature || null,
     notifyEnabled: item?.notifyEnabled !== false,
