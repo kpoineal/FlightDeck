@@ -108,13 +108,7 @@
   color: var(--text);
 }
 .radar-row-summary {
-  flex: 2;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text-muted);
-  font-size: 0.8rem;
+  display: none;
 }
 .radar-row-due {
   flex-shrink: 0;
