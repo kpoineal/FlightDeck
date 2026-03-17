@@ -760,3 +760,172 @@
 **Impact:** `src/renderer/popout.js` — template + click handler. `src/styles/tracking.css` — `.popout-monitor-summary` styling. Main window tracking cards not affected.
 
 **Source:** `.squad/decisions/inbox/goose-popout-impl.md`
+
+---
+
+## DEC-037: OneDrive Context File IPC Channels
+
+**Author:** Viper (Backend Dev) | **Date:** 2026-03-06 | **Status:** Implemented
+
+**Summary:** Added two IPC channels (`write-context-file`, `get-context-file-path`) to write a `context.md` file to the user's corporate OneDrive (`%OneDriveCommercial%\FlightInfo\context.md`) so external tools can read FlightDeck state as ambient context.
+
+**Key decisions:**
+- `OneDriveCommercial` env var used (corporate/M365-linked OneDrive, not personal `OneDrive`).
+- `FlightInfo/` subdirectory provides clean namespace under OneDrive root.
+- Structured return values (`{ success, path }` / `{ success, error }`) follow established IPC handler pattern.
+- `mkdirSync({ recursive: true })` before every write — safe and idempotent.
+- `null` return on missing env var for `GET_CONTEXT_FILE_PATH` (easier to gate on than catching errors).
+
+**Files changed:** `src/shared/ipc-contract.js`, `src/main/ipc-handlers.js`, `src/preload.js`.
+
+**Validation:** 430/430 tests pass.
+
+**Source:** `.squad/decisions/inbox/viper-context-file-ipc.md`
+
+---
+
+## DEC-038: OneDrive Context File Frontend Integration
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-12 | **Status:** Implemented
+
+**Summary:** Frontend integration for OneDrive context file sync. Five sub-decisions covering radar merge strategy, module-level path cache, fire-and-forget sync pattern, script tag positioning, and test state resets.
+
+**Key decisions:**
+- **Radar merge replaces replace-all:** `applyRadarPayload()` now preserves existing items and only appends truly new IDs, so cards don't disappear between scans.
+- **Module-level path cache:** `_contextFilePath` cached by `initContextFilePath()` at startup; synchronous accessor for use in prompt construction.
+- **Fire-and-forget sync:** All `syncContextFile()` call sites are non-awaited. Failures are non-critical (context file is advisory).
+- **Script tag position:** `context-file.js` loaded after `state.js` and before `prompts.js`.
+- **Test resets:** `beforeEach` added to radar tests to clear merge-accumulating state.
+
+**Source:** `.squad/decisions/inbox/goose-context-file-frontend.md`
+
+---
+
+## DEC-039: OneDrive Context File Tests
+
+**Author:** Merlin (Tester) | **Date:** 2026-03-12 | **Status:** Proposed
+
+**Summary:** Test coverage for OneDrive context file feature. Two new test files (17 tests total) plus 4 new radar merge tests in existing file. 451 tests total, 450 passing, 1 intentional TDD red.
+
+**Key decisions:**
+- `test/renderer-models-context-file.test.js` (11 tests) — fresh vm context per test due to module-level mutable state.
+- `test/main-ipc-context-file.test.js` (6 tests) — real `os.tmpdir()` for filesystem writes, env var save/restore.
+- Radar merge behavior tests (4 tests) in `renderer-models-radar.test.js` — 1 intentional failure documenting dismissed-item tracking gap.
+- Convention established: fresh context per test for modules with module-level mutable state; real fs with tmpdir for IPC handler tests.
+
+**Source:** `.squad/decisions/inbox/merlin-context-file-tests.md`
+
+---
+
+## DEC-040: Dismissed Radar Items No Longer Reappear
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-12 | **Status:** Implemented
+
+**Summary:** Fixed dismissed radar items reappearing on next scan. Added `state.seenRadarIds` Set in `applyRadarPayload()` that tracks every item ID ever appended, so dismissed items (removed from `radarItems`) are still filtered out on subsequent scans.
+
+**Key decisions:**
+- Used `seenRadarIds` (ever-seen) over `dismissedRadarIds` — works regardless of how removal happened (direct mutation or `dismissRadarItem()`).
+- `seenRadarIds` is in-memory only (not persisted). Dismissed items could reappear after app restart — restart-persistence is a separate concern.
+- Set grows unboundedly but with negligible memory pressure (~15 char IDs).
+
+**Validation:** 451/451 tests pass. Previously failing TDD red now passes.
+
+**Source:** `.squad/decisions/inbox/goose-dismissed-radar-fix.md`
+
+---
+
+## DEC-041: Revert Lifecycle Model & Bulk Selection
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-10 | **Status:** Implemented | **Requested by:** the project owner
+
+**Summary:** Removed Phase 3 lifecycle state machine and bulk selection features while preserving Phase 1 (origin indicators) and Phase 2 (visual polish). The lifecycle model added complexity that wasn't essential to the core tracking workflow.
+
+**Removed:** `LIFECYCLE_STATES` enum, lifecycle transition logic, filter tabs, bulk actions bar, 8 lifecycle/bulk functions, related state fields, DOM elements, and CSS.
+
+**Preserved:** Origin pills (custom/imported badges), typography hierarchy, spacing, `has-new-update` badges, mark-as-seen functionality.
+
+**Validation:** 369 tests pass after removal.
+
+**Source:** `.squad/decisions/inbox/goose-lifecycle-revert.md`
+
+---
+
+## DEC-042: Tracking Item Inline Editing
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-12 | **Status:** Implemented
+
+**Summary:** Click-to-edit inline editing for title, due date, and owner fields on tracked items. Editable fields show dashed underline on hover; clicking activates input mode. Save on blur/Enter, cancel on Escape.
+
+**Key decisions:**
+- Model: `updateTrackingItemField(itemId, field, value)` in `models/tracking.js` — single-field update + persist.
+- View: `.editable-field` spans with `.edit-field-btn` pencil icon in both card and row views.
+- Events: delegation on `elements.trackingList` via `activateInlineEdit(span, field, itemId)`.
+- Input types: text for title/owner, native date picker for due date.
+- No undo mechanism yet — edits save immediately.
+- Popout window excluded (separate concern).
+
+**Validation:** 430 tests pass.
+
+**Source:** `.squad/decisions/inbox/goose-inline-editing.md`
+
+---
+
+## DEC-043: Remove Origin Tags from Tracking Cards
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-12 | **Status:** Implemented | **Requested by:** the project owner
+
+**Summary:** Removed origin tags (Custom/Imported badges) from tracking card headers — unnecessary clutter. Removed origin badge rendering, `ORIGIN_LABELS` constant, and `.origin-pill` CSS styles. The `origin` field remains in tracking item data for potential future use.
+
+**Source:** `.squad/decisions/inbox/goose-remove-origin-tags.md`
+
+---
+
+## DEC-044: README Professional Rewrite
+
+**Author:** Iceman (Product Owner) | **Date:** 2026-03-16 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Summary:** Rewrote README.md from functional-but-rough project doc into polished professional open-source README. Updated `package.json` description to "Air traffic control for your Microsoft 365 workload."
+
+**Key decisions:**
+- Centered logo + shield badges header (License, Node 18+, Electron 35+, build status, Changelog).
+- Elevator pitch over verbose Problem/Solution sections.
+- GitHub markdown features: callout blocks, collapsible `<details>`, clean tables, anchor-linked TOC.
+- Electron version corrected from "33+" to "35+" to match `package.json`.
+- Contributing section added linking to CONTRIBUTING.md.
+
+**Source:** `.squad/decisions/inbox/iceman-readme-polish.md`
+
+---
+
+## DEC-045: Logging Architecture — electron-log with Decorator Pattern
+
+**Author:** Maverick (Lead) | **Date:** 2026-03-17 | **Status:** Proposed | **Requested by:** Kyle Poineal
+
+**Summary:** Proposed logging architecture for FlightDeck using `electron-log` with a thin `src/main/logger.js` wrapper module. Replaces console-only logging with persistent file output at `{userData}/logs/`. Introduces `handleWithLogging` decorator for IPC handlers and whitelist-only PII redaction.
+
+**Key decisions:**
+- **Library:** electron-log v5 chosen over winston (overkill), custom fs.appendFile (maintenance burden), pino (no Electron awareness). ~15KB, auto-detects `userData/logs/`, handles file rotation.
+- **Architecture:** New `logger.js` at bottom of dependency tree (zero internal imports). Exports `log`/`logError`/`logIpc`. `utils.js` delegates to logger for backward compat.
+- **IPC logging:** `handleWithLogging(channel, handler)` decorator wraps `ipcMain.handle` with `summarizeArgs`/`summarizeResult` per channel. Handler bodies untouched.
+- **Redaction (whitelist-only):** Log channel names, lengths, exit codes, PIDs, timing. NEVER log raw prompts/responses, store values, external URLs, notification body text, markdown preview content.
+- **Log format:** `[timestamp] [level] [scope] channel → direction { summary }` with `[ipc]`, `[pty]`, `[app]` scope tags.
+- **Rotation:** 1 MB max (electron-log default), `main.log` + `main.old.log` (~2 MB max disk). No remote shipping.
+- **Implementation plan:** 4 sequential PRs (Viper) + 1 parallel test PR (Merlin).
+
+**Source:** `.squad/decisions/inbox/maverick-logging-architecture.md`
+
+---
+
+## DEC-046: Logging Integration Point Catalog
+
+**Author:** Viper (Backend Dev) | **Date:** 2026-03-17 | **Status:** Assessment | **Requested by:** Kyle Poineal
+
+**Summary:** Full catalog of all backend I/O points for structured logging. 16 IPC channels, 2 PTY spawn sites, 3 file I/O paths, external process spawns, and existing logging state assessed.
+
+**Key findings:**
+- **6 PII-sensitive channels:** ASK_WORKIQ, OPEN_MARKDOWN_WINDOW, SHOW_DESKTOP_NOTIFICATION, STORE_GET, STORE_SET/GET_ALL/MIGRATE (persisted state contains names, email subjects, task descriptions).
+- **PTY concern:** `process.env` spread into PTY spawn could leak env vars. PTY bridge currently logs full raw WorkIQ output to console — must be redacted in file logger.
+- **Existing logging:** `console.log`/`console.error` only, no file output, no log levels, no structured format. Lost when app closes.
+- **3-tier sensitivity classification:** High (never log content), Medium (log with care), Safe (log freely). Aligns with Maverick's whitelist-only redaction approach (DEC-045).
+
+**Source:** `.squad/decisions/inbox/viper-logging-integration-points.md`

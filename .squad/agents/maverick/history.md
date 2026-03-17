@@ -92,6 +92,31 @@
 - Defer larger renderer decomposition until shared contracts and review gates are active.
 - Require Merlin-owned contract/timer/interaction tests for each risk-reduction slice touching orchestration.
 
+### 2026-03-17 — Logging Architecture Proposal
+
+**Architecture decision:**
+- Recommended `electron-log` v5 over winston (overkill), pino (no Electron awareness), and custom fs.appendFile (re-invents rotation).
+- New module: `src/main/logger.js` — sits at bottom of dependency tree, zero internal imports. Configures electron-log and exports `log`, `logError`, `logIpc`.
+- `utils.js` delegates its `log`/`logError` to logger.js — zero breaking changes for existing callers.
+- IPC logging via decorator pattern: `handleWithLogging(channel, handler)` wraps all 14 `ipcMain.handle` registrations in `ipc-handlers.js`. Avoids modifying individual handler bodies.
+- Whitelist-only redaction: `summarizeArgs(channel, args)` and `summarizeResult(channel, result)` extract only safe metadata per channel. Raw M365 content (questions, answers, store values, external URLs) never reaches the log.
+- Log location: `app.getPath('userData')/logs/` → `%APPDATA%/FlightDeck/logs/` on Windows.
+- Rotation: 1 MB max, 2-file rotation (main.log + main.old.log). No remote shipping.
+
+**Key integration points:**
+- `ipc-handlers.js` — decorator wraps all 14 handlers (channel name + arg/result shape only)
+- `pty-bridge.js` — spawn/exit/timing events (already has log calls that will auto-redirect to file)
+- `store.js` — log set/delete key names only (never values)
+- `index.js` — app lifecycle (version, window state, quit transitions)
+- `ipc/tracker-popout.js` — popout open/close events
+
+**Delegation:** All implementation assigned to Viper (4 sequential PR slices). Tests assigned to Merlin.
+
+**User preferences:**
+- User wants to see inputs/outputs in a log file — specifically the IPC traffic shapes and PTY process lifecycle, not raw M365 content.
+
+**Decision:** `.squad/decisions/inbox/maverick-logging-architecture.md`
+
 **Coordination rules for this program:**
 - Goose owns renderer duplication/coupling slices.
 - Viper owns main-process, IPC, preload-boundary, and sanitizer normalization slices.
