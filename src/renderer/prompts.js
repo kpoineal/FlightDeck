@@ -280,6 +280,7 @@ Monitoring instructions:
 5. Update the summary to reflect the current state, not just repeat old information.
 6. List all people currently involved based on recent signals.
 7. If no new signals are found since the last check time, indicate that no updates were detected but preserve the last known state.
+8. You MUST include inline markdown citations in the summary and reason fields using [label](url) syntax for every source signal you reference. This is how the application extracts evidence links — without inline citations, no links will appear.
 
 Return strict valid JSON only:
 {
@@ -308,12 +309,12 @@ Due date rules:
 - If no deadline signal is found and dueAt was already set, preserve the existing value.
 - Never fabricate deadlines — only set dueAt when grounded in actual signals.
 
-Evidence link rules:
-- Include your normal response markdown formatting for the summary.
-- Include your normal response in reason as well.
-- Include inline citations for every referenced source.
+Evidence link and citation rules:
+- You MUST use inline markdown citations in summary and reason using [label](url) syntax for every referenced source. For example: 'Alex sent a [status update](https://outlook.office.com/...) confirming the timeline.'
+- The summary and reason fields are the primary way evidence links are extracted. If you do not include [label](url) citations inline, the user will see no source links.
+- Include your normal response markdown formatting for the summary and reason fields.
 - Review previously known evidence links listed above. Preserve any that remain relevant. Add new ones from new signals.
-- NEVER fabricate URLs. If no URL exists, return an empty evidenceLinks array.
+- Only include URLs that are real and grounded in actual Microsoft 365 signals. If a signal has no URL, still describe it but omit the link for that specific signal.
 
 IMPORTANT — hasNewInfo rules:
 - Set hasNewInfo to true ONLY if you found genuinely new signals (new emails, chats, meetings, or documents) that were created or modified AFTER the last check time shown above.
