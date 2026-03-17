@@ -28,7 +28,7 @@ function renderPopoutMode() {
           <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
         </select>
         ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
-        ${(() => { if (hasNew) { return `<span class="tracker-new-badge">${unseenCount > 1 ? `${unseenCount} New Updates` : 'New Update'}</span>`; } const lastUpdate = item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
+        ${(() => { if (hasNew) { return `<span class="tracker-new-badge">${unseenCount > 1 ? `${unseenCount} New Updates` : 'New Update'}</span>`; } const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
         <div class="popout-head-actions">
           ${hasNew ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
           <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
@@ -36,6 +36,7 @@ function renderPopoutMode() {
       </div>
       <div class="popout-panels">
         <div class="popout-panel-left">
+          ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
           <h3 class="tracker-title">${escapeHtml(item.title || 'Untitled item')}</h3>
           <p class="tracker-summary">${renderMarkdownLinks(item.summary || 'No summary available.')}</p>
           ${buildNextStepHintsHtml(item, true)}

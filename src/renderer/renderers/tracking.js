@@ -464,15 +464,15 @@ function renderTrackingMode() {
 
       return `
       <div class="tracker-row-wrapper" data-tracker-id="${escapeHtml(item.id)}">
-        <div class="tracker-row ${hasNew ? 'has-new-update' : ''} ${isExpanded ? 'expanded' : ''}" data-row-toggle-id="${escapeHtml(item.id)}">;
-          <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">;
+        <div class="tracker-row ${hasNew ? 'has-new-update' : ''} ${isExpanded ? 'expanded' : ''}" data-row-toggle-id="${escapeHtml(item.id)}">
+          <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
             <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
             <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
             <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
           </select>
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
           ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
-          ${(() => { const lastUpdate = item.lastRunAt || null; const rt = relativeTime(lastUpdate); const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}${timeStr ? ' · ' + escapeHtml(timeStr) : ''}</span>` : ''; })()}
+          ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}${timeStr ? ' · ' + escapeHtml(timeStr) : ''}</span>` : ''; })()}
           <span class="tracker-row-title">
             <span class="editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
           </span>
@@ -483,6 +483,7 @@ function renderTrackingMode() {
           <span class="row-expand-chevron ${isExpanded ? 'open' : ''}">&#9660;</span>
         </div>
         <div class="tracker-row-detail ${isExpanded ? 'show' : ''}">
+          ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
           <p class="tracker-summary">${renderMarkdownLinks(item.summary || 'No summary available.')}</p>
           ${buildNextStepHintsHtml(item)}
           <div class="tracker-meta">
@@ -490,7 +491,6 @@ function renderTrackingMode() {
             <span>Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
             <span>Owner: <span class="editable-field" data-edit-field="owner" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.owner ? escapeHtml(item.owner) : '<span class="field-placeholder">Set owner</span>'}</span></span>
           </div>
-          ${(() => { const lastUpdate = item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
           <div class="tracker-timestamp">
             Tracked: ${escapeHtml(safeDate(item.trackedAt, 'Unknown'))} · Last checked: ${escapeHtml(safeDate(item.lastRunAt, 'Never'))}
           </div>
@@ -574,10 +574,11 @@ function renderTrackingMode() {
         </div>
         <div class="tracker-head-right">
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
-          ${(() => { if (hasNew) { const label = unseenCount > 1 ? `${unseenCount} NEW` : 'NEW'; const lastUpdate = item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return `<span class="tracker-new-badge">${label}${timeStr ? ` \u00b7 ${timeStr}` : ''}</span>`; } const lastUpdate = item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Last update: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
+          ${(() => { if (hasNew) { const label = unseenCount > 1 ? `${unseenCount} NEW` : 'NEW'; const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return `<span class="tracker-new-badge">${label}${timeStr ? ` \u00b7 ${timeStr}` : ''}</span>`; } const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Last update: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
         </div>
       </div>
       <div class="card-body">
+        ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
         <div class="item-title-wrap">
           <h3 class="tracker-title">
             <span class="item-title-text editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
@@ -591,7 +592,6 @@ function renderTrackingMode() {
           <span>Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
           <span>Owner: <span class="editable-field" data-edit-field="owner" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.owner ? escapeHtml(item.owner) : '<span class="field-placeholder">Set owner</span>'}</span></span>
         </div>
-        ${(() => { const lastUpdate = item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
         <div class="tracker-timestamp">
           Tracked: ${escapeHtml(safeDate(item.trackedAt, 'Unknown'))} · Last checked: ${escapeHtml(safeDate(item.lastRunAt, 'Never'))}
         </div>

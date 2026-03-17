@@ -208,16 +208,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 260px;
-  flex-shrink: 0;
-}
-.tracker-row-summary {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
+}
+.tracker-row-summary {
+  display: none;
 }
 .tracker-row-due {
   flex-shrink: 0;
