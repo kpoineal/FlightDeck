@@ -1,0 +1,11 @@
+# Default owner for everything
+*                           @kpoineal
+
+# Security-critical paths — main process, preload bridge, dependencies
+src/main/                   @kpoineal
+src/preload.js              @kpoineal
+package.json                @kpoineal
+package-lock.json           @kpoineal
+
+# CI/CD and build configuration
+.github/                    @kpoineal
