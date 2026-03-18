@@ -40,3 +40,19 @@
 - `version:patch` convenience script added: `npm version patch --no-git-tag-version` — git tag creation is handled by the release workflow.
 - README now has a Download section with a badge linking to GitHub Releases.
 - Existing squad workflows (`squad-release.yml`, `squad-ci.yml`) run on Ubuntu — the new `release.yml` and `ci.yml` run on Windows to handle native modules.
+
+### 2026-03-18 — Incremental Build Workflow & Versioning Strategy
+- **Branch:** `squad/incremental-builds` — new workflow `.github/workflows/incremental.yml`.
+- **Two-channel versioning:** Stable releases use `release.yml` (tag-triggered, `X.Y.0`). Incremental builds use `incremental.yml` (scheduled weekday 6AM UTC + manual dispatch, `X.Y.{run_number}`).
+- **Version computation:** Reads major.minor from `package.json`, sets patch to `github.run_number` via PowerShell. Patch is ephemeral — never committed back.
+- **Pipeline:** Checkout main → compute version → npm ci → tests → build MSI → Azure Login (OIDC) → Sign MSI (Trusted Signing) → create GitHub pre-release → cleanup incrementals older than 14 days.
+- **Decision captured:** `.squad/decisions/inbox/jester-versioning-strategy.md` — full two-channel strategy.
+- **Key detail:** Pre-releases auto-delete after 14 days to avoid clutter. Re-runs safe — existing tag/release deleted before re-creation.
+
+### 2026-03-18 — Azure Trusted Signing (Code Signing)
+- **PR #12** (`squad/code-signing`): Added Azure Trusted Signing to `release.yml` to sign the MSI before GitHub Release upload.
+- **Approach:** OIDC-based Azure login via `azure/login@v2` + `azure/trusted-signing-action@v0.5.0`. Uses Workload Identity Federation — no client secrets stored in repo.
+- **Permission:** Added `id-token: write` to workflow permissions (required for OIDC token exchange).
+- **Signing config:** SHA256 digest, RFC 3161 timestamping via `timestamp.acs.microsoft.com`, certificate profile is Public Trust (CN=Kyle Poineal).
+- **Secrets required:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_CODE_SIGNING_ENDPOINT_URL`, `AZURE_CODE_SIGNING_ACCOUNT_NAME`, `AZURE_CODE_SIGNING_PROFILE_NAME` — all pre-configured by Kyle.
+- **Step order:** Build MSI → Azure Login → Sign MSI → Create GitHub Release. No existing steps modified.

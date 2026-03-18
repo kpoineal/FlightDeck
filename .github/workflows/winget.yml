@@ -1,0 +1,68 @@
+name: Publish to winget
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v1.1.0)'
+        required: true
+        type: string
+
+jobs:
+  winget:
+    runs-on: windows-latest
+    # Only publish stable releases (X.Y.0), not incrementals
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (!github.event.release.prerelease && !github.event.release.draft)
+
+    steps:
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ inputs.tag }}"
+          } else {
+            $tag = "${{ github.event.release.tag_name }}"
+          }
+          $version = $tag -replace '^v', ''
+          "tag=$tag" | Out-File -Append $env:GITHUB_OUTPUT
+          "version=$version" | Out-File -Append $env:GITHUB_OUTPUT
+          Write-Host "Publishing FlightDeck.FlightDeck $version to winget"
+
+      - name: Get MSI URL from release
+        id: msi
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $assets = gh release view $tag --repo ${{ github.repository }} --json assets --jq ".assets[].url" | Where-Object { $_ -match "\.msi$" }
+          if (-not $assets) {
+            Write-Error "No MSI asset found in release $tag"
+            exit 1
+          }
+          $url = $assets | Select-Object -First 1
+          "url=$url" | Out-File -Append $env:GITHUB_OUTPUT
+          Write-Host "MSI URL: $url"
+
+      - name: Install wingetcreate
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile wingetcreate.exe
+
+      - name: Submit to winget-pkgs
+        shell: pwsh
+        env:
+          WINGET_PAT: ${{ secrets.WINGET_PAT }}
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $url = "${{ steps.msi.outputs.url }}"
+          ./wingetcreate.exe update FlightDeck.FlightDeck `
+            --urls $url `
+            --version $version `
+            --submit `
+            --token $env:WINGET_PAT
