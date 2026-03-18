@@ -17,12 +17,37 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
+
+      - name: Check for new commits
+        id: changes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the most recent incremental tag
+          $lastTag = git tag --list "v*.*.*" --sort=-version:refname | Where-Object { $_ -notmatch "\.0$" } | Select-Object -First 1
+          if ($lastTag) {
+            $newCommits = git rev-list "$lastTag..HEAD" --count
+            Write-Host "Commits since $lastTag`: $newCommits"
+            if ($newCommits -eq 0 -and "${{ github.event_name }}" -eq "schedule") {
+              Write-Host "No new commits since last incremental. Skipping."
+              "skip=true" | Out-File -Append $env:GITHUB_OUTPUT
+            } else {
+              "skip=false" | Out-File -Append $env:GITHUB_OUTPUT
+            }
+          } else {
+            Write-Host "No previous incremental tag found. Building."
+            "skip=false" | Out-File -Append $env:GITHUB_OUTPUT
+          }
 
       - uses: actions/setup-node@v4
+        if: steps.changes.outputs.skip != 'true'
         with:
           node-version: 22
 
       - name: Compute version
+        if: steps.changes.outputs.skip != 'true'
         id: version
         shell: pwsh
         run: |
@@ -34,15 +59,19 @@ jobs:
           Write-Host "Incremental version: $version"
 
       - name: Install dependencies
+        if: steps.changes.outputs.skip != 'true'
         run: npm ci
 
       - name: Run tests
+        if: steps.changes.outputs.skip != 'true'
         run: node --test test/*.test.js
 
       - name: Build MSI
+        if: steps.changes.outputs.skip != 'true'
         run: npm run dist
 
       - name: Azure Login
+        if: steps.changes.outputs.skip != 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -50,6 +79,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Sign MSI
+        if: steps.changes.outputs.skip != 'true'
         uses: azure/trusted-signing-action@v0.5.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -64,6 +94,7 @@ jobs:
           timestamp-digest: SHA256
 
       - name: Create pre-release
+        if: steps.changes.outputs.skip != 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -85,6 +116,7 @@ jobs:
             --notes "Automated incremental build #${{ github.run_number }} from main. Not a stable release."
 
       - name: Cleanup old incrementals
+        if: steps.changes.outputs.skip != 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
