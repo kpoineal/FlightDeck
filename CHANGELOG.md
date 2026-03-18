@@ -4,6 +4,30 @@ All notable changes to FlightDeck will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.4] - 2026-03-18
+
+### Added
+
+- **File logging** — Console logs now write to `userData/logs` for easier debugging.
+- **Apache 2.0 License** — Added LICENSE file for open source distribution.
+- **Security policy** — Added SECURITY.md with Electron-specific vulnerability reporting scope.
+- **CODEOWNERS** — Require owner review on security-critical paths (main process, preload, dependencies).
+- **Code signing** — Azure Trusted Signing integrated into release workflow (Authenticode-signed MSI).
+- **Incremental builds** — Automated weekday builds with auto-versioning via `github.run_number`.
+- **Winget workflows** — Publishing pipelines for `FlightDeck.FlightDeck` (stable) and `FlightDeck.FlightDeck.Preview` (incremental).
+
+### Fixed
+
+- **Notification click on Windows** — Fixed notification click handler and backfill `lastChangedAt` for tracking items.
+- **Updated timestamp accuracy** — Decoupled "Updated" display timestamp from last-checked time.
+- **Tracker inline citations** — Strengthened citation rendering and replaced `alert()` with toast notifications.
+
+### Changed
+
+- **Pinned node-pty** — Locked to exact version 1.1.0 to prevent unaudited minor bumps.
+- **Branding** — Styled FLIGHTDECK title with blue DECK accent, updated tagline.
+- **README** — License badge updated from TBD to Apache 2.0.
+
 ## [1.0.3] - 2026-03-06
 
 ### Fixed
