@@ -1,0 +1,100 @@
+name: Incremental Build
+
+on:
+  schedule:
+    - cron: '0 6 * * 1-5' # 6 AM UTC, weekdays
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  incremental:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Compute version
+        id: version
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $parts = $pkg.version.Split('.')
+          $version = "$($parts[0]).$($parts[1]).${{ github.run_number }}"
+          npm version $version --no-git-tag-version
+          "version=$version" | Out-File -Append $env:GITHUB_OUTPUT
+          Write-Host "Incremental version: $version"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: node --test test/*.test.js
+
+      - name: Build MSI
+        run: npm run dist
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign MSI
+        uses: azure/trusted-signing-action@v0.5.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          endpoint: ${{ secrets.AZURE_CODE_SIGNING_ENDPOINT_URL }}
+          trusted-signing-account-name: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_CODE_SIGNING_PROFILE_NAME }}
+          files-folder: dist
+          files-folder-filter: msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Create pre-release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $tag = "v$version"
+          $msi = Get-ChildItem -Path dist -Filter "*.msi" | Select-Object -First 1
+          if (-not $msi) {
+            Write-Error "No MSI found in dist/"
+            exit 1
+          }
+          # Delete existing release/tag if it exists (re-runs)
+          gh release delete $tag --yes 2>$null
+          git push origin :refs/tags/$tag 2>$null
+          # Create pre-release
+          gh release create $tag $msi.FullName `
+            --title "Incremental $version" `
+            --prerelease `
+            --notes "Automated incremental build #${{ github.run_number }} from main. Not a stable release."
+
+      - name: Cleanup old incrementals
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $cutoff = (Get-Date).AddDays(-14).ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $releases = gh release list --json tagName,isPrerelease,createdAt --limit 50 | ConvertFrom-Json
+          foreach ($r in $releases) {
+            if ($r.isPrerelease -and $r.createdAt -lt $cutoff) {
+              Write-Host "Deleting old incremental: $($r.tagName)"
+              gh release delete $r.tagName --yes
+              git push origin :refs/tags/$($r.tagName) 2>$null
+            }
+          }
