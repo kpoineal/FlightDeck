@@ -9,7 +9,7 @@
   </p>
   <p><strong>Your personal work-intelligence dashboard</strong></p>
 
-  ![License: TBD](https://img.shields.io/badge/License-TBD-lightgrey)
+  [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
   ![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=nodedotjs&logoColor=white)
   ![Electron](https://img.shields.io/badge/Electron-35%2B-47848F?logo=electron&logoColor=white)
   ![Build](https://img.shields.io/badge/build-passing-brightgreen)
@@ -399,4 +399,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding conventions
 
 ## License
 
-License TBD.
+This project is licensed under the [Apache License 2.0](LICENSE).
