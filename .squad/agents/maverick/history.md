@@ -198,6 +198,31 @@
 
 **Design principle:** Triple-reinforce critical instructions — before schema (prime attention), inside schema (field-level), after schema (rules section). Each reinforcement uses the exact `[label](url)` notation so the LLM has no ambiguity about format.
 
+### 2026-03-18 — Repository Protection Strategy Assessment
+
+**Context:** Kyle requested a strategic review of branch protection and open-source readiness policies for FlightDeck. Repo is currently private (`kpoineal/flightdeck`), actively refactored by a small team (AI agents + Kyle).
+
+**Current state assessed:**
+- CI exists: `ci.yml` (tests on PR to main + push to main, windows-latest) and `squad-ci.yml` (tests on PR to dev/preview/main/insider).
+- `squad-main-guard.yml` blocks forbidden paths (`.ai-team/`, `team-docs/`, `docs/proposals/`) from reaching main. `.squad/` intentionally allowed.
+- DEC-013 established "no direct pushes to main" as a team directive.
+- 430 tests, all green. Test suite runs in ~4s.
+- Dependencies with security surface: `node-pty` (native module, shell spawning), `electron` (filesystem/shell access), `@microsoft/workiq` (M365 data).
+- `preload.js` is well-locked: `contextIsolation: true`, `nodeIntegration: false`, explicit `contextBridge.exposeInMainWorld` with typed IPC channels.
+- CSP tightened (DEC-014): `'unsafe-inline'` removed, `default-src 'self'`.
+
+**Key recommendations delivered:**
+1. **Immediate (Phase 1):** Enable GitHub branch protection on `main` (require PR, require CI pass, no force-push). Add `npm audit` to CI. Add SECURITY.md. These are zero-friction, high-value.
+2. **Short-term (Phase 2):** Add CodeQL/Dependabot for automated vulnerability scanning. Require 1 review on PRs to main (Kyle or lead review). Pin node-pty to exact version with audit-on-update policy.
+3. **Future/open-source (Phase 3):** Add PR template with security checklist. CODEOWNERS file. Contributor License Agreement (CLA) bot if project goes public. Sandbox or restrict node-pty surface for external contributors.
+4. **Overkill for now:** Signed commits, required multiple reviewers, branch deploy previews, SAST beyond CodeQL.
+
+**Threat model priorities for FlightDeck:**
+- #1: Supply chain (node-pty, electron, workiq) — native modules are high-value targets
+- #2: IPC surface abuse — preload is well-locked, but any new channel needs review
+- #3: LLM output injection — CSP + escapeHtml cover this today, but remains an ongoing concern
+- #4: Open-source PR poisoning (future) — malicious PRs modifying preload, main process, or native deps
+
 **Key file paths:**
 - Monitor prompt: `src/renderer/prompts.js` line ~233 (`buildTaskMonitorPrompt`)
 - Radar schema: `src/renderer/constants.js` line ~3 (`RADAR_SCAN_JSON_SCHEMA`)
