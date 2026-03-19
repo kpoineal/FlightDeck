@@ -33,7 +33,7 @@ jobs:
           "version=$version" | Out-File -Append $env:GITHUB_OUTPUT
           Write-Host "Building release for tag: $tag (version: $version)"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ steps.tag.outputs.tag }}
 
