@@ -14,7 +14,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
@@ -41,7 +41,7 @@ jobs:
             "skip=false" | Out-File -Append $env:GITHUB_OUTPUT
           }
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.changes.outputs.skip != 'true'
         with:
           node-version: 22
@@ -72,7 +72,7 @@ jobs:
 
       - name: Azure Login
         if: steps.changes.outputs.skip != 'true'
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
