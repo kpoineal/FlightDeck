@@ -59,6 +59,8 @@ FlightDeck scans your Microsoft 365 signals — email, Teams, meetings, document
 > [!TIP]
 > See [docs/user-guide.md](docs/user-guide.md) for the full user guide with screenshots and walkthrough of every feature.
 
+[![Download Latest](https://img.shields.io/badge/Download%20Latest-MSI%20Installer-blue?style=for-the-badge)](../../releases/latest)
+
 ---
 
 ### 📡 Scan — surface what matters
@@ -97,30 +99,22 @@ Generate AI-powered briefings for your upcoming meetings. Each briefing surfaces
 
 ## Quick Start
 
-> [!WARNING]
-> **The installer is not code-signed.** Windows SmartScreen and your browser will flag the `.msi` as unrecognized. This is expected — follow the steps below to allow it.
-
 1. **Download** the latest `.msi` from [GitHub Releases](../../releases/latest)
 
    [![Download Latest](https://img.shields.io/badge/Download%20Latest-MSI%20Installer-blue?style=for-the-badge)](../../releases/latest)
 
-2. **Keep the file** — Your browser will warn the file isn't commonly downloaded:
-   - **Edge:** Click the `⋯` menu on the download bar → **Keep** → **Keep anyway**
-   - **Chrome:** Click **Keep dangerous file** (or go to `chrome://downloads` and click **Keep**)
+2. **Run the `.msi`** to install FlightDeck
 
-3. **Run the `.msi`** — Windows SmartScreen may show a "Windows protected your PC" popup:
-   - Click **More info** → **Run anyway**
-
-4. **Install prerequisites** (if not already installed):
+3. **Install prerequisites** (if not already installed):
    - Install [Node.js](https://nodejs.org/) v18+
    - Install the WorkIQ CLI: `npm i -g @microsoft/workiq`
-   - Ensure you have a Microsoft Copilot license and your tenant admin has granted WorkIQ consent
+   - Ensure you have a Microsoft Copilot license and your tenant admin has [granted WorkIQ consent](https://www.npmjs.com/package/@microsoft/workiq#admin-setup)
 
-5. **Launch FlightDeck** from the Start menu
+4. **Launch FlightDeck** from the Start menu
 
-6. **Click "Enable WorkIQ"** in the connect banner — FlightDeck auto-accepts the EULA and connects
+5. **Click "Enable WorkIQ"** in the connect banner — FlightDeck auto-accepts the EULA and connects
 
-7. **You're live!** — The Radar populates with your M365 signals. Switch to Briefings for meeting prep.
+6. **You're live!** — The Radar populates with your M365 signals. Switch to Briefings for meeting prep.
 
 > [!NOTE]
 > Prefer to build from source? See [Build from Source](#build-from-source) below.
@@ -136,7 +130,7 @@ Generate AI-powered briefings for your upcoming meetings. Each briefing surfaces
 | **Node.js** | v18 or later ([download](https://nodejs.org/)) |
 | **WorkIQ CLI** | `npm i -g @microsoft/workiq` — installed globally |
 | **Microsoft Copilot license** | Required by WorkIQ for M365 data access |
-| **Tenant admin consent** | Your organization must grant WorkIQ access to M365 signals |
+| **Tenant admin consent** | Your organization must [grant WorkIQ access](https://www.npmjs.com/package/@microsoft/workiq#admin-setup) to M365 signals |
 
 ### Install & Run
 
