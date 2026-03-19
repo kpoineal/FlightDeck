@@ -233,10 +233,15 @@
 ### 2026-03-12 — Remove Origin Tags from Tracking Cards
 - **Goal**: Remove "Custom"/"Imported" origin tags from tracking cards as requested by the user — they take up space and aren't useful.
 - **Changes made**:
-  1. **tracking.js**: Removed origin badge rendering logic (lines computing origin variable and originBadge template literal) from enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-right div.
+  1. **tracking.js**: Removed origin badge rendering logic (lines computing origin variable and originBadge template literal) from 
+enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-right div.
   2. **constants.js**: Removed ORIGIN_LABELS constant definition (including custom/imported labels and icons).
   3. **tracking.css**: Removed all origin-pill CSS rules (.origin-pill, .origin-pill--custom, .origin-pill--imported).
 - **Verification**: Row rendering did not include origin pills (checked via grep). Only card rendering was affected.
+
+### 2026-03-19 — Cross-Agent: Sparkline Feature Queued as P0
+
+**Context:** Iceman and Maverick assessed three feature proposals. Sparkline/timeline for trackers is the top priority (P0) — both agents agree it ships first. Data already exists in `updateHistory[]` (timestamps + severity). Maverick's suggested approach: new `buildSparklineHtml(item)` in `renderers/tracking.js`, pure inline SVG, X-axis timestamps, Y-axis severity mapped to height, color-coded using existing `--color-critical/elevated/observe` tokens. Show when `updateHistory.length >= 3`. Place in tracking card header next to severity badge. See DEC-051 and DEC-052 for full details.
 - **All 371 tests pass** after the changes.
 - **Key files**: src/renderer/renderers/tracking.js, src/renderer/constants.js, src/styles/tracking.css.
 - **Pattern**: Clean removal of unused visual indicator — CSS, JS rendering logic, and constant definition all removed as they served no other purpose. The origin field remains on tracking items in storage but is no longer displayed.
