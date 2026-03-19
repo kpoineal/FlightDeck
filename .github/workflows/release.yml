@@ -33,11 +33,11 @@ jobs:
           "version=$version" | Out-File -Append $env:GITHUB_OUTPUT
           Write-Host "Building release for tag: $tag (version: $version)"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ steps.tag.outputs.tag }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -62,7 +62,7 @@ jobs:
         run: npm run dist
 
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
