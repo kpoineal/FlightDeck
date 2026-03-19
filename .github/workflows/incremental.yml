@@ -41,7 +41,7 @@ jobs:
             "skip=false" | Out-File -Append $env:GITHUB_OUTPUT
           }
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.changes.outputs.skip != 'true'
         with:
           node-version: 22
