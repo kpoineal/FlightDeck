@@ -929,3 +929,115 @@
 - **3-tier sensitivity classification:** High (never log content), Medium (log with care), Safe (log freely). Aligns with Maverick's whitelist-only redaction approach (DEC-045).
 
 **Source:** `.squad/decisions/inbox/viper-logging-integration-points.md`
+
+---
+
+## DEC-047: Always-Visible Updated Timestamp Bar on Tracker Cards
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-17 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Summary:** The "Updated:" timestamp bar on tracker cards/rows now shows whenever `item.lastRunAt` exists, regardless of seen/unseen state. Previously it only appeared when `hasNew` was true.
+
+**Key decisions:**
+- Green (`.tracker-updated-at--new`) for unseen items — keeps existing success color + pulse animation.
+- Neutral (`.tracker-updated-at`) for seen items — muted text, subtle background, card-border left stripe, no animation.
+- Moved above the title in card view so it's the first thing visible inside `card-body`.
+- Added to popout view which previously had no Updated bar at all.
+
+**Files changed:** `src/styles/tracking.css`, `src/renderer/renderers/tracking.js`, `src/renderer/popout.js`
+
+**Source:** `.squad/decisions/inbox/goose-updated-bar-always-visible.md`
+
+---
+
+## DEC-048: Repository Protection Plan
+
+**Author:** Jester (DevOps) + Maverick (Lead) | **Date:** 2026-03-18 | **Status:** Phase 1 Implemented, Phase 2-3 Proposed | **Requested by:** Kyle Poineal
+
+**Summary:** Comprehensive repo protection strategy for FlightDeck as an open source project. Phased approach based on threat model analysis.
+
+**Phase 1 (Implemented):**
+- LICENSE file (MIT) added.
+- SECURITY.md with vulnerability reporting via GitHub Security Advisories.
+- `node-pty` pinned to exact version `1.1.0` (removed `^` — critical native module).
+
+**Phase 2 (Recommended):** `npm audit --audit-level=high` in CI, Dependabot, CODEOWNERS, 1 review on PRs, PR/issue templates, protected tags, secret scanning.
+
+**Phase 3 (Nice-to-Have):** CodeQL/code scanning, linter in CI, DCO/CLA, signed commits.
+
+**Key threat model finding:** `node-pty` is #1 threat vector — native C++ module that spawns shells. All 430 tests pass after Phase 1 changes.
+
+**Source:** `.squad/decisions/inbox/jester-repo-protection-plan.md`, `.squad/decisions/inbox/jester-repo-protection-implemented.md`
+
+---
+
+## DEC-049: FlightDeck Versioning Strategy
+
+**Author:** Kyle Poineal + Jester (DevOps) | **Date:** 2026-03-18 | **Status:** Active
+
+**Summary:** Two-channel versioning for FlightDeck releases.
+
+**Channels:**
+- **Release** (stable): `X.Y.0` — minor version bumped manually via `npm version minor`. Tagged `vX.Y.0`. Built by `release.yml`. GitHub Release marked as Latest.
+- **Incremental** (pre-release): `X.Y.{run_number}` — patch auto-set to `github.run_number` in CI. Tagged `vX.Y.N`. Built by `incremental.yml` on schedule (weekday 6AM UTC) or manual dispatch. GitHub Release marked as Pre-release.
+
+**Key decisions:**
+- `package.json` version is source of truth for major.minor only. Patch versions are ephemeral, set in CI.
+- Incremental releases auto-cleanup after 14 days.
+- Both channels code-signed via Azure Trusted Signing.
+- MSI-compatible (3-part numeric versions throughout).
+
+**Source:** `.squad/decisions/inbox/jester-versioning-strategy.md`
+
+---
+
+## DEC-050: Branch Protection Guide for `main`
+
+**Author:** Maverick (Lead) | **Date:** 2026-03-18 | **Status:** Reference | **Requested by:** Kyle Poineal
+
+**Summary:** Step-by-step guide to enable branch protection on `main` via GitHub Settings, enforcing DEC-013 at the platform level.
+
+**Key settings:** Require PR before merging (1 approval, dismiss stale), require status checks (`CI / test`), require branches to be up to date, require linear history, no force pushes, no deletions. Optional bypass for repo admin for emergency hotfixes.
+
+**Source:** `.squad/decisions/inbox/maverick-branch-protection-guide.md`
+
+---
+
+## DEC-051: Feature Review — Sparkline, Multiple Scanners, Todos
+
+**Author:** Iceman (Product Owner) | **Date:** 2026-03-19 | **Status:** Proposal — awaiting Kyle's prioritization | **Requested by:** Kyle Poineal
+
+**Summary:** Product analysis of three proposed features with value assessment, risk analysis, and strategic fit.
+
+**Priority recommendations:**
+| Priority | Feature | Rationale |
+|----------|---------|-----------|
+| **P0** | Sparkline/Timeline | Lowest effort, highest signal-to-noise improvement, data already exists, no state model changes |
+| **P1** | Multiple Radar Scanners | High value but significant architecture investment — state model, prompt system, UX all change |
+| **P2** | Todo Functionality | Moderate value, high scope creep risk — scope as "tracking completion" not "todo app" |
+
+**Key insights:**
+- Sparkline: `updateHistory[]` data already exists. Pure rendering problem (SVG or canvas). Perfect strategic fit.
+- Multiple Scanners: Transforms FlightDeck from single-lens to multi-lens work radar. Persistent cards blur Radar/Tracking boundary — design clarity needed.
+- Todos: Tracking system is 80% there. Frame as "Tracking Item Completion" — add `completed` state, quick-add, filter. Do NOT build projects, subtasks, or recurring todos in v1.
+
+**Source:** `.squad/decisions/inbox/iceman-feature-review.md`
+
+---
+
+## DEC-052: Feature Feasibility Assessment — Architecture Analysis
+
+**Author:** Maverick (Lead) | **Date:** 2026-03-19 | **Status:** Assessment — pending Kyle's prioritization | **Requested by:** Kyle Poineal
+
+**Summary:** Technical architecture feasibility for three proposed features against the post-refactoring codebase.
+
+**Verdicts:**
+- **Multiple Scanners:** HIGH value, MEDIUM complexity. Touches ~7 files. `state.radarItems` → `state.scanners[]`. New `Scanner` model + CRUD. N× WorkIQ calls per refresh. IPC unchanged if renderer-managed.
+- **Todos:** LOW-MEDIUM complexity. Tracking system is 80% of a todo system. Add `completed`/`completedAt` fields, quick-add input, completion filter. Keep in Tracking tab — do NOT create separate Todo tab.
+- **Sparkline:** LOW-MEDIUM complexity. Data exists in `updateHistory[]` (timestamps + severity). New `buildSparklineHtml(item)` in tracking renderer. Pure SVG, no library. Minimum threshold: show when `updateHistory.length >= 3`.
+
+**Cross-feature dependencies:** All three are independent. Refactoring (DEC-001, DEC-004) significantly helps — modular files vs. monolith.
+
+**Priority divergence from Iceman:** Maverick recommends Todo → Sparkline → Scanners (by complexity). Iceman recommends Sparkline → Scanners → Todos (by strategic value).
+
+**Source:** `.squad/decisions/inbox/maverick-feature-feasibility.md`
