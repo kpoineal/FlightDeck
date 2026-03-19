@@ -265,3 +265,19 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **All 451 tests pass** after the single-file change.
 - **Key file**: `src/renderer/models/radar.js` (merge logic in `applyRadarPayload`).
 - **Pattern**: When "dedup on current state" is insufficient (items can be removed), maintain an ever-growing "seen" set that survives removals. Seed it from current state on first use to cover items loaded from persistence before the set existed.
+
+### 2026-03-19 — Radar JSON Parse Retry & Graceful Error Handling
+- **Problem**: When WorkIQ returns malformed JSON for a radar scan, users see a scary red error box with a raw "bad payload error" or "Response JSON could not be parsed" message. No retry is attempted.
+- **Fix**: Added configurable retry logic to `runWorkiqJson()` in `src/renderer/json-parser.js`:
+  - New optional 4th parameter: `{ maxRetries, retryDelayMs, onRetry }`. Default: 1 retry, 2s delay.
+  - On JSON parse failure, logs a `console.warn` with failure count and attempt number, then retries the full WorkIQ call.
+  - EULA detection and WorkIQ-level failures (`!result.success`) still throw immediately without retrying.
+  - A `_parseFailureCounts` object tracks cumulative parse failures per label for debugging diagnostics.
+  - Final throw after all retries exhausted uses a user-friendly message: "Scan returned an unexpected response. Will try again on next refresh."
+- **Caller changes** in `src/renderer/app.js`:
+  - Both `refreshAllData()` and `refreshRadarData()` radar calls now pass `{ maxRetries: 1, onRetry }` to `runWorkiqJson`.
+  - `onRetry` callback updates the status bar to "Retrying radar scan (1/1)…" so the user sees a subtle indication.
+  - Error catch blocks changed: `class="error"` → `class="empty"` (no red box), status changed from "Refresh failed" → "Scan incomplete", history entries use "issue" instead of "failed".
+- **All 430 tests pass** unchanged — retry logic is additive and the existing tests use the default (1 retry) path or mock at a higher level.
+- **Key files**: `src/renderer/json-parser.js`, `src/renderer/app.js`.
+- **Pattern**: Retry at the centralized `runWorkiqJson` chokepoint covers all 10+ call sites. The `onRetry` callback lets each caller decide how to show retry progress without coupling the parser to UI concerns.
