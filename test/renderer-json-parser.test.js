@@ -461,3 +461,184 @@ describe('runWorkiqJson() EULA detection', () => {
     assert.equal(eulaCtx.state.connected, true);
   });
 });
+
+/* ================================================================== */
+/*  runWorkiqJson — retry logic                                       */
+/* ================================================================== */
+describe('runWorkiqJson() retry logic', () => {
+  let retryCtx;
+
+  before(() => {
+    const mockState = { connected: true };
+    const mockElements = { connectBanner: { classList: { remove() {}, add() {} } } };
+    retryCtx = createRendererContext({
+      state: mockState,
+      elements: mockElements,
+      savePersistentState: () => {},
+      window: {
+        location: { search: '' },
+        workiq: { ask: async () => ({ success: true, answer: '' }) },
+      },
+    });
+    loadFile(retryCtx, 'renderer/json-parser.js');
+  });
+
+  it('succeeds on first attempt without retrying', async () => {
+    let callCount = 0;
+    retryCtx.window.workiq.ask = async () => {
+      callCount += 1;
+      return { success: true, answer: '{"status":"ok"}' };
+    };
+
+    const result = await retryCtx.runWorkiqJson(
+      'test prompt', (o) => o.status === 'ok', 'first-attempt',
+      { maxRetries: 2, retryDelayMs: 0 }
+    );
+    assert.equal(result.status, 'ok');
+    assert.equal(callCount, 1);
+  });
+
+  it('retries on parse failure and succeeds on second attempt', async () => {
+    let callCount = 0;
+    retryCtx.window.workiq.ask = async () => {
+      callCount += 1;
+      if (callCount === 1) return { success: true, answer: 'not json at all' };
+      return { success: true, answer: '{"status":"recovered"}' };
+    };
+
+    const result = await retryCtx.runWorkiqJson(
+      'test prompt', (o) => o.status === 'recovered', 'retry-success',
+      { maxRetries: 1, retryDelayMs: 0 }
+    );
+    assert.equal(result.status, 'recovered');
+    assert.equal(callCount, 2);
+  });
+
+  it('throws user-friendly error after all retries exhausted', async () => {
+    retryCtx.window.workiq.ask = async () => ({ success: true, answer: 'garbage' });
+
+    await assert.rejects(
+      () => retryCtx.runWorkiqJson(
+        'test prompt', () => true, 'all-fail',
+        { maxRetries: 2, retryDelayMs: 0 }
+      ),
+      (err) => {
+        assert.ok(err.message.includes('Scan returned an unexpected response'));
+        assert.ok(err.message.includes('Will try again on next refresh'));
+        return true;
+      }
+    );
+  });
+
+  it('EULA error throws immediately — no retry', async () => {
+    let callCount = 0;
+    const eulaAnswer = 'accept the End User License Agreement workiq accept-eula';
+    retryCtx.state.connected = true;
+    retryCtx.window.workiq.ask = async () => {
+      callCount += 1;
+      return { success: true, answer: eulaAnswer };
+    };
+
+    await assert.rejects(
+      () => retryCtx.runWorkiqJson(
+        'test prompt', () => true, 'eula-no-retry',
+        { maxRetries: 3, retryDelayMs: 0 }
+      ),
+      (err) => {
+        assert.ok(err.message.includes('EULA'));
+        return true;
+      }
+    );
+    assert.equal(callCount, 1);
+  });
+
+  it('result.success === false throws immediately — no retry', async () => {
+    let callCount = 0;
+    retryCtx.window.workiq.ask = async () => {
+      callCount += 1;
+      return { success: false, error: 'server error' };
+    };
+
+    await assert.rejects(
+      () => retryCtx.runWorkiqJson(
+        'test prompt', () => true, 'fail-no-retry',
+        { maxRetries: 3, retryDelayMs: 0 }
+      ),
+      (err) => {
+        assert.ok(err.message.includes('server error'));
+        return true;
+      }
+    );
+    assert.equal(callCount, 1);
+  });
+
+  it('invokes onRetry callback with correct (attempt, maxRetries) args', async () => {
+    const retryCalls = [];
+    let callCount = 0;
+    retryCtx.window.workiq.ask = async () => {
+      callCount += 1;
+      if (callCount <= 2) return { success: true, answer: 'bad' };
+      return { success: true, answer: '{"done":true}' };
+    };
+
+    const result = await retryCtx.runWorkiqJson(
+      'test prompt', (o) => o.done === true, 'onretry-test',
+      {
+        maxRetries: 2,
+        retryDelayMs: 0,
+        onRetry: (attempt, max) => retryCalls.push({ attempt, max }),
+      }
+    );
+    assert.equal(result.done, true);
+    assert.equal(retryCalls.length, 2);
+    assert.equal(retryCalls[0].attempt, 1);
+    assert.equal(retryCalls[0].max, 2);
+    assert.equal(retryCalls[1].attempt, 2);
+    assert.equal(retryCalls[1].max, 2);
+  });
+
+  it('maxRetries: 0 means single attempt only — no retry', async () => {
+    let callCount = 0;
+    retryCtx.window.workiq.ask = async () => {
+      callCount += 1;
+      return { success: true, answer: 'not json' };
+    };
+
+    await assert.rejects(
+      () => retryCtx.runWorkiqJson(
+        'test prompt', () => true, 'zero-retries',
+        { maxRetries: 0, retryDelayMs: 0 }
+      ),
+      (err) => {
+        assert.ok(err.message.includes('Scan returned an unexpected response'));
+        return true;
+      }
+    );
+    assert.equal(callCount, 1);
+  });
+
+  it('logs parse failure count per label via console.warn', async () => {
+    const label = 'counter-test-' + Date.now();
+    const warnings = [];
+    const origWarn = retryCtx.console.warn;
+    retryCtx.console.warn = (...args) => warnings.push(args.join(' '));
+
+    let callCount = 0;
+    retryCtx.window.workiq.ask = async () => {
+      callCount += 1;
+      if (callCount <= 2) return { success: true, answer: 'bad json' };
+      return { success: true, answer: '{"ok":true}' };
+    };
+
+    await retryCtx.runWorkiqJson(
+      'test prompt', (o) => o.ok === true, label,
+      { maxRetries: 2, retryDelayMs: 0 }
+    );
+
+    retryCtx.console.warn = origWarn;
+    const failureLogs = warnings.filter((w) => w.includes(label) && /parse failure #\d+/.test(w));
+    assert.equal(failureLogs.length, 2);
+    assert.ok(failureLogs[0].includes('parse failure #1'));
+    assert.ok(failureLogs[1].includes('parse failure #2'));
+  });
+});
