@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@microsoft/workiq": "^0.2.8",
-    "electron-store": "^8.2.0",
+    "electron-store": "^11.0.2",
     "node-pty": "1.1.0"
   }
 }
