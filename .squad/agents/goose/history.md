@@ -281,3 +281,61 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **All 430 tests pass** unchanged — retry logic is additive and the existing tests use the default (1 retry) path or mock at a higher level.
 - **Key files**: `src/renderer/json-parser.js`, `src/renderer/app.js`.
 - **Pattern**: Retry at the centralized `runWorkiqJson` chokepoint covers all 10+ call sites. The `onRetry` callback lets each caller decide how to show retry progress without coupling the parser to UI concerns.
+
+### 2026-03-19 — Sparkline POC for Tracking Cards
+- **Goal**: Add inline SVG sparkline/timeline visualization to tracking cards showing severity trend over update history.
+- **New function**: `buildSparklineSvg(updateHistory)` in `renderers/tracking.js` — generates a compact SVG (120×24px) with dots connected by lines. X-axis = evenly spaced history entries (oldest→newest left→right), Y-axis = severity height (Critical=top, Elevated=mid, Observe=bottom). 3-entry minimum threshold.
+- **Color mapping**: Uses existing CSS tokens — `--color-critical`, `--color-elevated`, `--color-observe`. Lines colored by target point's severity at 0.4 opacity; dots at full opacity.
+- **Integration**: Rendered in both card view (`tracker-head-left`, after severity select) and minimal/row view (after severity select, before pills). Naturally fits the 20-entry history cap (DEC-010).
+- **CSS**: `.sparkline-svg` styles in `tracking.css` — inline-block, flex-shrink:0, subtle hover opacity transition. Row view has reduced dimensions (80×20px).
+- **Key files**: `src/renderer/renderers/tracking.js`, `src/styles/tracking.css`.
+- **All 438 tests pass** — additive change only.
+
+### 2026-03-19 — Sparkline → Timeline V2 (Popout Only)
+- **Problem**: Kyle tested the sparkline POC on tracking cards and didn't like how it looked — too small, too stock-charty, not enough context.
+- **Two requested changes**: (1) Move visualization to the popout view (more space), (2) Make it look like a timeline with time markers and severity-colored event nodes, not a sparkline.
+- **Removed from cards**: Deleted `buildSparklineSvg()` calls from both card view (`tracker-head-left`) and row view in `renderers/tracking.js`. Removed `.sparkline-svg` CSS block.
+- **Kept utility logic**: Severity-to-color mapping reused via extracted `severityColor()` and `severityLabel()` helpers.
+- **New `buildTimelineHtml(updateHistory)`** in `renderers/tracking.js`:
+  - Horizontal timeline with severity-colored dot nodes connected by colored lines
+  - Time labels below each node (relative: "2h ago", "yesterday", or short date for older)
+  - Severity labels under time labels
+  - Hover tooltip per node: full timestamp, severity, change description, truncated summary
+  - Collapsible section toggle ("Severity Timeline (N events)")
+  - 2-entry minimum threshold (vs 3 for old sparkline)
+  - Edge-aware tooltips (first/last child repositioned to stay on-screen)
+- **Popout integration** in `popout.js`:
+  - Timeline section placed between tracker-timestamp and People section
+  - Toggle click handler added for `[data-timeline-toggle-id]` delegation
+  - Starts expanded by default
+- **CSS** in `tracking.css`:
+  - Full `.tl-*` class system: `.tl-track` (flex container), `.tl-node`, `.tl-connector`, `.tl-dot`, `.tl-line-before/after`, `.tl-time`, `.tl-label`, `.tl-tooltip`
+  - Dot glows via `color-mix()` with severity color, scales 1.4× on hover
+  - Tooltip uses `--bg-surface`, blur backdrop, shadow — matches existing popout panel style
+  - All colors via CSS tokens — works in both dark and light themes
+- **Key files**: `src/renderer/renderers/tracking.js`, `src/renderer/popout.js`, `src/styles/tracking.css`
+- **All 438 tests pass** after changes.
+
+### 2026-03-19 — Activity Timeline V3 + Resizable Popout Panels
+- **Problem**: Kyle said the horizontal timeline "isn't even really visible and kinda looks dumb." Wanted something "more interactive and modern" that would "make Apple's UI developers jealous." Also wanted resizable panels in the popout view.
+- **Deliverable 1: Resizable Popout Panels**
+  - Added drag handle between `.popout-panel-left` and `.popout-panel-right` — injected as DOM element in `applyPopoutPanelRatio()`, called after every `renderPopoutMode()` re-render.
+  - Mousedown/move/up handlers in `initResize()` with `requestAnimationFrame` for smooth dragging. Minimum 250px per panel.
+  - Panel ratio persisted to `localStorage` key `flightdeck_popout_panel_ratio` and restored on render.
+  - CSS grid changed from `3fr 2fr` → `3fr 6px 2fr` (3 columns) to accommodate the handle element.
+  - Handle styling: subtle borders, grip dots appear on hover, `col-resize` cursor.
+- **Deliverable 2: Vertical Activity Timeline (Apple-quality)**
+  - Removed entire `buildTimelineHtml` function and all `.tl-*` CSS (horizontal tooltip-based timeline).
+  - New `buildActivityTimelineHtml(updateHistory)` — vertical layout, newest at top, oldest at bottom.
+  - Each event: severity-colored node (14px dot with glow ring), connecting spine segments, event cards with relative time, severity pill, change summary, link chips.
+  - Newest node has pulsing ring animation (`at-pulse` keyframes, 2s infinite).
+  - Severity transitions between events show gradient spine segments and ▲/▼ direction badges.
+  - Hover: node scales 1.3× with spring cubic-bezier, card gets severity-colored highlight border.
+  - Click: smooth-scrolls right panel to matching history entry with pulse highlight animation.
+  - Card entrance: staggered fade-up via `animation-delay` (30ms per card).
+  - Spine draws itself on first render via `at-spine-draw` keyframe.
+  - Max-height 420px with scrolling for long histories.
+  - Light theme: solid shadows instead of glows (both explicit and `prefers-color-scheme` variants).
+  - All colors via CSS custom property `--at-color` set per-node via inline style.
+- **Key files**: `src/renderer/renderers/tracking.js`, `src/renderer/popout.js`, `src/styles/tracking.css`
+- **All 438 tests pass** after changes.
