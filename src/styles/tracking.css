@@ -398,7 +398,7 @@
 
 .popout-panels {
   display: grid;
-  grid-template-columns: 3fr 2fr;
+  grid-template-columns: 3fr 6px 2fr;
   gap: 0;
   flex: 1;
   min-height: 0;
@@ -407,7 +407,7 @@
 .popout-panel-left {
   padding: 20px 24px;
   overflow-y: auto;
-  border-right: 1px solid var(--border);
+  border-right: none;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1005,5 +1005,278 @@ html[data-theme="light"] .weekly-time-picker::-webkit-calendar-picker-indicator 
 
 .tracker-row-due .editable-field {
   display: inline;
+}
+
+/* ── Popout Resize Handle ── */
+.popout-resize-handle {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+  z-index: 5;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.popout-resize-handle::before {
+  content: '';
+  position: absolute;
+  inset: 0 -3px;
+}
+.popout-resize-handle:hover,
+.popout-resize-handle:active {
+  background: color-mix(in srgb, var(--border-hover) 60%, transparent);
+}
+.popout-resize-grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.popout-resize-handle:hover .popout-resize-grip,
+.popout-resize-handle:active .popout-resize-grip {
+  opacity: 1;
+}
+.popout-resize-grip::before,
+.popout-resize-grip::after,
+.popout-resize-grip {
+  --grip-dot: var(--text-muted);
+}
+.popout-resize-grip::before,
+.popout-resize-grip::after {
+  content: '';
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--grip-dot);
+}
+
+/* ── Activity Timeline (vertical, Apple-quality) ── */
+.activity-timeline {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+  margin-top: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  animation: at-spine-draw 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes at-spine-draw {
+  from { max-height: 0; opacity: 0; }
+  to { max-height: 420px; opacity: 1; }
+}
+.at-event {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  position: relative;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: at-card-enter 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: var(--at-delay, 0ms);
+  cursor: pointer;
+}
+@keyframes at-card-enter {
+  to { opacity: 1; transform: translateY(0); }
+}
+.at-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  position: relative;
+}
+.at-node {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  z-index: 2;
+}
+.at-node-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--at-color);
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--at-color) 18%, transparent),
+    0 0 10px color-mix(in srgb, var(--at-color) 25%, transparent);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.at-event:hover .at-node-dot {
+  transform: scale(1.3);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--at-color) 25%, transparent),
+    0 0 16px color-mix(in srgb, var(--at-color) 40%, transparent);
+}
+.at-node-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--at-color);
+  opacity: 0.6;
+  animation: at-pulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes at-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.35); opacity: 0; }
+}
+.at-spine-segment {
+  flex: 1;
+  width: 2px;
+  min-height: 12px;
+  background: color-mix(in srgb, var(--at-color) 35%, transparent);
+  transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.at-spine-transition {
+  background: linear-gradient(to bottom,
+    color-mix(in srgb, var(--at-color) 50%, transparent),
+    color-mix(in srgb, var(--at-color) 15%, transparent));
+}
+.at-card {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: var(--bg-raised);
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.at-event:hover .at-card {
+  border-color: color-mix(in srgb, var(--at-color) 40%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--at-color) 12%, transparent);
+  background: color-mix(in srgb, var(--at-color) 4%, var(--bg-raised));
+}
+.at-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.at-time {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.at-severity {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+}
+.at-severity.severity-critical {
+  color: var(--pill-critical-text);
+  background: var(--pill-critical-bg);
+}
+.at-severity.severity-elevated {
+  color: var(--pill-elevated-text);
+  background: var(--pill-elevated-bg);
+}
+.at-severity.severity-observe {
+  color: var(--pill-observe-text);
+  background: var(--pill-observe-bg);
+}
+.at-transition-badge {
+  font-size: 0.6rem;
+  line-height: 1;
+  opacity: 0.6;
+}
+.at-changes {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.at-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.at-link-chip {
+  font-size: 0.68rem;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--link);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+.at-link-chip:hover {
+  border-color: var(--link);
+  background: color-mix(in srgb, var(--link) 10%, var(--bg-inset));
+}
+
+/* History entry pulse when clicked from timeline */
+.tracker-history-entry.at-pulse {
+  animation: at-history-pulse 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes at-history-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 40%, transparent); }
+  30% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ── Light-theme refinements for Activity Timeline ── */
+html[data-theme="light"] .at-node-dot {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--at-color) 15%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.12);
+}
+html[data-theme="light"] .at-event:hover .at-node-dot {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--at-color) 20%, transparent),
+    0 2px 6px rgba(0, 0, 0, 0.15);
+}
+html[data-theme="light"] .at-card {
+  background: var(--bg-inset);
+}
+html[data-theme="light"] .at-event:hover .at-card {
+  background: color-mix(in srgb, var(--at-color) 5%, var(--bg-inset));
+}
+@media (prefers-color-scheme: light) {
+  html:not([data-theme="dark"]) .at-node-dot {
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--at-color) 15%, transparent),
+      0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+  html:not([data-theme="dark"]) .at-event:hover .at-node-dot {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--at-color) 20%, transparent),
+      0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+  html:not([data-theme="dark"]) .at-card {
+    background: var(--bg-inset);
+  }
+  html:not([data-theme="dark"]) .at-event:hover .at-card {
+    background: color-mix(in srgb, var(--at-color) 5%, var(--bg-inset));
+  }
 }
 

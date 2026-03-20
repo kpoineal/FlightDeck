@@ -131,7 +131,80 @@ function buildScheduleControlsHtml(item) {
     <input class="tracking-input${isOneTime ? '' : ' d-none'}" type="datetime-local" data-monitor-onetime-id="${escapeHtml(item.id)}" value="${item.oneTimeAt ? escapeHtml(item.oneTimeAt.slice(0, 16)) : ''}" />
     ${buildWeeklyScheduleHtml(item, item.id)}`;
 }
+function severityColor(sev) {
+  const s = (sev || '').toLowerCase();
+  if (s === 'critical') return 'var(--color-critical)';
+  if (s === 'elevated') return 'var(--color-elevated)';
+  return 'var(--color-observe)';
+}
 
+function severityLabel(sev) {
+  const s = (sev || '').toLowerCase();
+  if (s === 'critical') return 'Critical';
+  if (s === 'elevated') return 'Elevated';
+  return 'Observe';
+}
+
+function timelineRelativeLabel(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    + ', ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function buildActivityTimelineHtml(updateHistory) {
+  if (!Array.isArray(updateHistory) || updateHistory.length < 2) return '';
+  // newest first (top → bottom)
+  const entries = updateHistory.slice();
+
+  const events = entries.map((e, i) => {
+    const color = severityColor(e.severity);
+    const label = severityLabel(e.severity);
+    const timeLabel = timelineRelativeLabel(e.timestamp);
+    const changeSummary = Array.isArray(e.changes) ? e.changes.join(' · ') : '';
+    const isNewest = i === 0;
+    const isLast = i === entries.length - 1;
+
+    // Show severity transition indicator between events
+    const prevSeverity = i > 0 ? (entries[i - 1].severity || '').toLowerCase() : null;
+    const curSeverity = (e.severity || '').toLowerCase();
+    const sevChanged = prevSeverity && prevSeverity !== curSeverity;
+    const escalated = sevChanged && (curSeverity === 'critical' || (curSeverity === 'elevated' && prevSeverity === 'observe'));
+
+    // Build link chips if newLinks exist
+    const linkChips = Array.isArray(e.newLinks) && e.newLinks.length
+      ? `<span class="at-links">${e.newLinks.map((l) => `<a class="at-link-chip" href="${escapeHtml(l.url)}" target="_blank" rel="noreferrer">${escapeHtml(l.label || 'link')}</a>`).join('')}</span>`
+      : '';
+
+    return `<div class="at-event${isNewest ? ' at-event--newest' : ''}" style="--at-color: ${color}; --at-delay: ${i * 30}ms" data-at-index="${i}">
+      <div class="at-track">
+        <div class="at-node">
+          ${isNewest ? '<div class="at-node-ring"></div>' : ''}
+          <div class="at-node-dot"></div>
+        </div>
+        ${!isLast ? `<div class="at-spine-segment${sevChanged ? ' at-spine-transition' : ''}"></div>` : ''}
+      </div>
+      <div class="at-card">
+        <div class="at-card-head">
+          <span class="at-time">${escapeHtml(timeLabel)}</span>
+          <span class="at-severity pill severity-${escapeHtml(curSeverity)}">${escapeHtml(label)}</span>
+          ${sevChanged ? `<span class="at-transition-badge">${escalated ? '▲' : '▼'}</span>` : ''}
+        </div>
+        <p class="at-changes">${escapeHtml(changeSummary || 'No changes recorded')}</p>
+        ${linkChips}
+      </div>
+    </div>`;
+  });
+
+  return `
+    <button class="tracker-section-toggle expanded" data-timeline-toggle-id="timeline">
+      <span class="chevron chevron--expanded">&#9654;</span> Activity Timeline (${entries.length} events)
+    </button>
+    <div class="tracker-section-panel show" data-timeline-panel-id="timeline">
+      <div class="activity-timeline">${events.join('')}</div>
+    </div>`;
+}
 function buildNextStepHintsHtml(item, alwaysShow = false) {
   const steps = Array.isArray(item?.suggestedNextSteps) ? item.suggestedNextSteps : [];
   if (!steps.length) return '';
@@ -535,7 +608,7 @@ function renderTrackingMode() {
           </div>
 
           <div class="action-row">
-            ${hasNew ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
+            ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
             <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
             <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
           </div>
@@ -650,7 +723,7 @@ function renderTrackingMode() {
         </div>
 
         <div class="action-row">
-          ${hasNew ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
+          ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
           <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
           <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
         </div>
