@@ -1059,3 +1059,99 @@
 **Why:** Reduce vertical space consumed by tracking cards while keeping full detail one click away.
 
 **Source:** `.squad/decisions/inbox/goose-details-collapsible.md`
+
+---
+
+## DEC-054: Never Work Directly in Main
+
+**Author:** Kyle Poineal (via Copilot) | **Date:** 2026-03-19 | **Status:** Active
+
+**Summary:** Never work directly in main. Always use feature branches. All changes must go through PRs.
+
+**Source:** `.squad/decisions/inbox/copilot-directive-2026-03-19T-never-work-in-main.md`
+
+---
+
+## DEC-055: Radar JSON Parse Retry Logic
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-19 | **Status:** Implemented
+
+**Summary:** `runWorkiqJson()` now accepts optional `{ maxRetries, retryDelayMs, onRetry }` config. On JSON parse failure, retries the full WorkIQ call up to `maxRetries` times (default 1) with configurable delay (default 2s). EULA and WorkIQ-level failures still throw immediately. Error messages now user-friendly; error display uses `class="empty"` instead of `class="error"`.
+
+**Key decisions:**
+- Retry at the `runWorkiqJson` chokepoint covers all call sites.
+- `onRetry` callback pattern keeps UI coupling out of the parser module.
+- Radar scan callers in `app.js` use the retry with a status bar callback.
+
+**Source:** `.squad/decisions/inbox/goose-radar-json-retry.md`
+
+---
+
+## DEC-056: Sparkline POC → Timeline V2 → Activity Timeline V3 Evolution
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-19 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Summary:** Three iterations of severity trend visualization driven by user feedback. Started as inline SVG sparklines on tracking cards, evolved through a horizontal popout timeline (V2), and landed on a vertical Apple-quality Activity Timeline (V3) with resizable popout panels.
+
+**Key decisions (V3 — final):**
+- Vertical layout (newest at top) instead of horizontal — handles 20+ entries gracefully.
+- Click-to-scroll from timeline nodes to corresponding history entries in the right panel.
+- Pulsing ring animation on newest node (heartbeat indicator).
+- Staggered card entrance animations (30ms delay per card).
+- Resizable panels use CSS grid 3-column layout with ratio persisted in localStorage.
+- Minimum panel width: 250px each side.
+- All new CSS classes prefixed `at-` (activity timeline) and `popout-resize-`.
+
+**Source:** `.squad/decisions/inbox/goose-sparkline-poc.md`, `.squad/decisions/inbox/goose-sparkline-timeline-v2.md`, `.squad/decisions/inbox/goose-timeline-v3.md`
+
+---
+
+## DEC-057: ToDo Feature — Product Analysis & Architecture
+
+**Author:** Iceman (Product Owner) + Maverick (Lead) | **Date:** 2026-03-20 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Summary:** Product analysis confirmed ToDo/task management as a natural extension of FlightDeck's existing tracking model. Architecture recommendation: Option A — extend tracking model with task/completion/due-date fields (lowest risk, reuses existing persistence, rendering, and IPC infrastructure).
+
+**Key decisions:**
+- FlightDeck tasks are AI-briefing-aware and contextually linked, not a generic standalone list.
+- Extend tracking model rather than separate model or derived view.
+- Phased approach approved by user: Phase 1 (core completion), Phase 2 (due dates/filters), Phase 3 (subtasks), Phase 4 (polish).
+
+**Source:** `.squad/decisions/inbox/iceman-todo-product-proposal.md`, `.squad/decisions/inbox/maverick-todo-architecture.md`
+
+---
+
+## DEC-058: ToDo Feature User Directives
+
+**Author:** Kyle Poineal (via Copilot) | **Date:** 2026-03-20 | **Status:** Active
+
+**Summary:** User directives governing ToDo feature behavior:
+1. Completed items should be archived when completed (not persist in active view).
+2. Default filter is "Active" (hiding completed/archived items).
+3. Auto-resolve approved — monitor re-scans can auto-mark AI actions as done.
+4. Filtered view inside Tracking tab (no new dedicated tab for now).
+5. All phases greenlit.
+
+**Source:** `.squad/decisions/inbox/copilot-directive-todo-decisions.md`
+
+---
+
+## DEC-059: ToDo Feature — Full 4-Phase Implementation
+
+**Author:** Goose (Frontend Dev) + Merlin (Tester) | **Date:** 2026-03-20 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Summary:** Implemented complete ToDo feature across 4 phases, extending the tracking model per DEC-057 architecture recommendation.
+
+**Phase 1 — Core Completion:** Added `completed`, `completedAt`, `subtasks` fields. `toggleItemCompleted()` and `setItemCompleted()` model functions. Completion checkbox on tracking cards. Completed items styled with strikethrough and reduced opacity.
+
+**Phase 2 — Filter Bar & Due Date Prominence:** Filter bar with Active (default), Due Today, Completed, All views. `filterItems()`, `isDueToday()`, `isOverdue()`, `isDueSoon()` helpers. Due date visual prominence classes.
+
+**Phase 3 — Subtasks:** `subtasks` array with `text`, `completed`, `origin` (ai/user) fields. `seedSubtasks()` integrates AI-generated subtasks from monitor scans. `buildNextStepHintsHtml()` renders subtask lists with origin badges.
+
+**Phase 4 — Polish & Integration:** Monitor-engine auto-resolve. KPI integration with completion stats. Demo fixture updated. Full CSS for all new components.
+
+**Testing:** 47 new tests covering all model functions, filter logic, date helpers, and UI builders. Total: 485 tests passing.
+
+**Key files:** `src/renderer/models/tracking.js`, `src/renderer/renderers/tracking.js`, `src/renderer/renderers/kpi.js`, `src/renderer/monitor-engine.js`, `src/renderer/constants.js`, `src/renderer/events.js`, `src/styles/tracking.css`, `src/styles/components.css`, `src/demo/fixture.json`, `test/renderer-todo.test.js`
+
+**Source:** `.squad/decisions/inbox/goose-todo-implementation.md`

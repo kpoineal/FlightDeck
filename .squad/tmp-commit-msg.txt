@@ -1,1 +1,10 @@
-chore(squad): log collapsible details session, merge DEC-053
+Scribe: log ToDo implementation session, merge 9 inbox decisions (DEC-054 through DEC-059)
+
+- Session log: 2026-03-20T17-00-00Z-todo-implementation.md
+- Merged inbox: sparkline/timeline evolution, radar JSON retry, ToDo product
+  analysis, architecture recommendation, user directives, full 4-phase
+  implementation, never-work-in-main directive
+- Decisions: DEC-054 (no direct main), DEC-055 (JSON retry), DEC-056
+  (sparkline→timeline V3), DEC-057 (ToDo architecture), DEC-058 (ToDo
+  user directives), DEC-059 (ToDo 4-phase implementation)
+- Cleared decisions/inbox/
