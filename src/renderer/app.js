@@ -105,7 +105,13 @@ async function refreshAllData() {
     const radarTask = runWorkiqJson(
       buildRadarScanPrompt(),
       (payload) => payload && Array.isArray(payload.radarItems),
-      'radar'
+      'radar',
+      {
+        maxRetries: 1,
+        onRetry: (attempt, max) => {
+          setStatus(`Retrying radar scan (${attempt}/${max})…`);
+        },
+      }
     )
       .then((payload) => {
         applyRadarPayload(payload);
@@ -115,8 +121,8 @@ async function refreshAllData() {
         renderTrackingMode();
       })
       .catch((error) => {
-        addHistory('failure', `Radar scan failed: ${error.message}`);
-        elements.radarList.innerHTML = `<div class="error">Radar scan failed: ${escapeHtml(error.message)}</div>`;
+        addHistory('failure', `Radar scan issue: ${error.message}`);
+        elements.radarList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
       })
       .finally(() => {
         completedCount += 1;
@@ -168,7 +174,13 @@ async function refreshRadarData() {
     const radarPayload = await runWorkiqJson(
       buildRadarScanPrompt(),
       (payload) => payload && Array.isArray(payload.radarItems),
-      'radar'
+      'radar',
+      {
+        maxRetries: 1,
+        onRetry: (attempt, max) => {
+          setStatus(`Retrying radar scan (${attempt}/${max})…`);
+        },
+      }
     );
 
     applyRadarPayload(radarPayload);
@@ -177,9 +189,9 @@ async function refreshRadarData() {
     setUpdatedNow();
     renderAll();
   } catch (error) {
-    addHistory('failure', `Radar scan failed: ${error.message}`);
-    setStatus('Refresh failed');
-    elements.radarList.innerHTML = `<div class="error">Radar scan failed: ${escapeHtml(error.message)}</div>`;
+    addHistory('failure', `Radar scan issue: ${error.message}`);
+    setStatus('Scan incomplete');
+    elements.radarList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   } finally {
     state.loading = false;
     elements.refreshBtn.disabled = false;
