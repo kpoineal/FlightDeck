@@ -1,5 +1,28 @@
 // ── Popout Mode — single-item tracker window ─────────────────────────
 
+const POPOUT_RESIZE_STORAGE_KEY = 'flightdeck_popout_panel_ratio';
+const POPOUT_MIN_PANEL_PX = 250;
+
+function applyPopoutPanelRatio() {
+  const panels = document.querySelector('.popout-panels');
+  if (!panels) return;
+  // Inject drag handle if not present
+  if (!panels.querySelector('.popout-resize-handle')) {
+    const handle = document.createElement('div');
+    handle.className = 'popout-resize-handle';
+    handle.innerHTML = '<div class="popout-resize-grip"></div>';
+    const rightPanel = panels.querySelector('.popout-panel-right');
+    if (rightPanel) panels.insertBefore(handle, rightPanel);
+  }
+  const stored = localStorage.getItem(POPOUT_RESIZE_STORAGE_KEY);
+  if (stored) {
+    const ratio = parseFloat(stored);
+    if (Number.isFinite(ratio) && ratio > 0 && ratio < 1) {
+      panels.style.gridTemplateColumns = `${ratio}fr 6px ${1 - ratio}fr`;
+    }
+  }
+}
+
 function renderPopoutMode() {
   const item = state.trackingItems.find((entry) => entry.id === POPOUT_ITEM_ID);
   if (!item) {
@@ -30,7 +53,7 @@ function renderPopoutMode() {
         ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
         ${(() => { if (hasNew) { return `<span class="tracker-new-badge">${unseenCount > 1 ? `${unseenCount} New Updates` : 'New Update'}</span>`; } const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
         <div class="popout-head-actions">
-          ${hasNew ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
+          ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
           <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
         </div>
       </div>
@@ -48,6 +71,7 @@ function renderPopoutMode() {
           <div class="tracker-timestamp">
             Tracked: ${escapeHtml(safeDate(item.trackedAt, 'Unknown'))} · Last checked: ${escapeHtml(safeDate(item.lastRunAt, 'Never'))}
           </div>
+          ${buildActivityTimelineHtml(item.updateHistory)}
           <button class="tracker-section-toggle expanded" data-people-toggle-id="${escapeHtml(item.id)}">
             <span class="chevron chevron--expanded">&#9654;</span> People (${(Array.isArray(item.counterparties) ? item.counterparties.length : 0)})
           </button>
@@ -107,6 +131,7 @@ function renderPopoutMode() {
   // Enforce schedule-control visibility via DOM API — inline style attributes
   // from the HTML template are not reliably applied after innerHTML replacement.
   inlineUpdateScheduleControls(popoutContainer, item.id, item.scheduleType);
+  applyPopoutPanelRatio();
 }
 
 async function initPopoutMode() {
@@ -125,6 +150,47 @@ async function initPopoutMode() {
   await loadPersistentState();
   renderPopoutMode();
 
+  // ── Resizable panels ──
+  function initResize() {
+    const panels = document.querySelector('.popout-panels');
+    const handle = panels?.querySelector('.popout-resize-handle');
+    if (!panels || !handle) return;
+
+    let dragging = false;
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      dragging = true;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      requestAnimationFrame(() => {
+        const rect = panels.getBoundingClientRect();
+        const totalW = rect.width;
+        let leftW = e.clientX - rect.left;
+        leftW = Math.max(POPOUT_MIN_PANEL_PX, Math.min(leftW, totalW - POPOUT_MIN_PANEL_PX));
+        const ratio = leftW / totalW;
+        panels.style.gridTemplateColumns = `${ratio}fr 6px ${1 - ratio}fr`;
+      });
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      // Persist ratio
+      const cols = panels.style.gridTemplateColumns;
+      const match = cols.match(/^([\d.]+)fr/);
+      if (match) localStorage.setItem(POPOUT_RESIZE_STORAGE_KEY, match[1]);
+    });
+  }
+
+  initResize();
+
   // Bind event delegation using shared handlers
   const popoutContainer = document.getElementById('popoutContainer');
 
@@ -138,6 +204,35 @@ async function initPopoutMode() {
     const historyToggle = event.target.closest('[data-history-toggle-id]');
     if (historyToggle) {
       handleSectionToggleClick(popoutContainer, historyToggle, 'history');
+      return;
+    }
+
+    const timelineToggle = event.target.closest('[data-timeline-toggle-id]');
+    if (timelineToggle) {
+      const panel = popoutContainer.querySelector('[data-timeline-panel-id="timeline"]');
+      if (panel) {
+        const isExpanded = timelineToggle.classList.toggle('expanded');
+        panel.classList.toggle('show', isExpanded);
+        const chevron = timelineToggle.querySelector('.chevron');
+        if (chevron) chevron.classList.toggle('chevron--expanded', isExpanded);
+      }
+      return;
+    }
+
+    // Activity Timeline node/card click → scroll right panel to matching history entry
+    const atEvent = event.target.closest('[data-at-index]');
+    if (atEvent) {
+      const idx = parseInt(atEvent.getAttribute('data-at-index'), 10);
+      const historyScroll = popoutContainer.querySelector('.popout-history-scroll');
+      if (historyScroll) {
+        const entries = historyScroll.querySelectorAll('.tracker-history-entry');
+        const target = entries[idx];
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.classList.add('at-pulse');
+          setTimeout(() => target.classList.remove('at-pulse'), 1200);
+        }
+      }
       return;
     }
 
