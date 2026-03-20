@@ -229,22 +229,47 @@ function looksLikeEulaPrompt(text) {
          (lower.includes('eula') && lower.includes('accept'));
 }
 
-async function runWorkiqJson(prompt, validator, label) {
-  const result = await window.workiq.ask(prompt);
-  const raw = result.success ? result.answer : result.error;
-  console.log(`[flightdeck] ${label} raw response:`, raw);
+// Track parse failures per label for debugging diagnostics
+const _parseFailureCounts = {};
 
-  // Detect EULA gate: WorkIQ returns EULA text instead of data
-  if (looksLikeEulaPrompt(raw)) {
-    console.warn(`[flightdeck] ${label}: WorkIQ returned EULA prompt — resetting connection`);
-    state.connected = false;
-    if (elements.connectBanner) elements.connectBanner.classList.remove('d-none');
-    savePersistentState();
-    throw new Error('WorkIQ EULA not accepted. Click "Enable WorkIQ" to accept and reconnect.');
+async function runWorkiqJson(prompt, validator, label, { maxRetries = 1, retryDelayMs = 2000, onRetry } = {}) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    if (attempt > 0) {
+      console.warn(`[flightdeck] ${label}: retry ${attempt}/${maxRetries} after parse failure`);
+      if (typeof onRetry === 'function') onRetry(attempt, maxRetries);
+      await new Promise((r) => setTimeout(r, retryDelayMs));
+    }
+
+    const result = await window.workiq.ask(prompt);
+    const raw = result.success ? result.answer : result.error;
+    console.log(`[flightdeck] ${label} raw response (attempt ${attempt + 1}):`, raw);
+
+    // Detect EULA gate: WorkIQ returns EULA text instead of data
+    if (looksLikeEulaPrompt(raw)) {
+      console.warn(`[flightdeck] ${label}: WorkIQ returned EULA prompt — resetting connection`);
+      state.connected = false;
+      if (elements.connectBanner) elements.connectBanner.classList.remove('d-none');
+      savePersistentState();
+      throw new Error('WorkIQ EULA not accepted. Click "Enable WorkIQ" to accept and reconnect.');
+    }
+
+    if (!result.success) {
+      throw new Error(result.error || `${label} query failed.`);
+    }
+
+    try {
+      return parseWorkiqJson(result.answer, validator);
+    } catch (parseErr) {
+      _parseFailureCounts[label] = (_parseFailureCounts[label] || 0) + 1;
+      console.warn(
+        `[flightdeck] ${label}: parse failure #${_parseFailureCounts[label]} (attempt ${attempt + 1}/${maxRetries + 1})`,
+        parseErr.message
+      );
+      lastError = parseErr;
+    }
   }
 
-  if (!result.success) {
-    throw new Error(result.error || `${label} query failed.`);
-  }
-  return parseWorkiqJson(result.answer, validator);
+  throw new Error(`Scan returned an unexpected response. Will try again on next refresh.`);
 }

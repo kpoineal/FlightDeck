@@ -123,10 +123,11 @@ async function savePersistentState() {
 
   try {
     await window.workiq.storeSet(key, payload);
-    window.workiq.broadcastStateChanged();
     updateStorageSize();
   } catch (error) {
     console.warn('[flightdeck] persistence write failed', error.message);
+  } finally {
+    window.workiq.broadcastStateChanged();
   }
 }
 
