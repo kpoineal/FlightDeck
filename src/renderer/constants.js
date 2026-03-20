@@ -174,3 +174,5 @@ const SIGNAL_TYPE_OPTIONS = [
 
 const HISTORY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const HISTORY_MAX_ENTRIES = 200;
+
+const TRACKING_FILTER_OPTIONS = ['active', 'dueToday', 'archived', 'all'];

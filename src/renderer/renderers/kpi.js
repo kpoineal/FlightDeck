@@ -263,11 +263,28 @@ function renderKpis() {
     elements.kpiElevated.textContent = counts.elevated;
     card2.querySelector('.kpi-sub').textContent = 'This week';
 
-    card3.className = 'kpi-card observe';
-    card3.querySelector('.kpi-label').textContent = 'Observe';
-    elements.kpiMonitor.textContent = counts.observe;
-    card3.querySelector('.kpi-sub').textContent = 'Watchlist';
-    card3.classList.remove('d-none');
+    if (state.mode === 'Tracking') {
+      const dueTodayCount = state.trackingItems.filter((item) => {
+        if (!item.dueAt || item.archived) return false;
+        const due = new Date(item.dueAt);
+        if (!Number.isFinite(due.getTime())) return false;
+        const now = new Date();
+        const todayEnd = new Date(now);
+        todayEnd.setHours(23, 59, 59, 999);
+        return due <= todayEnd;
+      }).length;
+      card3.className = 'kpi-card due-today-kpi';
+      card3.querySelector('.kpi-label').textContent = 'Due Today';
+      elements.kpiMonitor.textContent = dueTodayCount;
+      card3.querySelector('.kpi-sub').textContent = 'Due or overdue';
+      card3.classList.remove('d-none');
+    } else {
+      card3.className = 'kpi-card observe';
+      card3.querySelector('.kpi-label').textContent = 'Observe';
+      elements.kpiMonitor.textContent = counts.observe;
+      card3.querySelector('.kpi-sub').textContent = 'Watchlist';
+      card3.classList.remove('d-none');
+    }
   }
 
   if (elements.kpiScopeLabel) {

@@ -64,7 +64,9 @@
           }
         ],
         "hasNewUpdate": true,
-        "suggestedNextSteps": ["Reply to Jordan Chen with revised timeline", "Escalate blockers to VP Engineering"]
+        "suggestedNextSteps": ["Reply to Jordan Chen with revised timeline", "Escalate blockers to VP Engineering"],
+        "archived": false,
+        "archivedAt": null
       },
       {
         "id": "track_meridian_contract_renewal",
@@ -119,7 +121,9 @@
           }
         ],
         "hasNewUpdate": true,
-        "suggestedNextSteps": ["Send updated terms to Sam Patel"]
+        "suggestedNextSteps": ["Send updated terms to Sam Patel"],
+        "archived": false,
+        "archivedAt": null
       },
       {
         "id": "track_keystone_arch_decision",
@@ -190,7 +194,9 @@
           }
         ],
         "hasNewUpdate": false,
-        "suggestedNextSteps": []
+        "suggestedNextSteps": [],
+        "archived": true,
+        "archivedAt": "2026-03-02T15:30:00.000Z"
       },
       {
         "id": "track_contoso_escalation_4471",
@@ -244,7 +250,9 @@
           }
         ],
         "hasNewUpdate": false,
-        "suggestedNextSteps": []
+        "suggestedNextSteps": [],
+        "archived": false,
+        "archivedAt": null
       },
       {
         "id": "track_horizon_budget_approval",

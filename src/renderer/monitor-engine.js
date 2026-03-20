@@ -66,6 +66,7 @@ async function monitorTaskItem(item, { manual = false } = {}) {
       ? payload.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2)
       : [];
     item.lastRunAt = nowIso();
+
   }
 
   // Replace evidence links with the LLM's curated response, but only when

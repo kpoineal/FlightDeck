@@ -1280,3 +1280,89 @@ html[data-theme="light"] .at-event:hover .at-card {
   }
 }
 
+/* ── Tracking filter bar ── */
+.tracking-filter-bar {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 12px;
+  padding: 3px;
+  background: var(--bg-inset);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+.tracking-filter-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  white-space: nowrap;
+}
+.tracking-filter-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+.tracking-filter-btn.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+}
+
+/* ── Archived item styling ── */
+.tracker-archived {
+  opacity: 0.55;
+  transition: opacity 0.3s ease;
+}
+.tracker-archived .tracker-title,
+.tracker-archived .tracker-row-title,
+.tracker-archived .item-title-text {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-muted);
+}
+
+/* ── Archive pill ── */
+.archive-pill {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.archive-pill:hover {
+  opacity: 0.8;
+}
+.archive-pill--open {
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+.archive-pill:not(.archive-pill--open) {
+  background: color-mix(in srgb, var(--color-success, #30d158) 20%, transparent);
+  color: var(--color-success, #30d158);
+  border: 1px solid color-mix(in srgb, var(--color-success, #30d158) 30%, transparent);
+}
+
+/* ── Due date indicators ── */
+.due-overdue {
+  color: var(--color-critical) !important;
+  font-weight: 600;
+}
+.due-today {
+  color: var(--color-elevated) !important;
+  font-weight: 600;
+}
+
+/* ── Due Today KPI ── */
+.kpi-card.due-today-kpi {
+  border-left-color: var(--color-elevated);
+}
+.kpi-card.due-today-kpi .kpi-number {
+  color: var(--color-elevated);
+}
+
+
+

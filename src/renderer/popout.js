@@ -43,7 +43,7 @@ function renderPopoutMode() {
 
   const popoutContainer = document.getElementById('popoutContainer');
   popoutContainer.innerHTML = `
-    <article class="tracker-card tracker-card--popout ${hasNew ? 'has-new-update' : ''}" data-tracker-id="${escapeHtml(item.id)}">
+    <article class="tracker-card tracker-card--popout ${hasNew ? 'has-new-update' : ''} ${item.archived ? 'tracker-archived' : ''}" data-tracker-id="${escapeHtml(item.id)}">
       <div class="tracker-head">
         <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
           <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
@@ -51,6 +51,7 @@ function renderPopoutMode() {
           <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
         </select>
         ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
+        ${item.archived ? '<span class="pill archive-pill">\u2713 Archived</span>' : ''}
         ${(() => { if (hasNew) { return `<span class="tracker-new-badge">${unseenCount > 1 ? `${unseenCount} New Updates` : 'New Update'}</span>`; } const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
         <div class="popout-head-actions">
           ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}

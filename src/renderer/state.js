@@ -101,6 +101,7 @@ const state = {
   history: [],
   pendingConfirmAction: null,
   trackingDensity: 'full',
+  trackingFilter: 'active',
   radarDensity: 'full',
 };
 
@@ -115,6 +116,7 @@ async function savePersistentState() {
     history: state.history,
     connected: state.connected,
     trackingDensity: state.trackingDensity,
+    trackingFilter: state.trackingFilter,
     radarDensity: state.radarDensity,
   };
 
@@ -195,6 +197,7 @@ async function loadPersistentState() {
       : {};
     state.history = Array.isArray(parsed.history) ? parsed.history : [];
     state.trackingDensity = parsed.trackingDensity === 'minimal' ? 'minimal' : 'full';
+    state.trackingFilter = TRACKING_FILTER_OPTIONS.includes(parsed.trackingFilter) ? parsed.trackingFilter : 'active';
     state.radarDensity = parsed.radarDensity === 'minimal' ? 'minimal' : 'full';
     if (parsed.connected === true) {
       state.connected = true;

@@ -487,6 +487,67 @@ function restoreTrackingUiState(saved) {
   }
 }
 
+function isDueTodayOrOverdue(item) {
+  if (!item.dueAt || item.archived) return false;
+  const due = new Date(item.dueAt);
+  if (!Number.isFinite(due.getTime())) return false;
+  const now = new Date();
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+  return due <= todayEnd;
+}
+
+function isDueOverdue(item) {
+  if (!item.dueAt || item.archived) return false;
+  const due = new Date(item.dueAt);
+  if (!Number.isFinite(due.getTime())) return false;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return due < now;
+}
+
+function isDueToday(item) {
+  if (!item.dueAt || item.archived) return false;
+  const due = new Date(item.dueAt);
+  if (!Number.isFinite(due.getTime())) return false;
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+  return due >= todayStart && due <= todayEnd;
+}
+
+function filterTrackingItems(items, filter) {
+  if (filter === 'active') return items.filter((item) => !item.archived);
+  if (filter === 'archived') return items.filter((item) => item.archived === true);
+  if (filter === 'dueToday') return items.filter((item) => isDueTodayOrOverdue(item));
+  return items; // 'all'
+}
+
+function buildTrackingFilterBarHtml(allItems) {
+  const activeCount = allItems.filter((item) => !item.archived).length;
+  const dueTodayCount = allItems.filter((item) => isDueTodayOrOverdue(item)).length;
+  const archivedCount = allItems.filter((item) => item.archived === true).length;
+  const allCount = allItems.length;
+  const labels = [
+    { value: 'active', label: `Active (${activeCount})` },
+    { value: 'dueToday', label: `Due Today (${dueTodayCount})` },
+    { value: 'archived', label: `Archived (${archivedCount})` },
+    { value: 'all', label: `All (${allCount})` },
+  ];
+  return `<div class="tracking-filter-bar">${labels.map((opt) =>
+    `<button class="tracking-filter-btn ${state.trackingFilter === opt.value ? 'active' : ''}" data-tracking-filter="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</button>`
+  ).join('')}</div>`;
+}
+
+function buildDueDateClasses(item) {
+  if (!item.dueAt || item.archived) return '';
+  if (isDueOverdue(item)) return 'due-overdue';
+  if (isDueToday(item)) return 'due-today';
+  return '';
+}
+
 function renderTrackingMode() {
   if (!state.trackingItems.length) {
     elements.trackingList.innerHTML = '<div class="empty">No tracked items yet. Add a custom monitored task above or track an item from Radar.</div>';
@@ -502,6 +563,7 @@ function renderTrackingMode() {
   }
 
   const sortedItems = sortBySeverity(state.trackingItems, true);
+  const filteredItems = filterTrackingItems(sortedItems, state.trackingFilter);
 
   const isMinimal = state.trackingDensity === 'minimal';
   elements.trackingList.classList.toggle('list--minimal', isMinimal);
@@ -510,7 +572,7 @@ function renderTrackingMode() {
   const savedUiState = captureTrackingUiState();
 
   if (isMinimal) {
-    elements.trackingList.innerHTML = sortedItems.map((item) => {
+    elements.trackingList.innerHTML = buildTrackingFilterBarHtml(state.trackingItems) + filteredItems.map((item) => {
       const hasNew = item.hasNewUpdate === true;
       const unseenCount = unseenHistoryCount(item);
       const isExpanded = item.id === savedUiState.expandedRowId;
@@ -538,13 +600,14 @@ function renderTrackingMode() {
       const historyMarkup = buildTrackerHistoryMarkup(item, 'No history yet.');
 
       return `
-      <div class="tracker-row-wrapper" data-tracker-id="${escapeHtml(item.id)}">
+      <div class="tracker-row-wrapper ${item.archived ? 'tracker-archived' : ''}" data-tracker-id="${escapeHtml(item.id)}">
         <div class="tracker-row ${hasNew ? 'has-new-update' : ''} ${isExpanded ? 'expanded' : ''}" data-row-toggle-id="${escapeHtml(item.id)}">
           <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
             <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
             <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
             <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
           </select>
+          ${item.archived ? `<span class="pill archive-pill" data-archive-toggle="${escapeHtml(item.id)}">\u2713 Archived</span>` : `<span class="pill archive-pill archive-pill--open" data-archive-toggle="${escapeHtml(item.id)}">Open</span>`}
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
           ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
           ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}${timeStr ? ' · ' + escapeHtml(timeStr) : ''}</span>` : ''; })()}
@@ -552,7 +615,7 @@ function renderTrackingMode() {
             <span class="editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
           </span>
           <span class="tracker-row-summary">${escapeHtml((item.summary || '').replace(/\n/g, ' ').slice(0, 140))}${(item.summary || '').length > 140 ? '…' : ''}</span>
-          <span class="tracker-row-due">
+          <span class="tracker-row-due ${buildDueDateClasses(item)}">
             <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due</span>'}</span>
           </span>
           <span class="row-expand-chevron ${isExpanded ? 'open' : ''}">&#9660;</span>
@@ -567,7 +630,7 @@ function renderTrackingMode() {
           ${buildNextStepHintsHtml(item)}
           <div class="tracker-meta">
             <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
-            <span>Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
+            <span class="${buildDueDateClasses(item)}">Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
             <span>Owner: <span class="editable-field" data-edit-field="owner" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.owner ? escapeHtml(item.owner) : '<span class="field-placeholder">Set owner</span>'}</span></span>
           </div>
           <div class="tracker-timestamp">
@@ -611,11 +674,12 @@ function renderTrackingMode() {
             ${historyMarkup}
           </div>
 
+          </div>
+
           <div class="action-row">
             ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
             <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
             <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
-          </div>
           </div>
         </div>
       </div>
@@ -625,14 +689,14 @@ function renderTrackingMode() {
     restoreTrackingUiState(savedUiState);
     // Enforce schedule-control visibility via DOM API — inline style attributes
     // from the HTML template are not reliably applied after innerHTML replacement.
-    sortedItems.forEach(item => {
+    filteredItems.forEach(item => {
       inlineUpdateScheduleControls(elements.trackingList, item.id, item.scheduleType);
     });
     renderKpis();
     return;
   }
 
-  elements.trackingList.innerHTML = sortedItems.map((item) => {
+  elements.trackingList.innerHTML = buildTrackingFilterBarHtml(state.trackingItems) + filteredItems.map((item) => {
     const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
     const hasNew = item.hasNewUpdate === true;
     const people = Array.isArray(item.counterparties) && item.counterparties.length
@@ -643,7 +707,7 @@ function renderTrackingMode() {
     const historyMarkup = buildTrackerHistoryMarkup(item);
 
     return `
-    <article class="tracker-card ${hasNew ? 'has-new-update' : ''}" data-tracker-id="${escapeHtml(item.id)}">
+    <article class="tracker-card ${hasNew ? 'has-new-update' : ''} ${item.archived ? 'tracker-archived' : ''}" data-tracker-id="${escapeHtml(item.id)}">
       <div class="tracker-head">
         <div class="tracker-head-left">
           <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
@@ -654,6 +718,7 @@ function renderTrackingMode() {
         </div>
         <div class="tracker-head-right">
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
+          ${item.archived ? `<span class="pill archive-pill" data-archive-toggle="${escapeHtml(item.id)}">\u2713 Archived</span>` : `<span class="pill archive-pill archive-pill--open" data-archive-toggle="${escapeHtml(item.id)}">Open</span>`}
           ${(() => { if (hasNew) { const label = unseenCount > 1 ? `${unseenCount} NEW` : 'NEW'; const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return `<span class="tracker-new-badge">${label}${timeStr ? ` \u00b7 ${timeStr}` : ''}</span>`; } const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Last update: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
         </div>
       </div>
@@ -673,7 +738,7 @@ function renderTrackingMode() {
         ${buildNextStepHintsHtml(item)}
         <div class="tracker-meta">
           <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
-          <span>Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
+          <span class="${buildDueDateClasses(item)}">Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
           <span>Owner: <span class="editable-field" data-edit-field="owner" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.owner ? escapeHtml(item.owner) : '<span class="field-placeholder">Set owner</span>'}</span></span>
         </div>
         <div class="tracker-timestamp">
@@ -731,11 +796,12 @@ function renderTrackingMode() {
           ${historyMarkup}
         </div>
 
+        </div>
+
         <div class="action-row">
           ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
           <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
           <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
-        </div>
         </div>
       </div>
     </article>
@@ -746,7 +812,7 @@ function renderTrackingMode() {
   restoreTrackingUiState(savedUiState);
   // Enforce schedule-control visibility via DOM API — inline style attributes
   // from the HTML template are not reliably applied after innerHTML replacement.
-  sortedItems.forEach(item => {
+  filteredItems.forEach(item => {
     inlineUpdateScheduleControls(elements.trackingList, item.id, item.scheduleType);
   });
   renderKpis();

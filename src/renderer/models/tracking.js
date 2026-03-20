@@ -220,7 +220,8 @@ function normalizeTrackingItem(item) {
       : [],
     hasNewUpdate: item?.hasNewUpdate === true,
     suggestedNextSteps: Array.isArray(item?.suggestedNextSteps) ? item.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2) : [],
-    archived: item?.archived === true,
+    archived: item?.archived === true || item?.completed === true,
+    archivedAt: item?.archivedAt || item?.completedAt || null,
   };
 
   if (!normalized.nextRunAt && normalized.monitorEnabled) {
@@ -388,3 +389,47 @@ function updateTrackingItemField(itemId, field, value) {
 
   return { item, oldValue, newValue: value };
 }
+
+function archiveTrackingItem(id) {
+  const item = state.trackingItems.find((entry) => entry.id === id);
+  if (!item) return;
+  item.archived = true;
+  item.archivedAt = nowIso();
+  if (!Array.isArray(item.updateHistory)) item.updateHistory = [];
+  item.updateHistory.unshift({
+    timestamp: nowIso(),
+    changes: ['Archived'],
+    summary: item.summary || item.title,
+    status: 'Archived',
+    severity: item.severity,
+    seen: true,
+  });
+  if (item.updateHistory.length > 20) {
+    item.updateHistory = item.updateHistory.slice(0, 20);
+  }
+  savePersistentState();
+  renderTrackingMode();
+}
+
+function unarchiveTrackingItem(id) {
+  const item = state.trackingItems.find((entry) => entry.id === id);
+  if (!item) return;
+  item.archived = false;
+  item.archivedAt = null;
+  if (!Array.isArray(item.updateHistory)) item.updateHistory = [];
+  item.updateHistory.unshift({
+    timestamp: nowIso(),
+    changes: ['Unarchived'],
+    summary: item.summary || item.title,
+    status: item.status || 'Tracked',
+    severity: item.severity,
+    seen: true,
+  });
+  if (item.updateHistory.length > 20) {
+    item.updateHistory = item.updateHistory.slice(0, 20);
+  }
+  savePersistentState();
+  renderTrackingMode();
+}
+
+

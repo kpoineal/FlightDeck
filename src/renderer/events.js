@@ -494,6 +494,28 @@ function bindEvents() {
   });
 
   elements.trackingList.addEventListener('click', async (event) => {
+    const filterBtn = event.target.closest('[data-tracking-filter]');
+    if (filterBtn) {
+      state.trackingFilter = filterBtn.getAttribute('data-tracking-filter');
+      savePersistentState();
+      renderTrackingMode();
+      return;
+    }
+
+    const archivePill = event.target.closest('[data-archive-toggle]');
+    if (archivePill) {
+      const itemId = archivePill.getAttribute('data-archive-toggle');
+      const item = state.trackingItems.find((entry) => entry.id === itemId);
+      if (item) {
+        if (item.archived) {
+          unarchiveTrackingItem(itemId);
+        } else {
+          archiveTrackingItem(itemId);
+        }
+      }
+      return;
+    }
+
     const dismissButton = event.target.closest('[data-dismiss-radar-id]');
     if (dismissButton) {
       event.preventDefault();

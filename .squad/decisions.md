@@ -1155,3 +1155,24 @@
 **Key files:** `src/renderer/models/tracking.js`, `src/renderer/renderers/tracking.js`, `src/renderer/renderers/kpi.js`, `src/renderer/monitor-engine.js`, `src/renderer/constants.js`, `src/renderer/events.js`, `src/styles/tracking.css`, `src/styles/components.css`, `src/demo/fixture.json`, `test/renderer-todo.test.js`
 
 **Source:** `.squad/decisions/inbox/goose-todo-implementation.md`
+
+---
+
+## DEC-060: Archive Refactor — Subtask Removal & UX Simplification
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-20 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Summary:** Major UX simplification: removed subtask model entirely, restored Draft action buttons for AI-generated `suggestedNextSteps`, renamed "Complete/Completed" to "Archive/Archived" across all files, replaced completion checkbox with a status pill, fixed popout rendering, cleaned up subtask CSS.
+
+**Key decisions:**
+- Subtasks fully removed — `subtasks` array, `seedSubtasks()`, `buildNextStepHintsHtml()`, subtask toggle/add functions, all subtask rendering and CSS.
+- "Complete" → "Archive" rename applied consistently: model functions, constants, filter labels, CSS classes, KPI labels, demo fixture.
+- Status pill replaces completion checkbox — shows Active (green) / Archived (muted) state for cleaner information density.
+- `suggestedNextSteps` render as Draft action buttons again (pre-DEC-059 pattern), keeping AI-generated actions easily actionable.
+- Popout updated to match new terminology, subtask references removed.
+
+**Amends:** DEC-059 — Phase 3 (subtasks) reversed; Phase 1/2/4 terminology changed from "Complete" to "Archive."
+
+**Validation:** 469 tests pass.
+
+**Source:** `.squad/decisions/inbox/goose-archive-refactor.md`
