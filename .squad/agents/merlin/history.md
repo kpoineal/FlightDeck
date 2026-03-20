@@ -291,3 +291,25 @@
 **Key context from Viper's catalog (DEC-046):**
 - 6 PII-sensitive IPC channels must be verified as redacted: `ASK_WORKIQ`, `OPEN_MARKDOWN_WINDOW`, `SHOW_DESKTOP_NOTIFICATION`, `STORE_GET`, `STORE_SET`/`GET_ALL`/`MIGRATE`
 - PTY bridge currently logs raw WorkIQ output to console — new logger must not propagate this to file
+
+### 2026-03-19 — runWorkiqJson Retry Logic Tests (8 new tests)
+
+**Test file:** `test/renderer-json-parser.test.js` — added `describe('runWorkiqJson() retry logic')` section.
+
+**Context:** Goose added retry support to `runWorkiqJson()` for malformed JSON responses. The function now accepts `{ maxRetries, retryDelayMs, onRetry }` options. On JSON parse failure it retries up to `maxRetries` times (default 1). EULA errors and `result.success === false` still throw immediately without retry.
+
+**Test setup pattern:** Same as existing EULA tests — `createRendererContext` with mocked `state`, `elements`, `savePersistentState`, and `window.workiq.ask`. All retry tests use `retryDelayMs: 0` to avoid real delays.
+
+**Key gotcha — `_parseFailureCounts` is inaccessible:** The `const _parseFailureCounts = {}` declaration in `json-parser.js` is not exposed as a vm context property (known `const`/`let` limitation). Verified the counter behavior indirectly by capturing `console.warn` output and asserting on the `parse failure #N` messages. Used a regex filter `/parse failure #\d+/` to distinguish from the "retry ... after parse failure" announcement that also contains "parse failure".
+
+**Coverage (8 tests):**
+1. Succeeds on first attempt without retrying (callCount === 1)
+2. Retries on parse failure, succeeds on second attempt
+3. Throws user-friendly error after all retries exhausted (`"Scan returned an unexpected response..."`)
+4. EULA error throws immediately — no retry (callCount === 1 despite maxRetries: 3)
+5. `result.success === false` throws immediately — no retry (callCount === 1)
+6. `onRetry` callback invoked with correct `(attempt, maxRetries)` args
+7. `maxRetries: 0` means single attempt only
+8. Parse failure count logged correctly per label via console.warn
+
+**Final suite result:** 438 tests, 93 suites, 0 failures.
