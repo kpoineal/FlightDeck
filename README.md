@@ -27,7 +27,7 @@ winget install FlightDeck.FlightDeck
 ### Prerequisites
 
 - **Microsoft 365 Copilot license** — FlightDeck uses Copilot to analyze your M365 signals. A Copilot license must be assigned to your account.
-- **WorkIQ CLI enabled** — Your tenant administrator must enable the WorkIQ CLI. FlightDeck communicates with Copilot through WorkIQ to ground responses in your real M365 data.
+- **WorkIQ CLI enabled** — Your tenant administrator must enable the WorkIQ CLI. FlightDeck communicates with Copilot through WorkIQ to ground responses in your real M365 data. See [tenant setup instructions](https://github.com/microsoft/work-iq/blob/main/ADMIN-INSTRUCTIONS.md).
 
 ---
 
