@@ -18,6 +18,19 @@
 
 ---
 
+## Install
+
+```powershell
+winget install FlightDeck.FlightDeck
+```
+
+### Prerequisites
+
+- **Microsoft 365 Copilot license** — FlightDeck uses Copilot to analyze your M365 signals. A Copilot license must be assigned to your account.
+- **WorkIQ CLI enabled** — Your tenant administrator must enable the WorkIQ CLI. FlightDeck communicates with Copilot through WorkIQ to ground responses in your real M365 data.
+
+---
+
 FlightDeck scans your Microsoft 365 signals — email, Teams, meetings, documents — and surfaces what needs your attention, ranked by priority. Track items over time with automated monitoring and walk into every meeting prepared with AI-generated briefings. All AI responses are grounded in your real M365 data with deep-link citations. Every prompt is visible and editable — no black boxes.
 
 ![Radar view — inbound signals prioritized by severity](docs/electron_DJB2hb9lEB.png)
@@ -26,6 +39,8 @@ FlightDeck scans your Microsoft 365 signals — email, Teams, meetings, document
 
 ## Table of Contents
 
+- [Install](#install)
+- [Prerequisites](#prerequisites)
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [Build from Source](#build-from-source)
