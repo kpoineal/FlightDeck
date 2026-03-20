@@ -412,7 +412,7 @@ function popOutTrackerCard(item) {
 }
 
 // ── Tracking UI state helpers ────────────────────────────────────────
-const SECTION_PANEL_ATTRS = ['people', 'links', 'monitoring', 'history'];
+const SECTION_PANEL_ATTRS = ['details', 'people', 'links', 'monitoring', 'history'];
 const PROMPT_PANEL_ATTR = 'prompt';
 
 function captureTrackingUiState() {
@@ -560,6 +560,10 @@ function renderTrackingMode() {
         <div class="tracker-row-detail ${isExpanded ? 'show' : ''}">
           ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
           <p class="tracker-summary">${renderMarkdownLinks(item.summary || 'No summary available.')}</p>
+          <button class="tracker-section-toggle" data-details-toggle-id="${escapeHtml(item.id)}">
+            <span class="chevron">&#9654;</span> Details
+          </button>
+          <div class="tracker-section-panel" data-details-panel-id="${escapeHtml(item.id)}">
           ${buildNextStepHintsHtml(item)}
           <div class="tracker-meta">
             <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
@@ -612,6 +616,7 @@ function renderTrackingMode() {
             <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
             <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
           </div>
+          </div>
         </div>
       </div>
       `;
@@ -661,6 +666,10 @@ function renderTrackingMode() {
           </h3>
         </div>
         <p class="tracker-summary">${renderMarkdownLinks(item.summary || 'No summary available.')}</p>
+        <button class="tracker-section-toggle" data-details-toggle-id="${escapeHtml(item.id)}">
+          <span class="chevron">&#9654;</span> Details
+        </button>
+        <div class="tracker-section-panel" data-details-panel-id="${escapeHtml(item.id)}">
         ${buildNextStepHintsHtml(item)}
         <div class="tracker-meta">
           <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
@@ -726,6 +735,7 @@ function renderTrackingMode() {
           ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
           <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
           <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
+        </div>
         </div>
       </div>
     </article>

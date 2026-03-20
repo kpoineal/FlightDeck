@@ -513,6 +513,12 @@ function bindEvents() {
       return;
     }
 
+    const detailsToggle = event.target.closest('[data-details-toggle-id]');
+    if (detailsToggle) {
+      handleSectionToggleClick(elements.trackingList, detailsToggle, 'details');
+      return;
+    }
+
     const historyToggle = event.target.closest('[data-history-toggle-id]');
     if (historyToggle) {
       handleSectionToggleClick(elements.trackingList, historyToggle, 'history');

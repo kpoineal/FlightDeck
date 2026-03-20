@@ -1,0 +1,1 @@
+chore(squad): log collapsible details session, merge DEC-053

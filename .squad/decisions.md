@@ -1041,3 +1041,21 @@
 **Priority divergence from Iceman:** Maverick recommends Todo → Sparkline → Scanners (by complexity). Iceman recommends Sparkline → Scanners → Todos (by strategic value).
 
 **Source:** `.squad/decisions/inbox/maverick-feature-feasibility.md`
+
+---
+
+## DEC-053: Collapsible Details Section in Tracking Cards
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-20 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Summary:** Tracking cards (both card and minimal list views) now wrap next-steps, meta, timestamps, people, links, monitoring, history, and the action row inside a single collapsible "Details" toggle — collapsed by default. Title and summary remain always visible above the fold.
+
+**Key changes:**
+- Added `'details'` to `SECTION_PANEL_ATTRS` in constants.js for state preservation across re-renders.
+- Added `data-details-toggle-id` click handler in events.js.
+- Popout view left unchanged (separate layout).
+- All 438 tests pass.
+
+**Why:** Reduce vertical space consumed by tracking cards while keeping full detail one click away.
+
+**Source:** `.squad/decisions/inbox/goose-details-collapsible.md`

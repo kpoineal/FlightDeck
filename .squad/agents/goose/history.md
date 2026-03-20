@@ -316,7 +316,15 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Key files**: `src/renderer/renderers/tracking.js`, `src/renderer/popout.js`, `src/styles/tracking.css`
 - **All 438 tests pass** after changes.
 
-### 2026-03-19 — Activity Timeline V3 + Resizable Popout Panels
+### 2026-03-20 — Details Collapsible for Tracking Cards
+- **Goal**: Reduce vertical space in tracking cards by collapsing next-steps and everything below into a "Details" expander. Title and summary remain always visible.
+- **Changes**:
+  1. **tracking.js**: Added `'details'` to `SECTION_PANEL_ATTRS` for state preservation. Wrapped everything from `buildNextStepHintsHtml()` through the action-row in a `data-details-toggle-id`/`data-details-panel-id` collapsible section in BOTH minimal (list) view and card view. Default collapsed (no `expanded`/`show` classes).
+  2. **events.js**: Added `data-details-toggle-id` click handler before the existing section toggle handlers, using the existing `handleSectionToggleClick()` pattern.
+- **Popout skipped**: Popout uses a different two-panel layout (left panel + right history panel) with its own visual hierarchy — the Details collapsible doesn't apply there.
+- **Pattern**: Reused the existing toggle/panel/chevron pattern and `SECTION_PANEL_ATTRS` state preservation — no new CSS needed.
+- **Key files**: `src/renderer/renderers/tracking.js`, `src/renderer/events.js`.
+- **All 438 tests pass** after changes.
 - **Problem**: Kyle said the horizontal timeline "isn't even really visible and kinda looks dumb." Wanted something "more interactive and modern" that would "make Apple's UI developers jealous." Also wanted resizable panels in the popout view.
 - **Deliverable 1: Resizable Popout Panels**
   - Added drag handle between `.popout-panel-left` and `.popout-panel-right` — injected as DOM element in `applyPopoutPanelRatio()`, called after every `renderPopoutMode()` re-render.
