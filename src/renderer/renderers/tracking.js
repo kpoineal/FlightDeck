@@ -536,9 +536,14 @@ function buildTrackingFilterBarHtml(allItems) {
     { value: 'archived', label: `Archived (${archivedCount})` },
     { value: 'all', label: `All (${allCount})` },
   ];
-  return `<div class="tracking-filter-bar">${labels.map((opt) =>
+  return labels.map((opt) =>
     `<button class="tracking-filter-btn ${state.trackingFilter === opt.value ? 'active' : ''}" data-tracking-filter="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</button>`
-  ).join('')}</div>`;
+  ).join('');
+}
+
+function updateTrackingFilterBar() {
+  const bar = document.getElementById('trackingFilterBar');
+  if (bar) bar.innerHTML = buildTrackingFilterBarHtml(state.trackingItems);
 }
 
 function buildDueDateClasses(item) {
@@ -551,6 +556,7 @@ function buildDueDateClasses(item) {
 function renderTrackingMode() {
   if (!state.trackingItems.length) {
     elements.trackingList.innerHTML = '<div class="empty">No tracked items yet. Add a custom monitored task above or track an item from Radar.</div>';
+    updateTrackingFilterBar();
     renderKpis();
     return;
   }
@@ -572,7 +578,7 @@ function renderTrackingMode() {
   const savedUiState = captureTrackingUiState();
 
   if (isMinimal) {
-    elements.trackingList.innerHTML = buildTrackingFilterBarHtml(state.trackingItems) + filteredItems.map((item) => {
+    elements.trackingList.innerHTML = filteredItems.map((item) => {
       const hasNew = item.hasNewUpdate === true;
       const unseenCount = unseenHistoryCount(item);
       const isExpanded = item.id === savedUiState.expandedRowId;
@@ -607,7 +613,10 @@ function renderTrackingMode() {
             <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
             <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
           </select>
-          ${item.archived ? `<span class="pill archive-pill" data-archive-toggle="${escapeHtml(item.id)}">\u2713 Archived</span>` : `<span class="pill archive-pill archive-pill--open" data-archive-toggle="${escapeHtml(item.id)}">Open</span>`}
+          <select class="status-select ${item.archived ? 'status-archived' : 'status-active'}" data-status-select-id="${escapeHtml(item.id)}">
+            <option value="active" ${!item.archived ? 'selected' : ''}>Active</option>
+            <option value="archived" ${item.archived ? 'selected' : ''}>Archived</option>
+          </select>
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
           ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
           ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}${timeStr ? ' · ' + escapeHtml(timeStr) : ''}</span>` : ''; })()}
@@ -692,11 +701,12 @@ function renderTrackingMode() {
     filteredItems.forEach(item => {
       inlineUpdateScheduleControls(elements.trackingList, item.id, item.scheduleType);
     });
+    updateTrackingFilterBar();
     renderKpis();
     return;
   }
 
-  elements.trackingList.innerHTML = buildTrackingFilterBarHtml(state.trackingItems) + filteredItems.map((item) => {
+  elements.trackingList.innerHTML = filteredItems.map((item) => {
     const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
     const hasNew = item.hasNewUpdate === true;
     const people = Array.isArray(item.counterparties) && item.counterparties.length
@@ -718,7 +728,10 @@ function renderTrackingMode() {
         </div>
         <div class="tracker-head-right">
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
-          ${item.archived ? `<span class="pill archive-pill" data-archive-toggle="${escapeHtml(item.id)}">\u2713 Archived</span>` : `<span class="pill archive-pill archive-pill--open" data-archive-toggle="${escapeHtml(item.id)}">Open</span>`}
+          <select class="status-select ${item.archived ? 'status-archived' : 'status-active'}" data-status-select-id="${escapeHtml(item.id)}">
+            <option value="active" ${!item.archived ? 'selected' : ''}>Active</option>
+            <option value="archived" ${item.archived ? 'selected' : ''}>Archived</option>
+          </select>
           ${(() => { if (hasNew) { const label = unseenCount > 1 ? `${unseenCount} NEW` : 'NEW'; const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return `<span class="tracker-new-badge">${label}${timeStr ? ` \u00b7 ${timeStr}` : ''}</span>`; } const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Last update: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
         </div>
       </div>
@@ -815,5 +828,6 @@ function renderTrackingMode() {
   filteredItems.forEach(item => {
     inlineUpdateScheduleControls(elements.trackingList, item.id, item.scheduleType);
   });
+  updateTrackingFilterBar();
   renderKpis();
 }

@@ -493,29 +493,20 @@ function bindEvents() {
     }
   });
 
-  elements.trackingList.addEventListener('click', async (event) => {
-    const filterBtn = event.target.closest('[data-tracking-filter]');
-    if (filterBtn) {
-      state.trackingFilter = filterBtn.getAttribute('data-tracking-filter');
-      savePersistentState();
-      renderTrackingMode();
-      return;
-    }
-
-    const archivePill = event.target.closest('[data-archive-toggle]');
-    if (archivePill) {
-      const itemId = archivePill.getAttribute('data-archive-toggle');
-      const item = state.trackingItems.find((entry) => entry.id === itemId);
-      if (item) {
-        if (item.archived) {
-          unarchiveTrackingItem(itemId);
-        } else {
-          archiveTrackingItem(itemId);
-        }
+  // Filter bar is in the heading row, not in trackingList
+  const filterBar = document.getElementById('trackingFilterBar');
+  if (filterBar) {
+    filterBar.addEventListener('click', (event) => {
+      const filterBtn = event.target.closest('[data-tracking-filter]');
+      if (filterBtn) {
+        state.trackingFilter = filterBtn.getAttribute('data-tracking-filter');
+        savePersistentState();
+        renderTrackingMode();
       }
-      return;
-    }
+    });
+  }
 
+  elements.trackingList.addEventListener('click', async (event) => {
     const dismissButton = event.target.closest('[data-dismiss-radar-id]');
     if (dismissButton) {
       event.preventDefault();
@@ -656,6 +647,17 @@ function bindEvents() {
   });
 
   elements.trackingList.addEventListener('change', (event) => {
+    const statusSelect = event.target.closest('[data-status-select-id]');
+    if (statusSelect) {
+      const itemId = statusSelect.getAttribute('data-status-select-id');
+      if (statusSelect.value === 'archived') {
+        archiveTrackingItem(itemId);
+      } else {
+        unarchiveTrackingItem(itemId);
+      }
+      return;
+    }
+
     const enabledToggle = event.target.closest('[data-monitor-enabled-id]');
     if (enabledToggle) {
       handleMonitorEnabledChange(enabledToggle.getAttribute('data-monitor-enabled-id'), enabledToggle.checked);

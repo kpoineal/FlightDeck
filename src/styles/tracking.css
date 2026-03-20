@@ -62,6 +62,7 @@
 }
 .tracking-heading-row h2 {
   margin: 0;
+  white-space: nowrap;
 }
 
 /* ── Collapsible add-task section ── */
@@ -1284,19 +1285,20 @@ html[data-theme="light"] .at-event:hover .at-card {
 .tracking-filter-bar {
   display: flex;
   gap: 2px;
-  margin-bottom: 12px;
-  padding: 3px;
+  padding: 2px;
   background: var(--bg-inset);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
+  flex: 1;
+  min-width: 0;
 }
 .tracking-filter-btn {
   flex: 1;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 500;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -1326,24 +1328,49 @@ html[data-theme="light"] .at-event:hover .at-card {
   text-decoration-color: var(--text-muted);
 }
 
-/* ── Archive pill ── */
-.archive-pill {
+/* ── Status select (Active/Archived) ── */
+.status-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--radius-pill);
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  white-space: nowrap;
   cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
+  text-align: center;
+  background: none;
+  flex: 0 0 auto;
+  width: var(--sel-width, auto);
+  outline: none;
+  transition: box-shadow 0.2s ease;
 }
-.archive-pill:hover {
-  opacity: 0.8;
+.status-select option {
+  background: var(--bg-surface);
+  color: var(--text);
 }
-.archive-pill--open {
-  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+.status-select.status-active {
+  color: var(--color-success, #248a3d);
+  border-color: color-mix(in srgb, var(--color-success, #248a3d) 50%, transparent);
+  background-color: color-mix(in srgb, var(--color-success, #248a3d) 12%, transparent);
+}
+.status-select.status-archived {
   color: var(--text-muted);
-  border: 1px solid var(--border-subtle);
+  border-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);
 }
-.archive-pill:not(.archive-pill--open) {
-  background: color-mix(in srgb, var(--color-success, #30d158) 20%, transparent);
-  color: var(--color-success, #30d158);
-  border: 1px solid color-mix(in srgb, var(--color-success, #30d158) 30%, transparent);
+.status-select:focus {
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
+}
+
+/* ── Status pill (read-only, popout) ── */
+.status-pill--active {
+  color: var(--color-success, #248a3d);
+}
+.status-pill--archived {
+  color: var(--text-secondary);
 }
 
 /* ── Due date indicators ── */
