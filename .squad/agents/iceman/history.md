@@ -108,6 +108,33 @@
 - Updated `package.json` description from "Simple POC to call workiq CLI from Electron" to "Air traffic control for your Microsoft 365 workload".
 - Removed standalone "What's New" section — Changelog badge in header handles this.
 - Removed standalone "Screenshots" section — screenshots now inline with feature descriptions.
+
+### 2026-03-19 — Feature Review: Multi-Scanner, Todos, Sparklines
+
+**User request:** Kyle asked for product analysis on three feature ideas:
+1. Multiple radar scanners with per-scanner exclusion payloads and persistent cards
+2. Todo functionality
+3. Sparkline/timeline visualization for tracker history
+
+**Key architecture insights for feature planning:**
+- Exclusion system is in `prompts.js` — `getTrackedExclusionLabels()` builds exclusion list from `state.trackingItems`, capped at `MAX_TRACKED_EXCLUSIONS` (12). Single global exclusion payload today.
+- `buildRadarScanPrompt()` appends exclusions to the base prompt. Multi-scanner would need N instances of this.
+- `state.radarItems` is a flat array — multi-scanner requires restructuring to `scanners[].radarItems` or similar.
+- `updateHistory[]` on tracking items already has timestamps, severity, summaries, and change descriptions — perfect data source for sparklines. No new data collection needed.
+- Custom tracking items (created via `createCustomTrackingItem()` in `renderers/tracking.js`) already function as lightweight todos — they have title, context, severity, schedule, and monitoring.
+- State persistence migrated to electron-store (`main/store.js`). No more localStorage 5MB ceiling.
+
+**Priority recommendation delivered:**
+1. P0: Sparkline/Timeline (lowest effort, data exists, highest glanceability improvement)
+2. P1: Multiple Radar Scanners (high value, significant architecture change)
+3. P2: Todo Functionality (scope as "tracking completion" not "todo app" to avoid gravity well)
+
+**Decisions captured:** `.squad/decisions/inbox/iceman-feature-review.md`
+
+**User preferences observed:**
+- Kyle thinks in terms of "persistent cards" — items that survive across scans, not ephemeral signal lists
+- Interested in visual density of information (sparklines = glanceable temporal patterns)
+- Gravitates toward making FlightDeck a "stay here" app rather than a "check and leave" app
 - All existing content topics preserved: SmartScreen warnings, Enable WorkIQ flow, mermaid diagram, screenshots, monitoring engine, state persistence, security, project tree, prerequisites, tech stack.
 
 **Decisions:**
@@ -115,5 +142,14 @@
 - Folded "What's New" into a Changelog badge rather than a standalone section — the CONTRIBUTING.md and CHANGELOG.md links are more useful.
 - Separated "Build from Source" and "Quick Start (MSI)" into distinct sections for clarity.
 - Added test files that were missing from the old coverage table (ipc-handlers, tracker-popout, day-briefing, tracking-renderers, popout, prompts).
+
+### 2026-03-19 — Cross-Agent: Maverick Feature Feasibility Assessment
+
+**Context:** Maverick delivered architecture feasibility in parallel with Iceman's product analysis. Key technical findings:
+- Multiple Scanners: MEDIUM complexity. ~7 files touched. `state.radarItems` → `state.scanners[]`. New `Scanner` model. N× WorkIQ calls per refresh.
+- Todos: LOW-MEDIUM complexity. Tracking system is 80% there — add `completed`/`completedAt` fields, quick-add input, completion filter.
+- Sparkline: LOW-MEDIUM complexity. Data exists in `updateHistory[]`. New `buildSparklineHtml(item)` — pure SVG.
+- **Priority divergence:** Maverick recommends Todo → Sparkline → Scanners (by complexity). Iceman recommends Sparkline → Scanners → Todos (by strategic value). Both agree sparkline should ship first.
+- Decisions captured: DEC-051 (Iceman product analysis), DEC-052 (Maverick feasibility).
 
 <!-- Append learnings here as they are discovered -->

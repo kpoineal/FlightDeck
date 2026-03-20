@@ -231,3 +231,37 @@
 - Pipeline orchestration: `src/renderer/monitor-engine.js` lines 70-110
 
 **Decision written to:** `.squad/decisions/inbox/maverick-evidence-link-prompt.md`
+
+### 2026-03-19 — Feature Feasibility Assessment (Three Proposed Features)
+
+**Context:** Kyle asked for architecture feedback on three feature proposals: multiple radar scanners, todo functionality, and sparkline/timeline for trackers.
+
+**Key findings:**
+
+1. **Multiple Radar Scanners** (MEDIUM complexity):
+   - Biggest change: `state.radarItems` flat array → `state.scanners[]` with per-scanner items/exclusions/prompts.
+   - Files affected: `prompts.js` (multi-scanner prompt building), `models/radar.js` (partitioned apply), `renderers/radar.js` (scanner tabs/sections), `state.js` (scanner state), `app.js` (fan-out refresh), `constants.js`.
+   - Persistent cards blur Radar/Tracking boundary — needs design decision on whether persistent cards are just "auto-tracked" items or a separate concept.
+   - Risk: N × WorkIQ calls per refresh cycle. Rate limits / latency.
+
+2. **Todo Functionality** (LOW-MEDIUM complexity):
+   - Tracking system is already 80% of a todo system. `origin: 'custom'` + `monitorEnabled: false` tracking items are functionally todos.
+   - Add: `completed: boolean`, `completedAt: ISO|null`, quick-add input, completion checkbox, filter.
+   - Recommended: integrate into Tracking view with filters, NOT a separate tab. Avoids data model duplication.
+   - Risk: scope creep (subtasks, lists, Microsoft To-Do sync).
+
+3. **Sparkline/Timeline** (LOW-MEDIUM complexity):
+   - Data already exists: `updateHistory[]` on every tracking item has timestamps + severity.
+   - Pure rendering task: inline SVG sparkline using existing CSS color tokens.
+   - 20-entry history cap (DEC-010) is actually ideal sparkline density.
+   - No model, state, IPC, or main-process changes needed.
+
+**Recommended priority:** Todo → Sparkline → Multiple Scanners (quickest wins first, hardest last).
+
+**Key architectural insight:** The Phase 3/4 refactoring (modular file structure) makes all three features significantly easier. Each touches focused files rather than the old monolith.
+
+**Decision written to:** `.squad/decisions/inbox/maverick-feature-feasibility.md`
+
+### 2026-03-19 — Cross-Agent: Iceman Feature Priority Recommendations
+
+**Context:** Iceman delivered product analysis in parallel. Key divergence: Iceman ranks Sparkline → Scanners → Todos (strategic value), while Maverick ranks Todo → Sparkline → Scanners (complexity). Both agree sparkline should ship first. Iceman's critical insight: frame todos as "Tracking Item Completion" to avoid scope creep into generic task management. Decisions captured: DEC-051, DEC-052.

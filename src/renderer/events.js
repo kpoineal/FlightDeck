@@ -28,14 +28,14 @@ function handlePromptToggleClick(container, toggleEl) {
   }
 }
 
-function handleMarkSeenClick(itemId, renderFn) {
+async function handleMarkSeenClick(itemId, renderFn) {
   const item = state.trackingItems.find((entry) => entry.id === itemId);
   if (item) {
     item.hasNewUpdate = false;
     if (Array.isArray(item.updateHistory)) {
       item.updateHistory.forEach((e) => { e.seen = true; });
     }
-    savePersistentState();
+    await savePersistentState();
     if (renderFn) renderFn();
   }
 }
