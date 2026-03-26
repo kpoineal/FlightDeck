@@ -216,6 +216,10 @@
           <article class="panel">
             <div class="tracking-heading-row">
               <h2>Radar</h2>
+              <button class="add-scanner-btn" id="addScannerBtn" title="Add scanner">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>
+                Scanner
+              </button>
               <div class="tracking-header-controls">
                 <div class="filter-bar" id="filterBar">
                   <button class="filter-btn active" data-filter="all">All</button>
@@ -289,6 +293,7 @@
   </div>
 
   <div id="scannerSettingsModal" class="modal" role="dialog" aria-modal="true"></div>
+  <div id="radarPromptModal" class="modal" role="dialog" aria-modal="true"></div>
 
   <!-- Demo mode (must load before foundation to intercept early) -->
   <script src="renderer/demo.js"></script>
