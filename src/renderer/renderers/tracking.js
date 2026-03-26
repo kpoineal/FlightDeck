@@ -586,7 +586,6 @@ function buildTrackingCard(item) {
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
           ${(() => { if (hasNew) { const label = unseenCount > 1 ? unseenCount + ' NEW' : 'NEW'; const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return '<span class="tracker-new-badge">' + label + (timeStr ? ' \u00b7 ' + timeStr : '') + '</span>'; } const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? '<span class="pill last-updated-pill" title="Last update: ' + escapeHtml(safeDate(lastUpdate)) + '">' + escapeHtml(rt) + '</span>' : ''; })()}
           <button class="popout-icon-btn" data-popout-id="${escapeHtml(item.id)}" title="Pop Out" aria-label="Pop out">\u2197</button>
-          ${unseenCount > 0 ? '<button class="small-btn primary mark-seen-btn" data-mark-seen-id="' + escapeHtml(item.id) + '">Mark as Seen</button>' : ''}
         </div>
       </div>
       <div class="card-body">
@@ -597,6 +596,9 @@ function buildTrackingCard(item) {
           </h3>
         </div>
         ${buildCardTabsHtml(item)}
+        <div class="action-row">
+          ${(hasNew || unseenCount > 0) ? '<button class="small-btn primary" data-mark-seen-id="' + escapeHtml(item.id) + '">Mark as Seen</button>' : ''}
+        </div>
       </div>
     </article>
   `;
@@ -703,7 +705,7 @@ function buildTrackingRow(item, expandedRowId) {
       </div>
 
       <div class="action-row">
-        ${unseenCount > 0 ? '<button class="small-btn primary" data-mark-seen-id="' + escapeHtml(item.id) + '">Mark as Seen</button>' : ''}
+        ${(hasNew || unseenCount > 0) ? '<button class="small-btn primary" data-mark-seen-id="' + escapeHtml(item.id) + '">Mark as Seen</button>' : ''}
         <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
         <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
       </div>
@@ -833,7 +835,7 @@ void function _deadCode() {
           </div>
 
           <div class="action-row">
-            ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
+            ${(hasNew || unseenCount > 0) ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
             <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
             <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
           </div>
@@ -948,7 +950,7 @@ void function _deadCode() {
         </div>
 
         <div class="action-row">
-          ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
+          ${(hasNew || unseenCount > 0) ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
           <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
           <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
         </div>
