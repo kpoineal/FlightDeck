@@ -6,25 +6,22 @@ function captureRadarUiState() {
   // Capture tracker row expansion state
   const expandedRowId = container.querySelector('.tracker-row-detail.show')?.parentElement?.getAttribute('data-tracker-id') || null;
 
-  // Capture section panel states (people, links, monitoring, history, prompt)
-  const sectionStates = {};
-  for (const attr of SECTION_PANEL_ATTRS) {
-    container.querySelectorAll(`[data-${attr}-panel-id]`).forEach((panel) => {
-      const id = panel.getAttribute(`data-${attr}-panel-id`);
-      if (!id) return;
-      if (!sectionStates[id]) sectionStates[id] = {};
-      sectionStates[id][attr] = panel.classList.contains('show');
-    });
-  }
+  // Capture active tab per card
+  const tabStates = {};
+  container.querySelectorAll('.card-tab.active').forEach((tab) => {
+    const itemId = tab.getAttribute('data-card-tab-item-id');
+    if (itemId) tabStates[itemId] = tab.getAttribute('data-card-tab');
+  });
+
+  // Capture prompt panel states
+  const promptStates = {};
   container.querySelectorAll('[data-prompt-panel-id]').forEach((panel) => {
     const id = panel.getAttribute('data-prompt-panel-id');
-    if (!id) return;
-    if (!sectionStates[id]) sectionStates[id] = {};
-    sectionStates[id][PROMPT_PANEL_ATTR] = panel.classList.contains('show');
+    if (id) promptStates[id] = panel.classList.contains('show');
   });
 
   const scrollTop = container.scrollTop;
-  return { expandedRowId, sectionStates, scrollTop };
+  return { expandedRowId, tabStates, promptStates, scrollTop };
 }
 
 function restoreRadarUiState(saved) {
@@ -41,32 +38,24 @@ function restoreRadarUiState(saved) {
     }
   }
 
-  if (saved.sectionStates) {
-    for (const [itemId, sections] of Object.entries(saved.sectionStates)) {
-      for (const attr of SECTION_PANEL_ATTRS) {
-        if (sections[attr] === undefined) continue;
-        const panel = container.querySelector(`[data-${attr}-panel-id="${CSS.escape(itemId)}"]`);
-        const toggle = container.querySelector(`[data-${attr}-toggle-id="${CSS.escape(itemId)}"]`);
-        if (panel) {
-          panel.classList.toggle('show', sections[attr]);
-          if (toggle) {
-            toggle.classList.toggle('expanded', sections[attr]);
-            const chevron = toggle.querySelector('.chevron');
-            if (chevron) chevron.classList.toggle('chevron--expanded', sections[attr]);
-          }
-        }
-      }
-      if (sections[PROMPT_PANEL_ATTR] !== undefined) {
-        const panel = container.querySelector(`[data-prompt-panel-id="${CSS.escape(itemId)}"]`);
-        const toggle = container.querySelector(`[data-prompt-toggle-id="${CSS.escape(itemId)}"]`);
-        if (panel) {
-          panel.classList.toggle('show', sections[PROMPT_PANEL_ATTR]);
-          if (toggle) {
-            toggle.classList.toggle('expanded', sections[PROMPT_PANEL_ATTR]);
-            const chevron = toggle.querySelector('.chevron');
-            if (chevron) chevron.classList.toggle('chevron--expanded', sections[PROMPT_PANEL_ATTR]);
-          }
-        }
+  // Restore active tab per card
+  for (const [itemId, activeTab] of Object.entries(saved.tabStates || {})) {
+    const tabContainer = container.querySelector(`[data-card-tabs-id="${CSS.escape(itemId)}"]`);
+    if (!tabContainer) continue;
+    tabContainer.querySelectorAll('.card-tab').forEach((t) => t.classList.toggle('active', t.getAttribute('data-card-tab') === activeTab));
+    tabContainer.querySelectorAll('.card-tab-panel').forEach((p) => p.classList.toggle('active', p.getAttribute('data-card-tab-panel') === activeTab));
+  }
+
+  // Restore prompt panel states
+  for (const [itemId, isOpen] of Object.entries(saved.promptStates || {})) {
+    const panel = container.querySelector(`[data-prompt-panel-id="${CSS.escape(itemId)}"]`);
+    const toggle = container.querySelector(`[data-prompt-toggle-id="${CSS.escape(itemId)}"]`);
+    if (panel) {
+      panel.classList.toggle('show', isOpen);
+      if (toggle) {
+        toggle.classList.toggle('expanded', isOpen);
+        const chevron = toggle.querySelector('.chevron');
+        if (chevron) chevron.classList.toggle('chevron--expanded', isOpen);
       }
     }
   }
