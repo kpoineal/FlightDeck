@@ -13,12 +13,12 @@ before(() => {
     savePersistentState: () => {},
     renderTrackingMode: () => {},
     // Minimal state needed by upsertTrackingItemFromRadar
-    state: { trackingItems: [] },
+    state: { trackingItems: [], items: [], radarItems: [] },
   });
   // Load dependencies in order (script-tag loading)
   loadFile(ctx, 'renderer/constants.js');
   loadFile(ctx, 'renderer/utils.js');
-  loadFile(ctx, 'renderer/models/tracking.js');
+  loadFile(ctx, 'renderer/models/item.js');
 });
 
 /* ================================================================== */
@@ -222,8 +222,8 @@ describe('normalizeTrackingItem()', () => {
     assert.ok(result.id.length > 0);
     assert.equal(result.severity, 'Observe');
     assert.equal(result.owner, 'You');
-    assert.equal(result.status, 'Tracked');
-    assert.ok(result.trackedAt);
+    assert.equal(result.status, 'Inbound');
+    assert.equal(result.trackedAt, null); // null until monitoring is enabled
     assert.equal(result.counterparties.length, 0);
     assert.equal(result.evidenceLinks.length, 0);
     assert.ok(Array.isArray(result.weeklyDays));
@@ -520,7 +520,7 @@ describe('monitorTaskItem()', () => {
   function createMonitorContext(payload) {
     const notifications = [];
     const ctx2 = createRendererContext({
-      state: { connected: true, trackingItems: [] },
+      state: { connected: true, trackingItems: [], items: [], radarItems: [] },
       buildTaskMonitorPrompt: () => 'monitor prompt',
       runWorkiqJson: async () => payload,
       addHistory: () => {},
@@ -539,7 +539,7 @@ describe('monitorTaskItem()', () => {
     });
     loadFile(ctx2, 'renderer/constants.js');
     loadFile(ctx2, 'renderer/utils.js');
-    loadFile(ctx2, 'renderer/models/tracking.js');
+    loadFile(ctx2, 'renderer/models/item.js');
     loadFile(ctx2, 'renderer/monitor-engine.js');
     ctx2.__notifications = notifications;
     return ctx2;
