@@ -637,6 +637,9 @@ function buildTrackingRow(item, expandedRowId) {
         <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
         <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
       </select>
+      <select class="status-select status-${item.lifecycleStatus || 'in-progress'}" data-status-select-id="${escapeHtml(item.id)}">
+        ${LIFECYCLE_STATUSES.map(s => `<option value="${escapeHtml(s)}" ${item.lifecycleStatus === s ? 'selected' : ''}>${escapeHtml(LIFECYCLE_LABELS[s])}</option>`).join('')}
+      </select>
       ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
       ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
       ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}${timeStr ? ' \u00b7 ' + escapeHtml(timeStr) : ''}</span>` : ''; })()}

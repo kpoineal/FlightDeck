@@ -622,6 +622,13 @@ function bindEvents() {
       handleSeveritySelectChange(severitySelect.getAttribute('data-severity-select-id'), severitySelect.value, renderRadarMode);
       return;
     }
+
+    const statusSelect = event.target.closest('[data-status-select-id]');
+    if (statusSelect) {
+      const itemId = statusSelect.getAttribute('data-status-select-id');
+      setItemLifecycleStatus(itemId, statusSelect.value);
+      return;
+    }
   });
 
   elements.radarList.addEventListener('input', (event) => {

@@ -164,6 +164,15 @@ const DEFAULT_WEEKLY_TIMES = ['08:00', '12:00'];
 const WORK_HOURS_START_HOUR = 8;
 const WORK_HOURS_END_HOUR = 17;
 
+const LIFECYCLE_STATUSES = ['in-progress', 'blocked', 'waiting', 'complete', 'archived'];
+const LIFECYCLE_LABELS = {
+  'in-progress': 'In Progress',
+  'blocked': 'Blocked',
+  'waiting': 'Waiting',
+  'complete': 'Complete',
+  'archived': 'Archived',
+};
+
 const ALL_SIGNAL_TYPES = ['email', 'chat', 'meeting', 'doc'];
 const SIGNAL_TYPE_OPTIONS = [
   { value: 'email', label: 'Email', icon: '✉️' },
