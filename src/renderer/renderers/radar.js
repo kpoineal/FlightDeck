@@ -63,6 +63,7 @@ function restoreRadarUiState(saved) {
   if (saved.scrollTop) container.scrollTop = saved.scrollTop;
 }
 
+// ── Filtering ────────────────────────────────────────────────────────
 function applyFilter(items) {
   switch (state.filter) {
     case 'monitored':
@@ -88,16 +89,59 @@ function applyFilter(items) {
   }
 }
 
-function groupItemsByScanner(items) {
-  const groups = new Map();
-  for (const item of items) {
-    const key = item.scannerId || '__radar__';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(item);
+// ── Grouped sections (from scanner branch) ───────────────────────────
+function groupItemsBySource(filteredItems) {
+  const radarItems = filteredItems.filter((item) => !item.scannerId);
+
+  const scannerGroups = new Map();
+  const scanners = Array.isArray(state.scanners) ? state.scanners : [];
+  for (const scanner of scanners) {
+    scannerGroups.set(scanner.id, { scanner, items: [] });
   }
-  return groups;
+
+  for (const item of filteredItems) {
+    if (item.scannerId && scannerGroups.has(item.scannerId)) {
+      scannerGroups.get(item.scannerId).items.push(item);
+    }
+  }
+
+  const severityOrder = { Critical: 0, Elevated: 1, Observe: 2 };
+  const sortedGroups = [...scannerGroups.values()].sort((a, b) => {
+    const aEnabled = a.scanner.enabled !== false;
+    const bEnabled = b.scanner.enabled !== false;
+    if (aEnabled !== bEnabled) return aEnabled ? -1 : 1;
+    const aMax = Math.min(...a.items.map((i) => severityOrder[i.severity] ?? 2), 2);
+    const bMax = Math.min(...b.items.map((i) => severityOrder[i.severity] ?? 2), 2);
+    return aMax - bMax;
+  });
+
+  return { radarItems, scannerGroups: sortedGroups };
 }
 
+// ── Section header (from scanner branch) ─────────────────────────────
+function buildSectionHeader(sourceId, icon, name, count, { isScanner = false, scannerId = null, enabled = true } = {}) {
+  const collapsed = Array.isArray(state.collapsedSections) && state.collapsedSections.includes(sourceId);
+  return `
+    <div class="radar-section-header ${enabled ? '' : 'disabled'}" data-source-id="${escapeHtml(sourceId)}">
+      <div class="radar-section-header-left">
+        <span class="radar-section-icon">${icon}</span>
+        <span class="radar-section-name">${escapeHtml(name)}</span>
+        <span class="radar-section-count">(${count})</span>
+      </div>
+      <div class="radar-section-header-actions">
+        ${isScanner ? `
+          <button class="icon-btn" data-scanner-header-toggle="${escapeHtml(String(scannerId))}" title="${enabled ? 'Pause scanner' : 'Resume scanner'}">${enabled ? '\u23f8' : '\u25b6'}</button>
+          <button class="icon-btn" data-scanner-header-settings="${escapeHtml(String(scannerId))}" title="Scanner settings">\u2699\ufe0f</button>
+        ` : `
+          <button class="icon-btn" data-radar-prompt-settings title="Radar settings">\u2699\ufe0f</button>
+        `}
+        <button class="icon-btn radar-section-collapse ${collapsed ? 'collapsed' : ''}" data-section-collapse="${escapeHtml(sourceId)}" title="${collapsed ? 'Expand' : 'Collapse'}">\u25be</button>
+      </div>
+    </div>
+  `;
+}
+
+// ── Main render ──────────────────────────────────────────────────────
 function renderRadarList() {
   const allItems = Array.isArray(state.items) ? state.items : [];
   const filtered = applyFilter(allItems);
@@ -111,7 +155,6 @@ function renderRadarList() {
   }
 
   const sorted = sortBySeverity(filtered, true);
-  const groups = groupItemsByScanner(sorted);
 
   // Sync density toggle
   const densityBtn = document.getElementById('densityToggleBtn');
@@ -129,50 +172,47 @@ function renderRadarList() {
   }
 
   const isMinimal = state.density === 'minimal';
-  elements.radarList.classList.toggle('list--minimal', isMinimal);
+  // Remove legacy class — sections handle their own grid
+  elements.radarList.classList.remove('list--minimal');
 
   // Capture UI state before re-render
   const savedUiState = captureRadarUiState();
 
-  const html = [];
+  const { radarItems, scannerGroups } = groupItemsBySource(sorted);
 
-  // "Create Scanner" button at the top
-  html.push('<div class="scanner-create-row"><button class="small-btn primary" data-create-scanner-btn>+ New Scanner</button></div>');
+  let html = '';
 
-  for (const [groupKey, items] of groups) {
-    const scanner = groupKey !== '__radar__'
-      ? state.scanners.find((s) => s.id === groupKey)
-      : null;
-    const groupName = scanner ? scanner.name : 'Radar';
-    const isCollapsed = state.collapsedSections.includes(groupKey);
-    const enabled = scanner ? scanner.enabled !== false : true;
+  // Main Radar section
+  const radarCollapsed = Array.isArray(state.collapsedSections) && state.collapsedSections.includes('radar');
+  html += `<div class="radar-section">`;
+  html += buildSectionHeader('radar', '\uD83D\uDCE1', 'Radar', radarItems.length, { isScanner: false });
+  html += `<div class="radar-section-items ${isMinimal ? 'list--minimal' : ''} ${radarCollapsed ? 'collapsed' : ''}" data-section-items="radar">`;
+  html += radarItems.length
+    ? radarItems.map((item) => isMinimal ? buildTrackingRow(item, savedUiState.expandedRowId) : buildTrackingCard(item)).join('')
+    : '<div class="empty">No main radar items.</div>';
+  html += `</div></div>`;
 
-    html.push(`<div class="scanner-group" data-group-id="${escapeHtml(groupKey)}">`);
-    html.push(`<div class="scanner-group-header" data-collapse-group-id="${escapeHtml(groupKey)}">`);
-    html.push(`<span class="scanner-group-chevron ${isCollapsed ? '' : 'open'}">&#9660;</span>`);
-    html.push(`<span class="scanner-group-name">${escapeHtml(groupName)}</span>`);
-    html.push(`<span class="scanner-group-count">${items.length}</span>`);
-    if (scanner) {
-      const nextRun = scanner.nextRunAt ? safeDate(scanner.nextRunAt) : 'Not scheduled';
-      html.push(`<span class="scanner-group-schedule">${escapeHtml(nextRun)}</span>`);
-      html.push(`<button class="icon-btn" data-scanner-header-toggle="${escapeHtml(String(scanner.id))}" title="${enabled ? 'Pause scanner' : 'Resume scanner'}">${enabled ? '\u23f8' : '\u25b6'}</button>`);
-      html.push(`<button class="icon-btn" data-scanner-header-settings="${escapeHtml(String(scanner.id))}" title="Scanner settings">\u2699\ufe0f</button>`);
-    }
-    html.push('</div>');
+  // Scanner sections
+  for (const group of scannerGroups) {
+    const scanner = group.scanner;
+    const sourceId = `scanner-${scanner.id}`;
+    const enabled = scanner.enabled !== false;
+    const collapsed = Array.isArray(state.collapsedSections) && state.collapsedSections.includes(sourceId);
 
-    if (!isCollapsed) {
-      html.push('<div class="scanner-group-items">');
-      if (isMinimal) {
-        html.push(items.map((item) => buildTrackingRow(item, savedUiState.expandedRowId)).join(''));
-      } else {
-        html.push(items.map((item) => buildTrackingCard(item)).join(''));
-      }
-      html.push('</div>');
-    }
-    html.push('</div>');
+    html += `<div class="radar-section ${enabled ? '' : 'disabled'}">`;
+    html += buildSectionHeader(sourceId, '\uD83D\uDD0D', scanner.name || 'Unnamed Scanner', group.items.length, {
+      isScanner: true,
+      scannerId: scanner.id,
+      enabled,
+    });
+    html += `<div class="radar-section-items ${isMinimal ? 'list--minimal' : ''} ${collapsed ? 'collapsed' : ''}" data-section-items="${escapeHtml(sourceId)}">`;
+    html += group.items.length
+      ? group.items.map((item) => isMinimal ? buildTrackingRow(item, savedUiState.expandedRowId) : buildTrackingCard(item)).join('')
+      : '<div class="empty">No items from this scanner.</div>';
+    html += `</div></div>`;
   }
 
-  elements.radarList.innerHTML = html.join('');
+  elements.radarList.innerHTML = html;
   autoSizeSeveritySelects(elements.radarList);
   restoreRadarUiState(savedUiState);
 
@@ -182,35 +222,125 @@ function renderRadarList() {
   });
 }
 
+// ── Scanner settings modal ───────────────────────────────────────────
 function renderScannerSettingsModal(scannerId) {
   const modal = document.getElementById('scannerSettingsModal');
   if (!modal) return;
-
   const scanner = scannerId ? getScannerById(scannerId) : null;
-  const formHtml = buildScannerForm(scanner);
   const isEdit = scanner != null;
+  const title = isEdit ? escapeHtml(scanner.name || 'Scanner Settings') : 'New Scanner';
 
   modal.innerHTML = `
     <div class="modal-card">
-      <div class="modal-header">
-        <h3>${isEdit ? 'Scanner Settings' : 'Create Scanner'}</h3>
-        <button class="modal-close-btn" data-scanner-modal-close>&times;</button>
-      </div>
-      ${formHtml}
-      ${isEdit ? `
-        <div class="modal-footer">
-          <button class="small-btn" data-scanner-run-now="${escapeHtml(String(scanner.id))}">Run Now</button>
-          <button class="small-btn warn" data-scanner-modal-delete="${escapeHtml(String(scanner.id))}">Delete Scanner</button>
-        </div>` : ''}
-    </div>`;
+      <h3 class="scanner-modal-title">${title}</h3>
+      ${buildScannerForm(scanner)}
+      ${isEdit ? `<button class="scanner-modal-delete" data-scanner-modal-delete="${escapeHtml(String(scannerId))}">Delete this scanner</button>` : ''}
+    </div>
+  `;
 
-  modal.classList.add('open');
+  // Replace form save/cancel buttons to include Run Now for edit mode
+  if (isEdit) {
+    const actions = modal.querySelector('.scanner-form-actions');
+    if (actions) {
+      actions.innerHTML = `
+        <button class="small-btn primary" data-scanner-save="${escapeHtml(String(scannerId))}">Update Scanner</button>
+        <button class="small-btn" data-scanner-run-now="${escapeHtml(String(scannerId))}">Run Now</button>
+        <button class="small-btn" data-scanner-modal-close>Cancel</button>
+      `;
+    }
+  } else {
+    const actions = modal.querySelector('.scanner-form-actions');
+    if (actions) {
+      actions.innerHTML = `
+        <button class="small-btn primary" data-scanner-save="">Create Scanner</button>
+        <button class="small-btn" data-scanner-modal-close>Cancel</button>
+      `;
+    }
+  }
+
+  // Bind schedule type change within the form
+  const form = modal.querySelector('.scanner-form');
+  if (form) {
+    const typeSelect = form.querySelector('[data-scanner-input="scheduleType"]');
+    if (typeSelect) {
+      typeSelect.addEventListener('change', () => {
+        const intervalField = form.querySelector('[data-scanner-interval-field]');
+        const weeklyPanel = form.querySelector('[data-scanner-weekly-panel]');
+        if (intervalField) intervalField.classList.toggle('d-none', typeSelect.value !== 'interval');
+        if (weeklyPanel) weeklyPanel.classList.toggle('d-none', typeSelect.value !== 'weekly');
+      });
+    }
+  }
+
+  modal.classList.add('show');
 }
 
 function closeScannerSettingsModal() {
   const modal = document.getElementById('scannerSettingsModal');
   if (modal) {
-    modal.classList.remove('open');
+    modal.classList.remove('show');
+    modal.innerHTML = '';
+  }
+}
+
+function readScannerModalFormValues() {
+  const modal = document.getElementById('scannerSettingsModal');
+  if (!modal) return null;
+  const form = modal.querySelector('.scanner-form');
+  if (!form) return null;
+
+  const nameInput = form.querySelector('[data-scanner-input="name"]');
+  const promptInput = form.querySelector('[data-scanner-input="prompt"]');
+  const typeSelect = form.querySelector('[data-scanner-input="scheduleType"]');
+  const valueSelect = form.querySelector('[data-scanner-input="scheduleValue"]');
+
+  const values = {
+    name: nameInput?.value?.trim() || '',
+    prompt: promptInput?.value?.trim() || '',
+    scheduleType: typeSelect?.value || 'interval',
+    scheduleValue: valueSelect?.value || '4h',
+  };
+
+  if (values.scheduleType === 'weekly') {
+    const dayCbs = form.querySelectorAll('[data-scanner-weekly-day]:checked');
+    values.weeklyDays = [...dayCbs].map((cb) => cb.value).filter(Boolean);
+    if (!values.weeklyDays.length) values.weeklyDays = [...DEFAULT_WEEKLY_DAYS];
+
+    const timePickers = form.querySelectorAll('[data-scanner-weekly-time]');
+    values.weeklyTimes = [...timePickers].map((inp) => inp.value).filter(Boolean);
+    if (!values.weeklyTimes.length) values.weeklyTimes = [...DEFAULT_WEEKLY_TIMES];
+  }
+
+  return values;
+}
+
+// ── Radar prompt modal ───────────────────────────────────────────────
+function renderRadarPromptModal() {
+  const modal = document.getElementById('radarPromptModal');
+  if (!modal) return;
+
+  const currentPrompt = elements.radarPromptEditor ? elements.radarPromptEditor.value : '';
+
+  modal.innerHTML = `
+    <div class="modal-card" style="width:min(800px,100%)">
+      <h3 class="scanner-modal-title">Radar Prompt</h3>
+      <textarea id="radarPromptModalEditor" class="tracking-textarea" spellcheck="false" placeholder="Loading prompt..." style="min-height:400px;resize:vertical">${escapeHtml(currentPrompt)}</textarea>
+      <div class="modal-actions">
+        <button class="small-btn primary" id="radarPromptModalApply">Apply</button>
+        <button class="small-btn" id="radarPromptModalReset">Reset to Default</button>
+        <button class="small-btn" data-radar-prompt-modal-close>Cancel</button>
+        <span class="prompt-status" id="radarPromptModalStatus"></span>
+      </div>
+    </div>
+  `;
+
+  modal.classList.add('show');
+}
+
+function closeRadarPromptModal() {
+  const modal = document.getElementById('radarPromptModal');
+  if (modal) {
+    modal.classList.remove('show');
     modal.innerHTML = '';
   }
 }
