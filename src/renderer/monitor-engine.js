@@ -208,7 +208,7 @@ async function runDueMonitoringChecks() {
   }
 
   const nowMs = Date.now();
-  const dueItems = state.trackingItems.filter((item) => {
+  const dueItems = state.items.filter((item) => {
     if (!item.monitorEnabled || !item.nextRunAt) return false;
     const dueAt = new Date(item.nextRunAt).getTime();
     return Number.isFinite(dueAt) && dueAt <= nowMs;

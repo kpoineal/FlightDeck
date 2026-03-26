@@ -90,12 +90,12 @@ function getHistorySeverityCounts() {
 }
 
 function getModeSeverityCounts(mode) {
-  if (mode === 'Radar') {
-    return countSeverityFromItems(getInboundRadarItems());
+  if (mode === 'Radar' || mode === 'Tracking') {
+    return countSeverityFromItems(state.items);
   }
 
   if (mode === 'Tracking') {
-    return countSeverityFromItems(state.trackingItems);
+    return countSeverityFromItems(state.items);
   }
 
   if (mode === 'Briefings') {
@@ -110,8 +110,8 @@ function getModeSeverityCounts(mode) {
 }
 
 function getModeScopeLabel(mode) {
-  if (mode === 'Radar') return 'Radar Inbound';
-  if (mode === 'Tracking') return 'Tracked Items';
+  if (mode === 'Radar') return 'All Items';
+  if (mode === 'Tracking') return 'All Items';
   if (mode === 'Briefings') return 'Meetings Today';
   if (mode === 'History') return 'Audit Events';
   return 'Current View';

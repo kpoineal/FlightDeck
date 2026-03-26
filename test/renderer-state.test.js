@@ -62,6 +62,7 @@ before(() => {
   loadRendererBundle(ctx, [
     'renderer/constants.js',
     'renderer/utils.js',
+    'renderer/models/item.js',
     'renderer/models/tracking.js',
     'renderer/models/briefing.js',
     'renderer/state.js',
@@ -76,6 +77,7 @@ function resetState() {
   // Set migration flag so migrateLocalStorageToStore() is bypassed in tests
   ctx.localStorage.setItem('flightdeck.migrated-to-store', 'true');
   mockStore = {};
+  ctx.state.items = [];
   ctx.state.radarItems = [];
   ctx.state.meetings = [];
   ctx.state.trackingItems = [];
@@ -84,6 +86,7 @@ function resetState() {
   ctx.state.history = [];
   ctx.state.briefing = null;
   ctx.state.connected = false;
+  ctx.state.density = 'full';
   ctx.state.trackingDensity = 'full';
   ctx.state.radarDensity = 'full';
 }
@@ -111,8 +114,8 @@ describe('loadPersistentState()', () => {
     assert.equal(ctx.state.trackingItems.length, 1);
     assert.equal(ctx.state.trackingItems[0].id, 'task-alpha');
     assert.equal(ctx.state.connected, true);
-    // radarItems and meetings are ephemeral — not loaded from persistence
-    assert.equal(ctx.state.radarItems.length, 0);
+    // In unified model, radarItems is aliased to items; meetings remain ephemeral
+    assert.equal(ctx.state.items.length, 1);
     assert.equal(ctx.state.meetings.length, 0);
   });
 
@@ -201,8 +204,9 @@ describe('loadPersistentState()', () => {
 
     await ctx.loadPersistentState();
 
-    assert.equal(ctx.state.radarItems.length, 0,
-      'radarItems should not be restored from store');
+    // In unified model, radarItems with no trackingItems → migration adds them to items
+    // These radarItems had no monitoring data so they appear as items with monitorEnabled=false
+    assert.equal(ctx.state.items.length, 1);
     assert.equal(ctx.state.meetings.length, 0,
       'meetings should not be restored from store');
     // Other persisted fields should still load
@@ -606,7 +610,9 @@ describe('savePersistentState()', () => {
   beforeEach(resetState);
 
   it('persists state to the store under the v2 key', async () => {
-    ctx.state.trackingItems = [{ id: 'task-persist', title: 'Persisted Task' }];
+    const testItems = [{ id: 'task-persist', title: 'Persisted Task' }];
+    ctx.state.items = testItems;
+    ctx.state.trackingItems = testItems;
     ctx.state.history = [{ at: new Date().toISOString(), type: 'scan', text: 'test' }];
 
     await ctx.savePersistentState();
@@ -616,22 +622,27 @@ describe('savePersistentState()', () => {
     assert.equal(parsed.trackingItems.length, 1);
     assert.equal(parsed.trackingItems[0].id, 'task-persist');
     assert.equal(parsed.history.length, 1);
-    // radarItems and meetings should NOT be in the persisted payload
-    assert.equal(parsed.radarItems, undefined);
+    // radarItems is written as legacy rollback key
+    assert.ok(Array.isArray(parsed.radarItems));
     assert.equal(parsed.meetings, undefined);
   });
 
   it('round-trips through save and load', async () => {
-    ctx.state.trackingItems = [{ id: 'round-trip', title: 'Round Trip Task' }];
+    const testItems = [{ id: 'round-trip', title: 'Round Trip Task' }];
+    ctx.state.items = testItems;
+    ctx.state.trackingItems = testItems;
     ctx.state.briefingSeenAt = { mtg1: '2025-06-15T10:00:00Z' };
+    ctx.state.density = 'minimal';
     ctx.state.trackingDensity = 'minimal';
     ctx.state.radarDensity = 'minimal';
 
     await ctx.savePersistentState();
 
     // Reset state, then reload
+    ctx.state.items = [];
     ctx.state.trackingItems = [];
     ctx.state.briefingSeenAt = {};
+    ctx.state.density = 'full';
     ctx.state.trackingDensity = 'full';
     ctx.state.radarDensity = 'full';
 
@@ -656,7 +667,7 @@ describe('savePersistentState()', () => {
     assert.equal(parsed.briefingSeenAt.mtg1, '2025-06-15T10:00:00Z');
   });
 
-  it('does NOT include radarItems or meetings in saved payload', async () => {
+  it('does NOT include meetings in saved payload', async () => {
     ctx.state.radarItems = [{ id: 'r1', title: 'Active Radar Item' }];
     ctx.state.meetings = [{ id: 'm1', title: 'Upcoming Meeting' }];
     ctx.state.history = [{ at: new Date().toISOString(), type: 'scan', text: 'verify-save' }];
@@ -664,8 +675,8 @@ describe('savePersistentState()', () => {
     await ctx.savePersistentState();
 
     const parsed = mockStore[ctx.STORAGE_KEY];
-    assert.equal(parsed.radarItems, undefined,
-      'radarItems should not appear in persisted payload');
+    // radarItems is now written as legacy rollback key (since Phase 1 unification)
+    assert.ok(Array.isArray(parsed.radarItems));
     assert.equal(parsed.meetings, undefined,
       'meetings should not appear in persisted payload');
     // Confirm other fields are still written

@@ -753,9 +753,9 @@ describe('adoptStructuredLabels()', () => {
 
   it('adopts descriptive label from structured link matching by type', () => {
     const inline = [{ label: 'teams.microsoft.com', type: 'chat', url: 'https://teams.microsoft.com/l/message/19:abc/123' }];
-    const structured = [{ label: 'Ed Knox Teams message on FiServ DC exit', type: 'chat', url: 'https://teams.microsoft.com' }];
+    const structured = [{ label: 'Weekly sync message on datacenter migration', type: 'chat', url: 'https://teams.microsoft.com' }];
     const result = ctx.adoptStructuredLabels(inline, structured);
-    assert.equal(result[0].label, 'Ed Knox Teams message on FiServ DC exit');
+    assert.equal(result[0].label, 'Weekly sync message on datacenter migration');
     assert.equal(result[0].url, 'https://teams.microsoft.com/l/message/19:abc/123');
   });
 
@@ -787,11 +787,11 @@ describe('adoptStructuredLabels()', () => {
       { label: 'teams.microsoft.com', type: 'chat', url: 'https://teams.microsoft.com/l/message/19:def/2' },
     ];
     const structured = [
-      { label: 'FiServ DC exit thread', type: 'chat', url: 'https://teams.microsoft.com' },
+      { label: 'Datacenter migration thread', type: 'chat', url: 'https://teams.microsoft.com' },
       { label: 'CAF scope review thread', type: 'chat', url: 'https://teams.microsoft.com' },
     ];
     const result = ctx.adoptStructuredLabels(inline, structured);
-    assert.equal(result[0].label, 'FiServ DC exit thread');
+    assert.equal(result[0].label, 'Datacenter migration thread');
     assert.equal(result[1].label, 'CAF scope review thread');
   });
 
@@ -856,14 +856,14 @@ describe('extractLabelEmbeddedUrl()', () => {
 describe('normalizeEvidenceLink() with label-embedded URLs', () => {
   it('extracts URL from label when url field is missing', () => {
     const entry = {
-      label: 'Teams chat about FiServ [1](https://teams.microsoft.com/l/message/19:abc@thread.v2/12345?context=%7B%22contextType%22:%22chat%22%7D)',
+      label: 'Teams chat about Contoso [1](https://teams.microsoft.com/l/message/19:abc@thread.v2/12345?context=%7B%22contextType%22:%22chat%22%7D)',
       type: 'chat',
       signalAt: null,
     };
     const result = ctx.normalizeEvidenceLink(entry, 'chat');
     assert.ok(result);
-    // cleanDisplayText splits camelCase, so FiServ → Fi Serv
-    assert.equal(result.label, 'Teams chat about Fi Serv');
+    // cleanDisplayText leaves 'Contoso' as-is (no camelCase split)
+    assert.equal(result.label, 'Teams chat about Contoso');
     assert.ok(result.url.includes('teams.microsoft.com/l/message'));
     assert.equal(result.type, 'chat');
   });

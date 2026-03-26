@@ -46,7 +46,6 @@ function getSelectedTone() {
 function renderModeVisibility() {
   const viewMap = {
     Radar: elements.viewRadar,
-    Tracking: elements.viewTracking,
     Briefings: elements.viewBriefings,
     History: elements.viewHistory,
   };
@@ -61,16 +60,13 @@ function renderModeVisibility() {
     button.classList.toggle('active', button.dataset.mode === state.mode);
   });
 
-  if (elements.refreshBtn) {
-    elements.refreshBtn.classList.toggle('d-none', state.mode === 'Tracking');
-  }
+
 }
 
 function renderAll() {
   renderKpis();
   renderModeVisibility();
   renderRadarMode();
-  renderTrackingMode();
   renderBriefingsMode();
   renderHistory();
 }
@@ -118,7 +114,6 @@ async function refreshAllData() {
         addHistory('scan', 'Radar + ledger scan completed');
         successCount += 1;
         renderRadarMode();
-        renderTrackingMode();
       })
       .catch((error) => {
         addHistory('failure', `Radar scan issue: ${error.message}`);
@@ -247,56 +242,6 @@ async function refreshCurrentMode() {
     return;
   }
 
-  if (state.mode === 'Tracking') {
-    const enabledItems = state.trackingItems.filter((item) => item.monitorEnabled);
-    const totalItems = state.trackingItems.length;
-
-    if (!totalItems) {
-      setStatus('No tracked items');
-      setUpdatedNow();
-      renderTrackingMode();
-      return;
-    }
-
-    if (!enabledItems.length) {
-      setStatus(`${totalItems} tracked · none monitored`);
-      setUpdatedNow();
-      renderTrackingMode();
-      return;
-    }
-
-    const now = Date.now();
-    const nextDue = enabledItems
-      .filter((item) => item.nextRunAt)
-      .map((item) => new Date(item.nextRunAt).getTime())
-      .filter((t) => Number.isFinite(t) && t > now)
-      .sort((a, b) => a - b)[0] || null;
-
-    const nextDueLabel = nextDue
-      ? (() => {
-          const diffMin = Math.round((nextDue - now) / 60000);
-          if (diffMin <= 0) return 'any moment';
-          if (diffMin === 1) return 'in 1 min';
-          if (diffMin < 60) return `in ${diffMin} min`;
-          const diffHr = Math.round(diffMin / 60);
-          return `in ${diffHr}h`;
-        })()
-      : null;
-
-    const statusParts = [
-      `${totalItems} tracked`,
-      `${enabledItems.length} monitored`,
-    ];
-    if (nextDueLabel) {
-      statusParts.push(`next check ${nextDueLabel}`);
-    }
-
-    setStatus(statusParts.join(' · '));
-    setUpdatedNow();
-    renderTrackingMode();
-    return;
-  }
-
   if (state.mode === 'Briefings') {
     await refreshBriefingData();
     return;
@@ -312,12 +257,13 @@ async function refreshCurrentMode() {
 }
 
 function setMode(mode) {
+  if (mode === 'Tracking') mode = 'Radar';
   state.mode = mode;
   renderModeVisibility();
   renderKpis();
 
-  if (mode === 'Tracking') {
-    renderTrackingMode();
+  if (mode === 'Radar') {
+    renderRadarMode();
   }
 
   if (state.connected && mode === 'Briefings' && !state.meetings.length) {
@@ -437,7 +383,7 @@ async function init() {
   // Listen for state changes from popout windows
   window.workiq.onStateChanged(async () => {
     await loadPersistentState();
-    renderTrackingMode();
+    renderRadarMode();
   });
 
 }
