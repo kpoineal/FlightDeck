@@ -256,6 +256,9 @@ function normalizeItem(item) {
     lastNotifiedSignature: item?.lastNotifiedSignature || null,
     notifyEnabled: item?.notifyEnabled !== false,
     origin: item?.origin === 'custom' ? 'custom' : 'imported',
+    lifecycleStatus: LIFECYCLE_STATUSES.includes(item?.lifecycleStatus)
+      ? item.lifecycleStatus
+      : (item?.archived === true || item?.completed === true ? 'archived' : 'in-progress'),
     scannerId: item?.scannerId || null,
     isNew: item?.isNew === true,
     updateHistory: Array.isArray(item?.updateHistory)
@@ -810,4 +813,37 @@ function updateItemSchedule(itemId, nextScheduleType, nextScheduleValue, nextOne
 // Legacy alias
 function updateTrackingSchedule(itemId, nextScheduleType, nextScheduleValue, nextOneTimeAt, opts = {}) {
   updateItemSchedule(itemId, nextScheduleType, nextScheduleValue, nextOneTimeAt, opts);
+}
+
+function setItemLifecycleStatus(id, newStatus) {
+  const item = (state.items || []).find((entry) => entry.id === id);
+  if (!item || !LIFECYCLE_STATUSES.includes(newStatus)) return;
+  const oldStatus = item.lifecycleStatus;
+  if (oldStatus === newStatus) return;
+  item.lifecycleStatus = newStatus;
+  // Stop monitoring when complete or archived
+  if (newStatus === 'complete' || newStatus === 'archived') {
+    item.monitorEnabled = false;
+    item.nextRunAt = null;
+  }
+  if (!Array.isArray(item.updateHistory)) item.updateHistory = [];
+  item.updateHistory.unshift({
+    timestamp: nowIso(),
+    changes: [`Status: ${oldStatus} \u2192 ${newStatus}`],
+    summary: item.summary || item.title,
+    status: newStatus,
+    severity: item.severity,
+    seen: true,
+  });
+  if (item.updateHistory.length > 20) {
+    item.updateHistory = item.updateHistory.slice(0, 20);
+  }
+  state.trackingItems = state.items;
+  savePersistentState();
+  renderRadarMode();
+}
+
+// Legacy alias
+function setTrackingLifecycleStatus(id, newStatus) {
+  setItemLifecycleStatus(id, newStatus);
 }

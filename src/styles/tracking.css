@@ -97,6 +97,58 @@
   border-top: 1px solid var(--border);
 }
 
+/* ── Status Select ── */
+.status-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--radius-pill);
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  cursor: pointer;
+  text-align: center;
+  background: none;
+  flex: 0 0 auto;
+  width: var(--sel-width, auto);
+  outline: none;
+  transition: box-shadow 0.2s ease;
+}
+.status-select option {
+  background: var(--bg-surface);
+  color: var(--text);
+}
+.status-select.status-in-progress {
+  background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.status-select.status-blocked {
+  background-color: color-mix(in srgb, var(--color-critical) 12%, transparent);
+  color: var(--color-critical);
+  border-color: color-mix(in srgb, var(--color-critical) 50%, transparent);
+}
+.status-select.status-waiting {
+  background-color: color-mix(in srgb, var(--color-elevated) 12%, transparent);
+  color: var(--color-elevated);
+  border-color: color-mix(in srgb, var(--color-elevated) 50%, transparent);
+}
+.status-select.status-complete {
+  background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-muted);
+  border-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+}
+.status-select.status-archived {
+  background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-muted);
+  border-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+}
+.status-select:focus {
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
+}
+
 /* ── Tracking inputs ── */
 .tracking-input,
 .tracking-select {

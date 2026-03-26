@@ -82,9 +82,9 @@ function applyFilter(items) {
       });
     }
     case 'archived':
-      return items.filter((item) => item.archived);
+      return items.filter((item) => item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
     default: // 'all'
-      return items.filter((item) => !item.archived);
+      return items.filter((item) => item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived');
   }
 }
 
