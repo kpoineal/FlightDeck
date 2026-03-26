@@ -408,6 +408,19 @@ function bindEvents() {
       return;
     }
 
+    // Card tab switching
+    const cardTab = event.target.closest('[data-card-tab]');
+    if (cardTab) {
+      const itemId = cardTab.getAttribute('data-card-tab-item-id');
+      const activeTab = cardTab.getAttribute('data-card-tab');
+      const tabContainer = cardTab.closest('[data-card-tabs-id]');
+      if (tabContainer) {
+        tabContainer.querySelectorAll('.card-tab').forEach((t) => t.classList.toggle('active', t.getAttribute('data-card-tab') === activeTab));
+        tabContainer.querySelectorAll('.card-tab-panel').forEach((p) => p.classList.toggle('active', p.getAttribute('data-card-tab-panel') === activeTab));
+      }
+      return;
+    }
+
     const dismissButton = event.target.closest('[data-dismiss-radar-id]');
     if (dismissButton) {
       event.preventDefault();
