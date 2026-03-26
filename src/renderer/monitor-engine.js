@@ -56,6 +56,29 @@ async function monitorTaskItem(item, { manual = false } = {}) {
     item.summary = cleanDisplayText(payload.summary || item.summary || '');
     item.reason = cleanDisplayText(payload.reason || item.reason || '');
     item.status = cleanDisplayText(payload.status || item.status || 'Monitoring');
+
+    // Auto-update lifecycle status based on AI-reported status
+    const statusLower = (item.status || '').toLowerCase();
+    if (statusLower.includes('blocked') || statusLower.includes('stalled')) {
+      if (item.lifecycleStatus === 'in-progress') {
+        item.lifecycleStatus = 'blocked';
+      }
+    } else if (statusLower.includes('waiting') || statusLower.includes('pending')) {
+      if (item.lifecycleStatus === 'in-progress') {
+        item.lifecycleStatus = 'waiting';
+      }
+    } else if (statusLower.includes('resolved') || statusLower.includes('complete') || statusLower.includes('closed')) {
+      if (item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived') {
+        item.lifecycleStatus = 'complete';
+        item.monitorEnabled = false;
+        item.nextRunAt = null;
+      }
+    } else if (statusLower.includes('in progress') || statusLower.includes('active') || statusLower.includes('ongoing')) {
+      if (item.lifecycleStatus === 'blocked' || item.lifecycleStatus === 'waiting') {
+        item.lifecycleStatus = 'in-progress';
+      }
+    }
+
     item.severity = normalizeSeverity(payload.severity || item.severity);
     item.dueAt = payload.dueAt || item.dueAt || null;
     item.owner = cleanDisplayText(payload.owner || item.owner || 'You');
