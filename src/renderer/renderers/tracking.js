@@ -581,6 +581,9 @@ function buildTrackingCard(item) {
             <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
             <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
           </select>
+          <select class="status-select status-${item.lifecycleStatus || 'in-progress'}" data-status-select-id="${escapeHtml(item.id)}">
+            ${LIFECYCLE_STATUSES.map(s => `<option value="${escapeHtml(s)}" ${item.lifecycleStatus === s ? 'selected' : ''}>${escapeHtml(LIFECYCLE_LABELS[s])}</option>`).join('')}
+          </select>
         </div>
         <div class="tracker-head-right">
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
@@ -872,6 +875,9 @@ void function _deadCode() {
             <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
             <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
             <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
+          </select>
+          <select class="status-select status-${item.lifecycleStatus || 'in-progress'}" data-status-select-id="${escapeHtml(item.id)}">
+            ${LIFECYCLE_STATUSES.map(s => `<option value="${escapeHtml(s)}" ${item.lifecycleStatus === s ? 'selected' : ''}>${escapeHtml(LIFECYCLE_LABELS[s])}</option>`).join('')}
           </select>
         </div>
         <div class="tracker-head-right">
