@@ -260,6 +260,7 @@ async function loadPersistentState() {
 
     pruneHistory();
     pruneStaleBriefings();
+    autoArchiveCompletedItems();
 
     // Mark state as loaded — savePersistentState is now safe to write
     state._loaded = true;
@@ -267,6 +268,31 @@ async function loadPersistentState() {
     // Even on error, allow saves so the app isn't permanently frozen
     state._loaded = true;
     console.warn('[flightdeck] persistence read failed', error.message);
+  }
+}
+
+const AUTO_ARCHIVE_DAYS = 7;
+
+function autoArchiveCompletedItems() {
+  const cutoff = Date.now() - AUTO_ARCHIVE_DAYS * 24 * 60 * 60 * 1000;
+  let changed = false;
+  for (const item of state.items) {
+    if (item.lifecycleStatus !== 'complete') continue;
+    // Use lastChangedAt or the most recent history entry timestamp to determine when it was completed
+    const completedAt = item.lastChangedAt
+      || (Array.isArray(item.updateHistory) && item.updateHistory.length ? item.updateHistory[0].timestamp : null)
+      || item.lastRunAt || item.trackedAt;
+    if (!completedAt) continue;
+    const completedTime = new Date(completedAt).getTime();
+    if (Number.isFinite(completedTime) && completedTime < cutoff) {
+      item.lifecycleStatus = 'archived';
+      item.monitorEnabled = false;
+      item.nextRunAt = null;
+      changed = true;
+    }
+  }
+  if (changed && state._loaded) {
+    savePersistentState();
   }
 }
 
