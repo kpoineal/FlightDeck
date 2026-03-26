@@ -389,6 +389,18 @@ function bindEvents() {
     });
   }
 
+  // Filter bar (outside radarList, needs its own listener)
+  const filterBar = document.getElementById('filterBar');
+  if (filterBar) {
+    filterBar.addEventListener('click', (event) => {
+      const filterBtn = event.target.closest('[data-filter]');
+      if (!filterBtn) return;
+      state.filter = filterBtn.dataset.filter || 'all';
+      savePersistentState();
+      renderRadarMode();
+    });
+  }
+
   elements.commandInput.addEventListener('keydown', async (event) => {
     if (event.key === 'Enter') {
       await handleCommandSubmit();

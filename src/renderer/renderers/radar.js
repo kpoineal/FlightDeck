@@ -66,22 +66,14 @@ function restoreRadarUiState(saved) {
 // ── Filtering ────────────────────────────────────────────────────────
 function applyFilter(items) {
   switch (state.filter) {
+    case 'in-progress':
+      return items.filter((item) => item.lifecycleStatus === 'in-progress');
+    case 'blocked':
+      return items.filter((item) => item.lifecycleStatus === 'blocked');
+    case 'waiting':
+      return items.filter((item) => item.lifecycleStatus === 'waiting');
     case 'monitored':
-      return items.filter((item) => item.monitorEnabled && !item.archived);
-    case 'new':
-      return items.filter((item) => (item.isNew || item.hasNewUpdate) && !item.archived);
-    case 'dueToday': {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date(todayStart);
-      todayEnd.setDate(todayEnd.getDate() + 1);
-      return items.filter((item) => {
-        if (item.archived) return false;
-        if (!item.dueAt) return false;
-        const due = new Date(item.dueAt).getTime();
-        return Number.isFinite(due) && due >= todayStart.getTime() && due < todayEnd.getTime();
-      });
-    }
+      return items.filter((item) => item.monitorEnabled && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived');
     case 'archived':
       return items.filter((item) => item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
     default: // 'all'
