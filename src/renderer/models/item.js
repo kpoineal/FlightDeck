@@ -257,14 +257,14 @@ function normalizeItem(item) {
     notifyEnabled: item?.notifyEnabled !== false,
     origin: item?.origin === 'custom' ? 'custom' : 'imported',
     lifecycleStatus: (() => {
-      // Explicit lifecycle field takes priority
-      if (LIFECYCLE_STATUSES.includes(item?.lifecycleStatus)) return item.lifecycleStatus;
       if (item?.archived === true || item?.completed === true) return 'archived';
-      // Infer from status field (set by monitor engine: Resolved, Blocked, etc.)
+      // Always check the status field — it reflects the latest AI-reported state
       const s = String(item?.status || '').toLowerCase();
       if (s.includes('complete') || s.includes('resolved') || s.includes('closed') || s.includes('done')) return 'complete';
-      if (s.includes('block')) return 'blocked';
+      if (s.includes('block') || s.includes('stalled')) return 'blocked';
       if (s.includes('wait') || s.includes('pending')) return 'waiting';
+      // Fall back to explicit lifecycleStatus if set
+      if (LIFECYCLE_STATUSES.includes(item?.lifecycleStatus)) return item.lifecycleStatus;
       return 'in-progress';
     })(),
     scannerId: item?.scannerId || null,
