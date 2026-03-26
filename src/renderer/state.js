@@ -109,9 +109,13 @@ const state = {
   // Legacy aliases for density
   trackingDensity: 'full',
   radarDensity: 'full',
+  _loaded: false, // Guard: true only after loadPersistentState completes
 };
 
 async function savePersistentState() {
+  // Guard against saving empty state before load completes
+  if (!state._loaded) return;
+
   // Prune history before every save to prevent unbounded growth during long sessions
   pruneHistory();
 
@@ -256,7 +260,12 @@ async function loadPersistentState() {
 
     pruneHistory();
     pruneStaleBriefings();
+
+    // Mark state as loaded — savePersistentState is now safe to write
+    state._loaded = true;
   } catch (error) {
+    // Even on error, allow saves so the app isn't permanently frozen
+    state._loaded = true;
     console.warn('[flightdeck] persistence read failed', error.message);
   }
 }
