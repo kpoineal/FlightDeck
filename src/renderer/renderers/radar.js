@@ -1,159 +1,191 @@
-// ── Radar rendering — cards, rows, list, mode ────────────────────────
+// ── Unified rendering — all items in one pane ────────────────────────
 
-function buildRadarCard(item) {
-  const selected = item.id === state.selectedRadarItemId;
-  const tracked = state.trackingItems.some((entry) => entry.id === item.id);
-  const people = item.counterparties.length ? item.counterparties.join(', ') : 'No counterparties listed';
-  const allLinks = collectRadarSourceLinks(item);
-  const sourcesHtml = allLinks.length
-    ? allLinks.map((entry) => {
-        const recency = signalRecencyLabel(entry.signalAt);
-        return `<li><a href="${escapeHtml(entry.url)}" target="_blank" rel="noreferrer">${escapeHtml(entry.label)}</a>${recency ? ` <span class="source-recency">(${escapeHtml(recency)})</span>` : ''}</li>`;
-      }).join('')
-    : '<li>No direct source links</li>';
-  return `
-    <article class="list-card radar-card ${selected ? 'is-selected' : ''}" data-radar-id="${escapeHtml(item.id)}">
-      <div class="radar-head">
-        <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
-          <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
-          <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
-          <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
-        </select>
-      </div>
-      <div class="card-body">
-        <h3 class="radar-title">${escapeHtml(item.title)}</h3>
-        <p class="radar-summary">${escapeHtml(item.summary || item.reason || 'No summary provided.')}</p>
-        ${buildNextStepHintsHtml(item, true)}
-        <div class="meta">
-          <span>Source: ${escapeHtml(item.sourceType)}</span>
-          <span>Due: ${escapeHtml(safeDate(item.dueAt))}</span>
-          <span>Owner: ${escapeHtml(item.owner)}</span>
-        </div>
-        <p class="radar-people"><strong>People:</strong> ${escapeHtml(people)}</p>
-        <div class="radar-link"><strong>Links:</strong><ul class="source-list">${sourcesHtml}</ul></div>
-        <div class="action-row">
-          <button class="small-btn" data-track-radar-id="${escapeHtml(item.id)}">${tracked ? 'Remove from Tracking' : 'Track Item'}</button>
-          <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
-        </div>
-      </div>
-    </article>
-  `;
-}
-
-function getSelectedRadarItem() {
-  return getInboundRadarItems().find((item) => item.id === state.selectedRadarItemId) || null;
-}
-
-// ── Radar UI state helpers ───────────────────────────────────────────
+// ── UI state helpers ─────────────────────────────────────────────────
 function captureRadarUiState() {
   const container = elements.radarList;
-  const expandedRowId = container.querySelector('.radar-row-detail.show')?.parentElement?.getAttribute('data-radar-id') || null;
+  // Capture tracker row expansion state
+  const expandedRowId = container.querySelector('.tracker-row-detail.show')?.parentElement?.getAttribute('data-tracker-id') || null;
+
+  // Capture section panel states (people, links, monitoring, history, prompt)
+  const sectionStates = {};
+  for (const attr of SECTION_PANEL_ATTRS) {
+    container.querySelectorAll(`[data-${attr}-panel-id]`).forEach((panel) => {
+      const id = panel.getAttribute(`data-${attr}-panel-id`);
+      if (!id) return;
+      if (!sectionStates[id]) sectionStates[id] = {};
+      sectionStates[id][attr] = panel.classList.contains('show');
+    });
+  }
+  container.querySelectorAll('[data-prompt-panel-id]').forEach((panel) => {
+    const id = panel.getAttribute('data-prompt-panel-id');
+    if (!id) return;
+    if (!sectionStates[id]) sectionStates[id] = {};
+    sectionStates[id][PROMPT_PANEL_ATTR] = panel.classList.contains('show');
+  });
+
   const scrollTop = container.scrollTop;
-  return { expandedRowId, scrollTop };
+  return { expandedRowId, sectionStates, scrollTop };
 }
 
 function restoreRadarUiState(saved) {
   const container = elements.radarList;
   if (!saved) return;
+
   if (saved.expandedRowId) {
-    const wrapper = container.querySelector(`[data-radar-id="${CSS.escape(saved.expandedRowId)}"]`);
+    const wrapper = container.querySelector(`[data-tracker-id="${CSS.escape(saved.expandedRowId)}"]`);
     if (wrapper) {
-      const row = wrapper.querySelector('.radar-row');
-      const detail = wrapper.querySelector('.radar-row-detail');
+      const row = wrapper.querySelector('.tracker-row');
+      const detail = wrapper.querySelector('.tracker-row-detail');
       if (row) row.classList.add('expanded');
       if (detail) detail.classList.add('show');
-      const chevron = row?.querySelector('.row-expand-chevron');
-      if (chevron) chevron.classList.add('open');
     }
   }
+
+  if (saved.sectionStates) {
+    for (const [itemId, sections] of Object.entries(saved.sectionStates)) {
+      for (const attr of SECTION_PANEL_ATTRS) {
+        if (sections[attr] === undefined) continue;
+        const panel = container.querySelector(`[data-${attr}-panel-id="${CSS.escape(itemId)}"]`);
+        const toggle = container.querySelector(`[data-${attr}-toggle-id="${CSS.escape(itemId)}"]`);
+        if (panel) {
+          panel.classList.toggle('show', sections[attr]);
+          if (toggle) {
+            toggle.classList.toggle('expanded', sections[attr]);
+            const chevron = toggle.querySelector('.chevron');
+            if (chevron) chevron.classList.toggle('chevron--expanded', sections[attr]);
+          }
+        }
+      }
+      if (sections[PROMPT_PANEL_ATTR] !== undefined) {
+        const panel = container.querySelector(`[data-prompt-panel-id="${CSS.escape(itemId)}"]`);
+        const toggle = container.querySelector(`[data-prompt-toggle-id="${CSS.escape(itemId)}"]`);
+        if (panel) {
+          panel.classList.toggle('show', sections[PROMPT_PANEL_ATTR]);
+          if (toggle) {
+            toggle.classList.toggle('expanded', sections[PROMPT_PANEL_ATTR]);
+            const chevron = toggle.querySelector('.chevron');
+            if (chevron) chevron.classList.toggle('chevron--expanded', sections[PROMPT_PANEL_ATTR]);
+          }
+        }
+      }
+    }
+  }
+
   if (saved.scrollTop) container.scrollTop = saved.scrollTop;
 }
 
-function buildRadarRow(item) {
-  const selected = item.id === state.selectedRadarItemId;
-  const tracked = state.trackingItems.some((entry) => entry.id === item.id);
-  const people = item.counterparties.length ? item.counterparties.join(', ') : 'No counterparties listed';
-  const allLinks = collectRadarSourceLinks(item);
-  const sourcesHtml = allLinks.length
-    ? allLinks.map((entry) => {
-        const recency = signalRecencyLabel(entry.signalAt);
-        return `<li><a href="${escapeHtml(entry.url)}" target="_blank" rel="noreferrer">${escapeHtml(entry.label)}</a>${recency ? ` <span class="source-recency">(${escapeHtml(recency)})</span>` : ''}</li>`;
-      }).join('')
-    : '<li>No direct source links</li>';
+function applyFilter(items) {
+  switch (state.filter) {
+    case 'monitored':
+      return items.filter((item) => item.monitorEnabled && !item.archived);
+    case 'new':
+      return items.filter((item) => (item.isNew || item.hasNewUpdate) && !item.archived);
+    case 'dueToday': {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(todayStart);
+      todayEnd.setDate(todayEnd.getDate() + 1);
+      return items.filter((item) => {
+        if (item.archived) return false;
+        if (!item.dueAt) return false;
+        const due = new Date(item.dueAt).getTime();
+        return Number.isFinite(due) && due >= todayStart.getTime() && due < todayEnd.getTime();
+      });
+    }
+    case 'archived':
+      return items.filter((item) => item.archived);
+    default: // 'all'
+      return items.filter((item) => !item.archived);
+  }
+}
 
-  return `
-    <div class="radar-row-wrapper" data-radar-id="${escapeHtml(item.id)}">
-      <div class="radar-row ${selected ? 'is-selected' : ''}" data-radar-row-toggle-id="${escapeHtml(item.id)}">
-        <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
-          <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
-          <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
-          <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
-        </select>
-        <span class="radar-row-title">${escapeHtml(item.title)}</span>
-        <span class="radar-row-summary">${escapeHtml((item.summary || item.reason || '').replace(/\n/g, ' ').slice(0, 140))}${(item.summary || item.reason || '').length > 140 ? '…' : ''}</span>
-        <span class="radar-row-due">${escapeHtml(safeDate(item.dueAt))}</span>
-        <span class="row-expand-chevron">&#9660;</span>
-      </div>
-      <div class="radar-row-detail">
-        <p>${escapeHtml(item.summary || item.reason || 'No summary provided.')}</p>
-        ${buildNextStepHintsHtml(item, true)}
-        <div class="meta">
-          <span>Source: ${escapeHtml(item.sourceType)}</span>
-          <span>Due: ${escapeHtml(safeDate(item.dueAt))}</span>
-          <span>Owner: ${escapeHtml(item.owner)}</span>
-        </div>
-        <p class="radar-people"><strong>People:</strong> ${escapeHtml(people)}</p>
-        <div class="radar-link"><strong>Links:</strong><ul class="source-list">${sourcesHtml}</ul></div>
-        <div class="action-row">
-          <button class="small-btn" data-track-radar-id="${escapeHtml(item.id)}">${tracked ? 'Remove from Tracking' : 'Track Item'}</button>
-          <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
-        </div>
-      </div>
-    </div>
-  `;
+function groupItemsByScanner(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = item.scannerId || '__radar__';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return groups;
 }
 
 function renderRadarList() {
-  const inboundItems = getInboundRadarItems();
-  if (!inboundItems.length) {
-    elements.radarList.innerHTML = '<div class="empty">No inbound radar items yet. Click Refresh.</div>';
+  const allItems = Array.isArray(state.items) ? state.items : [];
+  const filtered = applyFilter(allItems);
+
+  if (!filtered.length) {
+    const emptyMsg = state.filter === 'all'
+      ? 'No items yet. Click Refresh to scan or add a custom monitored task above.'
+      : 'No items matching the current filter.';
+    elements.radarList.innerHTML = `<div class="empty">${escapeHtml(emptyMsg)}</div>`;
     return;
   }
 
-  const hasSelected = inboundItems.some((item) => item.id === state.selectedRadarItemId);
-  if (!hasSelected) {
-    state.selectedRadarItemId = inboundItems[0].id;
+  const sorted = sortBySeverity(filtered, true);
+  const groups = groupItemsByScanner(sorted);
+
+  // Sync density toggle
+  const densityBtn = document.getElementById('densityToggleBtn');
+  if (densityBtn) {
+    densityBtn.classList.toggle('is-minimal', state.density === 'minimal');
+    densityBtn.title = state.density === 'minimal' ? 'Switch to card view' : 'Switch to list view';
   }
 
-  // Sync density toggle icon state
-  const radarDensityBtn = document.getElementById('radarDensityToggleBtn');
-  if (radarDensityBtn) {
-    radarDensityBtn.classList.toggle('is-minimal', state.radarDensity === 'minimal');
-    radarDensityBtn.title = state.radarDensity === 'minimal' ? 'Switch to card view' : 'Switch to list view';
+  // Sync filter bar
+  const filterBar = document.getElementById('filterBar');
+  if (filterBar) {
+    filterBar.querySelectorAll('.filter-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.filter === state.filter);
+    });
   }
 
-  const isMinimal = state.radarDensity === 'minimal';
+  const isMinimal = state.density === 'minimal';
   elements.radarList.classList.toggle('list--minimal', isMinimal);
 
-  if (isMinimal) {
-    const savedUiState = captureRadarUiState();
-    elements.radarList.innerHTML = inboundItems.map(buildRadarRow).join('');
-    autoSizeSeveritySelects(elements.radarList);
-    restoreRadarUiState(savedUiState);
-    return;
+  // Capture UI state before re-render
+  const savedUiState = captureRadarUiState();
+
+  const html = [];
+  for (const [groupKey, items] of groups) {
+    const scanner = groupKey !== '__radar__'
+      ? state.scanners.find((s) => s.id === groupKey)
+      : null;
+    const groupName = scanner ? scanner.name : 'Radar';
+    const isCollapsed = state.collapsedSections.includes(groupKey);
+
+    html.push(`<div class="scanner-group" data-group-id="${escapeHtml(groupKey)}">`);
+    html.push(`<div class="scanner-group-header" data-collapse-group-id="${escapeHtml(groupKey)}">`);
+    html.push(`<span class="scanner-group-chevron ${isCollapsed ? '' : 'open'}">&#9660;</span>`);
+    html.push(`<span class="scanner-group-name">${escapeHtml(groupName)}</span>`);
+    html.push(`<span class="scanner-group-count">${items.length}</span>`);
+    if (scanner) {
+      html.push(`<button class="small-btn scanner-pause-btn" data-scanner-toggle-id="${escapeHtml(scanner.id)}" title="${scanner.enabled !== false ? 'Pause scanner' : 'Resume scanner'}">${scanner.enabled !== false ? '\u23f8' : '\u25b6'}</button>`);
+    }
+    html.push('</div>');
+
+    if (!isCollapsed) {
+      html.push('<div class="scanner-group-items">');
+      if (isMinimal) {
+        html.push(items.map((item) => buildTrackingRow(item, savedUiState.expandedRowId)).join(''));
+      } else {
+        html.push(items.map((item) => buildTrackingCard(item)).join(''));
+      }
+      html.push('</div>');
+    }
+    html.push('</div>');
   }
 
-  elements.radarList.innerHTML = inboundItems.map(buildRadarCard).join('');
+  elements.radarList.innerHTML = html.join('');
   autoSizeSeveritySelects(elements.radarList);
+  restoreRadarUiState(savedUiState);
+
+  // Enforce schedule-control visibility
+  filtered.forEach((item) => {
+    inlineUpdateScheduleControls(elements.radarList, item.id, item.scheduleType);
+  });
 }
 
 function renderRadarMode() {
   renderRadarList();
   renderKpis();
-}
-
-function selectRadarItem(id) {
-  state.selectedRadarItemId = id;
-  addHistory('selection', `Selected radar item ${id}`);
-  renderRadarMode();
 }

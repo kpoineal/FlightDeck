@@ -367,25 +367,15 @@ function bindEvents() {
     });
   }
 
-  // Density toggle button (Tracking)
+  // Unified density toggle
   const densityToggleBtn = document.getElementById('densityToggleBtn');
   if (densityToggleBtn) {
-    densityToggleBtn.classList.toggle('is-minimal', state.trackingDensity === 'minimal');
-    densityToggleBtn.title = state.trackingDensity === 'minimal' ? 'Switch to card view' : 'Switch to list view';
+    densityToggleBtn.classList.toggle('is-minimal', state.density === 'minimal');
+    densityToggleBtn.title = state.density === 'minimal' ? 'Switch to card view' : 'Switch to list view';
     densityToggleBtn.addEventListener('click', () => {
-      state.trackingDensity = state.trackingDensity === 'minimal' ? 'full' : 'minimal';
-      savePersistentState();
-      renderTrackingMode();
-    });
-  }
-
-  // Density toggle button (Radar)
-  const radarDensityToggleBtn = document.getElementById('radarDensityToggleBtn');
-  if (radarDensityToggleBtn) {
-    radarDensityToggleBtn.classList.toggle('is-minimal', state.radarDensity === 'minimal');
-    radarDensityToggleBtn.title = state.radarDensity === 'minimal' ? 'Switch to card view' : 'Switch to list view';
-    radarDensityToggleBtn.addEventListener('click', () => {
-      state.radarDensity = state.radarDensity === 'minimal' ? 'full' : 'minimal';
+      state.density = state.density === 'minimal' ? 'full' : 'minimal';
+      state.trackingDensity = state.density;
+      state.radarDensity = state.density;
       savePersistentState();
       renderRadarMode();
     });
@@ -398,136 +388,64 @@ function bindEvents() {
   });
 
   elements.radarList.addEventListener('click', async (event) => {
-    const dismissButton = event.target.closest('[data-dismiss-radar-id]');
-    if (dismissButton) {
-      event.preventDefault();
-      const itemId = dismissButton.getAttribute('data-dismiss-radar-id');
-      const dismissed = dismissRadarItem(itemId);
-      if (!dismissed) return;
-
-      addHistory('selection', `Deleted item: ${dismissed.title || itemId}`, { itemId });
-      renderRadarMode();
-      renderTrackingMode();
-      return;
-    }
-
-    const trackButton = event.target.closest('[data-track-radar-id]');
-    if (trackButton) {
-      event.preventDefault();
-      const itemId = trackButton.getAttribute('data-track-radar-id');
-      const item = getInboundRadarItems().find((entry) => entry.id === itemId);
-      if (!item) return;
-
-      const alreadyTracked = state.trackingItems.some((entry) => entry.id === item.id);
-      if (alreadyTracked) {
-        removeTrackingItem(item.id);
-        addHistory('selection', `Removed from Tracking: ${item.title}`, { itemId: item.id });
-      } else {
-        upsertTrackingItemFromRadar(item);
-        addHistory('selection', `Added to Tracking: ${item.title}`, { itemId: item.id });
-      }
-
-      renderRadarMode();
-      renderTrackingMode();
-      return;
-    }
-
-    const suggestionButton = event.target.closest('[data-draft-suggestion]');
-    if (suggestionButton) {
-      event.preventDefault();
-      await generateSuggestionDraft(
-        suggestionButton.getAttribute('data-draft-suggestion'),
-        suggestionButton.getAttribute('data-draft-item-id'),
-        suggestionButton
-      );
-      return;
-    }
-
-    // Minimal row click → expand/collapse detail inline
-    const radarRow = event.target.closest('[data-radar-row-toggle-id]');
-    if (radarRow && !event.target.closest('select') && !event.target.closest('a[href]')) {
-      const itemId = radarRow.getAttribute('data-radar-row-toggle-id');
-      const wrapper = elements.radarList.querySelector(`.radar-row-wrapper[data-radar-id="${CSS.escape(itemId)}"]`);
-      if (!wrapper) return;
-      const detail = wrapper.querySelector('.radar-row-detail');
-      const chevron = radarRow.querySelector('.row-expand-chevron');
-      if (detail) {
-        const currentlyOpen = elements.radarList.querySelector('.radar-row-detail.show');
-        if (currentlyOpen && currentlyOpen !== detail) {
-          currentlyOpen.classList.remove('show');
-          const otherRow = currentlyOpen.parentElement.querySelector('.radar-row');
-          if (otherRow) {
-            otherRow.classList.remove('expanded');
-            const otherChevron = otherRow.querySelector('.row-expand-chevron');
-            if (otherChevron) otherChevron.classList.remove('open');
-          }
-        }
-        const isExpanding = detail.classList.toggle('show');
-        radarRow.classList.toggle('expanded', isExpanding);
-        if (chevron) chevron.classList.toggle('open', isExpanding);
-      }
-      state.selectedRadarItemId = itemId;
-      elements.radarList.querySelectorAll('.radar-row').forEach((r) => r.classList.remove('is-selected'));
-      radarRow.classList.add('is-selected');
-      return;
-    }
-
-    const radarCard = event.target.closest('[data-radar-id]');
-    if (radarCard && !event.target.closest('a[href]') && !event.target.closest('[data-severity-select-id]')) {
-      event.preventDefault();
-      selectRadarItem(radarCard.getAttribute('data-radar-id'));
-    }
-  });
-
-  elements.radarList.addEventListener('change', (event) => {
-    const severitySelect = event.target.closest('[data-severity-select-id]');
-    if (severitySelect) {
-      const itemId = severitySelect.getAttribute('data-severity-select-id');
-      const item = getInboundRadarItems().find((entry) => entry.id === itemId);
-      if (!item) return;
-
-      item.severity = normalizeSeverity(severitySelect.value);
+    // Scanner group collapse toggle
+    const groupHeader = event.target.closest('[data-collapse-group-id]');
+    if (groupHeader && !event.target.closest('button.scanner-pause-btn')) {
+      const groupId = groupHeader.getAttribute('data-collapse-group-id');
+      const idx = state.collapsedSections.indexOf(groupId);
+      if (idx >= 0) { state.collapsedSections.splice(idx, 1); } else { state.collapsedSections.push(groupId); }
       savePersistentState();
       renderRadarMode();
       return;
     }
-  });
 
-  elements.trackingList.addEventListener('click', async (event) => {
+    // Filter bar
+    const filterBtn = event.target.closest('[data-filter]');
+    if (filterBtn && filterBtn.closest('.filter-bar')) {
+      state.filter = filterBtn.dataset.filter || 'all';
+      savePersistentState();
+      renderRadarMode();
+      return;
+    }
+
     const dismissButton = event.target.closest('[data-dismiss-radar-id]');
     if (dismissButton) {
       event.preventDefault();
       const itemId = dismissButton.getAttribute('data-dismiss-radar-id');
       const dismissed = dismissRadarItem(itemId);
       if (!dismissed) return;
-
       addHistory('selection', `Deleted item: ${dismissed.title || itemId}`, { itemId });
-      renderTrackingMode();
       renderRadarMode();
       return;
     }
 
     const markSeenButton = event.target.closest('[data-mark-seen-id]');
     if (markSeenButton) {
-      handleMarkSeenClick(markSeenButton.getAttribute('data-mark-seen-id'), renderTrackingMode);
+      handleMarkSeenClick(markSeenButton.getAttribute('data-mark-seen-id'), renderRadarMode);
       return;
     }
 
     const historyToggle = event.target.closest('[data-history-toggle-id]');
     if (historyToggle) {
-      handleSectionToggleClick(elements.trackingList, historyToggle, 'history');
+      handleSectionToggleClick(elements.radarList, historyToggle, 'history');
       return;
     }
 
     const peopleToggle = event.target.closest('[data-people-toggle-id]');
     if (peopleToggle) {
-      handleSectionToggleClick(elements.trackingList, peopleToggle, 'people');
+      handleSectionToggleClick(elements.radarList, peopleToggle, 'people');
       return;
     }
 
     const linksToggle = event.target.closest('[data-links-toggle-id]');
     if (linksToggle) {
-      handleSectionToggleClick(elements.trackingList, linksToggle, 'links');
+      handleSectionToggleClick(elements.radarList, linksToggle, 'links');
+      return;
+    }
+
+    const timelineToggle = event.target.closest('[data-timeline-toggle-id]');
+    if (timelineToggle) {
+      handleSectionToggleClick(elements.radarList, timelineToggle, 'timeline');
       return;
     }
 
@@ -535,12 +453,12 @@ function bindEvents() {
     const trackerRow = event.target.closest('[data-row-toggle-id]');
     if (trackerRow && !event.target.closest('select') && !event.target.closest('input') && !event.target.closest('label') && !event.target.closest('button') && !event.target.closest('.weekly-schedule-panel')) {
       const itemId = trackerRow.getAttribute('data-row-toggle-id');
-      const wrapper = elements.trackingList.querySelector(`.tracker-row-wrapper[data-tracker-id="${CSS.escape(itemId)}"]`);
+      const wrapper = elements.radarList.querySelector(`.tracker-row-wrapper[data-tracker-id="${CSS.escape(itemId)}"]`);
       if (!wrapper) return;
       const detail = wrapper.querySelector('.tracker-row-detail');
       const chevron = trackerRow.querySelector('.row-expand-chevron');
       if (detail) {
-        const currentlyOpen = elements.trackingList.querySelector('.tracker-row-detail.show');
+        const currentlyOpen = elements.radarList.querySelector('.tracker-row-detail.show');
         if (currentlyOpen && currentlyOpen !== detail) {
           currentlyOpen.classList.remove('show');
           const otherRow = currentlyOpen.parentElement.querySelector('.tracker-row');
@@ -559,23 +477,21 @@ function bindEvents() {
 
     const monitoringToggle = event.target.closest('[data-monitoring-toggle-id]');
     if (monitoringToggle) {
-      handleSectionToggleClick(elements.trackingList, monitoringToggle, 'monitoring');
+      handleSectionToggleClick(elements.radarList, monitoringToggle, 'monitoring');
       return;
     }
 
     const popoutButton = event.target.closest('[data-popout-id]');
     if (popoutButton) {
       const itemId = popoutButton.getAttribute('data-popout-id');
-      const item = state.trackingItems.find((entry) => entry.id === itemId);
-      if (item) {
-        popOutTrackerCard(item);
-      }
+      const item = state.items.find((entry) => entry.id === itemId);
+      if (item) popOutTrackerCard(item);
       return;
     }
 
     const promptToggle = event.target.closest('[data-prompt-toggle-id]');
     if (promptToggle) {
-      handlePromptToggleClick(elements.trackingList, promptToggle);
+      handlePromptToggleClick(elements.radarList, promptToggle);
       return;
     }
 
@@ -591,6 +507,7 @@ function bindEvents() {
 
     const suggestionButton = event.target.closest('[data-draft-suggestion]');
     if (suggestionButton) {
+      event.preventDefault();
       await generateSuggestionDraft(
         suggestionButton.getAttribute('data-draft-suggestion'),
         suggestionButton.getAttribute('data-draft-item-id'),
@@ -604,7 +521,7 @@ function bindEvents() {
       await handleRunNowClick(
         runNowButton.getAttribute('data-monitor-run-now-id'),
         runNowButton,
-        renderTrackingMode,
+        renderRadarMode,
         true
       );
       return;
@@ -612,7 +529,7 @@ function bindEvents() {
 
     const addTimeBtn = event.target.closest('[data-add-time-id]');
     if (addTimeBtn) {
-      handleAddTimeClick(addTimeBtn.getAttribute('data-add-time-id'), elements.trackingList);
+      handleAddTimeClick(addTimeBtn.getAttribute('data-add-time-id'), elements.radarList);
       return;
     }
 
@@ -621,13 +538,13 @@ function bindEvents() {
       handleRemoveTimeClick(
         removeTimeBtn.getAttribute('data-remove-time-id'),
         parseInt(removeTimeBtn.getAttribute('data-time-index'), 10),
-        elements.trackingList
+        elements.radarList
       );
       return;
     }
   });
 
-  elements.trackingList.addEventListener('change', (event) => {
+  elements.radarList.addEventListener('change', (event) => {
     const enabledToggle = event.target.closest('[data-monitor-enabled-id]');
     if (enabledToggle) {
       handleMonitorEnabledChange(enabledToggle.getAttribute('data-monitor-enabled-id'), enabledToggle.checked);
@@ -648,31 +565,31 @@ function bindEvents() {
 
     const typeSelect = event.target.closest('[data-monitor-type-id]');
     if (typeSelect) {
-      handleScheduleTypeSelectChange(typeSelect.getAttribute('data-monitor-type-id'), elements.trackingList, typeSelect.value);
+      handleScheduleTypeSelectChange(typeSelect.getAttribute('data-monitor-type-id'), elements.radarList, typeSelect.value);
       return;
     }
 
     const intervalSelect = event.target.closest('[data-monitor-interval-id]');
     if (intervalSelect) {
-      handleIntervalSelectChange(intervalSelect.getAttribute('data-monitor-interval-id'), elements.trackingList, intervalSelect.value);
+      handleIntervalSelectChange(intervalSelect.getAttribute('data-monitor-interval-id'), elements.radarList, intervalSelect.value);
       return;
     }
 
     const oneTimeInput = event.target.closest('[data-monitor-onetime-id]');
     if (oneTimeInput) {
-      handleOneTimeInputChange(oneTimeInput.getAttribute('data-monitor-onetime-id'), elements.trackingList, oneTimeInput.value);
+      handleOneTimeInputChange(oneTimeInput.getAttribute('data-monitor-onetime-id'), elements.radarList, oneTimeInput.value);
       return;
     }
 
     const weeklyDayCb = event.target.closest('[data-weekly-day-id]');
     if (weeklyDayCb) {
-      handleWeeklyDayChange(weeklyDayCb.getAttribute('data-weekly-day-id'), elements.trackingList, weeklyDayCb);
+      handleWeeklyDayChange(weeklyDayCb.getAttribute('data-weekly-day-id'), elements.radarList, weeklyDayCb);
       return;
     }
 
     const weeklyTimePicker = event.target.closest('[data-weekly-time-id]');
     if (weeklyTimePicker) {
-      collectAndUpdateWeeklyTimes(elements.trackingList, weeklyTimePicker.getAttribute('data-weekly-time-id'));
+      collectAndUpdateWeeklyTimes(elements.radarList, weeklyTimePicker.getAttribute('data-weekly-time-id'));
       return;
     }
 
@@ -683,18 +600,18 @@ function bindEvents() {
 
     const signalCheckbox = event.target.closest('[data-signal-item-id]');
     if (signalCheckbox) {
-      handleSignalCheckboxChange(signalCheckbox.getAttribute('data-signal-item-id'), elements.trackingList, signalCheckbox);
+      handleSignalCheckboxChange(signalCheckbox.getAttribute('data-signal-item-id'), elements.radarList, signalCheckbox);
       return;
     }
 
     const severitySelect = event.target.closest('[data-severity-select-id]');
     if (severitySelect) {
-      handleSeveritySelectChange(severitySelect.getAttribute('data-severity-select-id'), severitySelect.value, renderTrackingMode);
+      handleSeveritySelectChange(severitySelect.getAttribute('data-severity-select-id'), severitySelect.value, renderRadarMode);
       return;
     }
   });
 
-  elements.trackingList.addEventListener('input', (event) => {
+  elements.radarList.addEventListener('input', (event) => {
     const promptInput = event.target.closest('[data-monitor-prompt-id]');
     if (promptInput) {
       autoResizeTextarea(promptInput);
@@ -702,13 +619,13 @@ function bindEvents() {
   });
 
   // Inline editing for tracked items (title, dueAt, owner)
-  elements.trackingList.addEventListener('click', (event) => {
+  elements.radarList.addEventListener('click', (event) => {
     // Handle edit button clicks
     const editBtn = event.target.closest('[data-edit-field].edit-field-btn');
     if (editBtn) {
       const field = editBtn.getAttribute('data-edit-field');
       const itemId = editBtn.getAttribute('data-item-id');
-      const span = elements.trackingList.querySelector(`[data-edit-field="${field}"][data-item-id="${CSS.escape(itemId)}"].editable-field`);
+      const span = elements.radarList.querySelector(`[data-edit-field="${field}"][data-item-id="${CSS.escape(itemId)}"].editable-field`);
       if (span) {
         event.stopPropagation();
         activateInlineEdit(span, field, itemId);
@@ -731,7 +648,7 @@ function bindEvents() {
     // Check if already editing
     if (span.contentEditable === 'true' || span.querySelector('input, .inline-edit')) return;
 
-    const item = state.trackingItems.find((i) => i.id === itemId);
+    const item = state.items.find((i) => i.id === itemId);
     if (!item) return;
 
     const originalValue = item[field] || '';
@@ -754,13 +671,13 @@ function bindEvents() {
         const newValue = span.textContent.trim();
         span.contentEditable = 'inherit';
         const result = updateTrackingItemField(itemId, 'title', newValue || originalValue);
-        if (result) renderTrackingMode();
+        if (result) renderRadarMode();
       };
       const doCancel = () => {
         if (done) return;
         done = true;
         span.contentEditable = 'inherit';
-        renderTrackingMode();
+        renderRadarMode();
       };
 
       span.addEventListener('blur', doSave, { once: true });
@@ -828,13 +745,13 @@ function bindEvents() {
       const result = updateTrackingItemField(itemId, field, valueToSave);
       if (result) {
         // Re-render the card/row
-        renderTrackingMode();
+        renderRadarMode();
       }
     };
 
     const cancelEdit = () => {
       // Restore original display
-      renderTrackingMode();
+      renderRadarMode();
     };
 
     // Replace span content with input
@@ -925,19 +842,19 @@ function bindEvents() {
     const hasTask = state.trackingItems.some((entry) => entry.id === taskId);
     if (!hasTask) return;
 
-    setMode('Tracking');
+    setMode('Radar');
     state.expandedBriefingMeetingIds = state.expandedBriefingMeetingIds || [];
-    renderTrackingMode();
+    renderRadarMode();
 
     requestAnimationFrame(() => {
-      const el = elements.trackingList.querySelector(`[data-tracker-id="${CSS.escape(taskId)}"]`);
+      const el = elements.radarList.querySelector(`[data-tracker-id="${CSS.escape(taskId)}"]`);
       if (!el) return;
 
       if (state.trackingDensity === 'minimal') {
         const row = el.querySelector('[data-row-toggle-id]');
         const detail = el.querySelector('.tracker-row-detail');
         if (row && detail && !detail.classList.contains('show')) {
-          const currentlyOpen = elements.trackingList.querySelector('.tracker-row-detail.show');
+          const currentlyOpen = elements.radarList.querySelector('.tracker-row-detail.show');
           if (currentlyOpen && currentlyOpen !== detail) {
             currentlyOpen.classList.remove('show');
             const otherRow = currentlyOpen.parentElement.querySelector('.tracker-row');

@@ -1,11 +1,85 @@
 /* ── FlightDeck Radar ── */
 
 #radarList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* ── Filter bar ── */
+.filter-bar {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.filter-btn {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.filter-btn:hover {
+  border-color: var(--border-hover);
+}
+.filter-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── Scanner groups ── */
+.scanner-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-inset);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  transition: background 0.15s ease;
+}
+.scanner-group-header:hover {
+  background: var(--bg-hover, var(--bg-inset));
+}
+.scanner-group-chevron {
+  font-size: 0.65rem;
+  transition: transform 0.2s ease;
+}
+.scanner-group-chevron.open {
+  transform: rotate(0deg);
+}
+.scanner-group-chevron:not(.open) {
+  transform: rotate(-90deg);
+}
+.scanner-group-name {
+  flex: 1;
+}
+.scanner-group-count {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 0.75rem;
+}
+.scanner-group-count::before { content: '('; }
+.scanner-group-count::after { content: ')'; }
+.scanner-group-items {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   align-items: stretch;
   width: 100%;
+  margin-top: 8px;
+}
+#radarList.list--minimal .scanner-group-items {
+  grid-template-columns: 1fr;
 }
 
 /* ── Radar card (viewport-style) ── */
@@ -142,14 +216,14 @@
 }
 
 /* ── Minimal (row) density ── */
-#radarList.list--minimal {
+#radarList.list--minimal .scanner-group-items {
   grid-template-columns: 1fr;
 }
 
 /* ── Responsive ── */
 @media (max-width: 1400px) {
-  #radarList { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .scanner-group-items { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
-  #radarList { grid-template-columns: 1fr; }
+  .scanner-group-items { grid-template-columns: 1fr; }
 }

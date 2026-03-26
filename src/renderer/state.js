@@ -28,7 +28,7 @@ const elements = {
   severityInsight: document.getElementById('severityInsight'),
 
   viewRadar: document.getElementById('viewRadar'),
-  viewTracking: document.getElementById('viewTracking'),
+  viewTracking: null, // Removed — unified into viewRadar
   viewBriefings: document.getElementById('viewBriefings'),
   viewHistory: document.getElementById('viewHistory'),
 
@@ -50,7 +50,7 @@ const elements = {
   briefingPromptEditorStatus: document.getElementById('briefingPromptEditorStatus'),
 
   briefingPane: document.getElementById('briefingPane'),
-  trackingList: document.getElementById('trackingList'),
+  trackingList: document.getElementById('radarList'), // Legacy alias — unified into radarList
   customTaskTitle: document.getElementById('customTaskTitle'),
   customTaskContext: document.getElementById('customTaskContext'),
   customTaskSeverity: document.getElementById('customTaskSeverity'),
@@ -83,7 +83,11 @@ const state = {
   mode: 'Radar',
   loading: false,
   kpis: { critical: null, elevated: null, observe: null },
+  items: [],
+  // Legacy aliases — kept in sync by item.js mutations for backward compat
   radarItems: [],
+  trackingItems: [],
+  scanners: [],
   actions: [],
   evidence: [],
   selectedRadarItemId: null,
@@ -95,11 +99,14 @@ const state = {
   briefing: null,
   meetings: [],
   expandedBriefingMeetingIds: [],
-  trackingItems: [],
   briefingsByMeetingId: {},
   briefingSeenAt: {},
   history: [],
   pendingConfirmAction: null,
+  density: 'full',
+  filter: 'all',
+  collapsedSections: [],
+  // Legacy aliases for density
   trackingDensity: 'full',
   radarDensity: 'full',
 };
@@ -109,13 +116,21 @@ async function savePersistentState() {
   pruneHistory();
 
   const payload = {
-    trackingItems: state.trackingItems,
+    items: state.items,
+    // Legacy key written for backward compat (tests + rollback safety)
+    trackingItems: state.items,
+    scanners: state.scanners,
+    radarItems: state.items,
     briefingsByMeetingId: state.briefingsByMeetingId,
     briefingSeenAt: state.briefingSeenAt,
     history: state.history,
     connected: state.connected,
-    trackingDensity: state.trackingDensity,
-    radarDensity: state.radarDensity,
+    density: state.density,
+    filter: state.filter,
+    collapsedSections: state.collapsedSections,
+    // Legacy keys written for rollback safety
+    trackingDensity: state.density,
+    radarDensity: state.density,
   };
 
   // Demo mode writes to a separate key so real data is never overwritten
@@ -177,25 +192,63 @@ async function loadPersistentState() {
       await window.workiq.storeDelete(LEGACY_STORAGE_KEY);
     }
 
-    state.trackingItems = Array.isArray(parsed.trackingItems)
-      ? parsed.trackingItems.map((entry) => normalizeTrackingItem(entry))
-      : [];
+    // ── Migration: unified items model ──────────────────────────────
+    if (Array.isArray(parsed.items)) {
+      // New format — load directly
+      state.items = parsed.items.map((entry) => normalizeItem(entry));
+    } else {
+      // Old format — migrate from separate radarItems + trackingItems
+      const trackingById = new Map();
+      const migratedItems = [];
+
+      // Tracking items first (they have richer monitoring data)
+      if (Array.isArray(parsed.trackingItems)) {
+        for (const entry of parsed.trackingItems) {
+          const normalized = normalizeItem(entry);
+          trackingById.set(normalized.id, true);
+          migratedItems.push(normalized);
+        }
+      }
+
+      // Radar items that aren't already covered by tracking
+      if (Array.isArray(parsed.radarItems)) {
+        for (const entry of parsed.radarItems) {
+          if (trackingById.has(entry.id)) continue;
+          migratedItems.push(normalizeItem(entry));
+        }
+      }
+
+      state.items = migratedItems;
+    }
 
     // Trim existing oversized update histories
-    for (const item of state.trackingItems) {
+    for (const item of state.items) {
       if (Array.isArray(item.updateHistory) && item.updateHistory.length > 20) {
         item.updateHistory = item.updateHistory.slice(0, 20);
       }
     }
+
+    // Keep legacy aliases in sync
+    state.radarItems = state.items;
+    state.trackingItems = state.items;
+
     state.briefingsByMeetingId = parsed.briefingsByMeetingId && typeof parsed.briefingsByMeetingId === 'object'
       ? parsed.briefingsByMeetingId
       : {};
     state.briefingSeenAt = parsed.briefingSeenAt && typeof parsed.briefingSeenAt === 'object'
       ? parsed.briefingSeenAt
       : {};
+    state.scanners = Array.isArray(parsed.scanners)
+      ? parsed.scanners.map((entry) => normalizeScannerDefinition(entry))
+      : [];
     state.history = Array.isArray(parsed.history) ? parsed.history : [];
-    state.trackingDensity = parsed.trackingDensity === 'minimal' ? 'minimal' : 'full';
-    state.radarDensity = parsed.radarDensity === 'minimal' ? 'minimal' : 'full';
+    state.density = parsed.density === 'minimal' ? 'minimal'
+      : (parsed.trackingDensity === 'minimal' ? 'minimal' : 'full');
+    // Keep legacy density aliases in sync
+    state.trackingDensity = state.density;
+    state.radarDensity = state.density;
+    state.filter = parsed.filter || parsed.trackingFilter || 'all';
+    state.collapsedSections = Array.isArray(parsed.collapsedSections) ? parsed.collapsedSections : [];
     if (parsed.connected === true) {
       state.connected = true;
       if (elements.connectBanner) elements.connectBanner.classList.add('d-none');

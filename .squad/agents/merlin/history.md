@@ -48,6 +48,15 @@
 - `renderer/models/radar.js` — `radarItemIdentitySeed`, `resolveRadarItemId`, `isInboundStatus`, `mapLedgerEntryToRadarItem`, `applyLedgerPayload`
 - `renderer/models/briefing.js` — `briefingAlignmentScore`, `isBriefingAlignedWithMeeting`, `classifyBriefingSeverity`, `meetingIdentitySeed`, `resolveMeetingId`, `buildFallbackBriefingSources`, `isBriefingUnseen`
 
+### 2026-03-26 — PII Scrub: renderer-utils.test.js
+
+Replaced real customer/person names in test fixtures with generic data:
+- "a colleague" + "Contoso DC exit" → "Weekly sync message on datacenter migration" (lines ~756-758)
+- "Datacenter migration thread" → "Datacenter migration thread" (lines ~790-794)
+- "Contoso" in embedded citation label → "Contoso" (line ~859)
+- Updated camelCase-split comment to reflect that "Contoso" has no camelCase behavior (line ~865)
+All 481 tests pass after changes. No test logic was altered — only string literals and one comment.
+
 **Functions skipped (require heavy DOM or async window.workiq):**
 - `renderMarkdownLinks` — produces HTML, testable but lower ROI vs. pure logic
 - `runWorkiqJson` — async, calls `window.workiq.ask`; `parseWorkiqJson` (its core) is tested
