@@ -256,9 +256,17 @@ function normalizeItem(item) {
     lastNotifiedSignature: item?.lastNotifiedSignature || null,
     notifyEnabled: item?.notifyEnabled !== false,
     origin: item?.origin === 'custom' ? 'custom' : 'imported',
-    lifecycleStatus: LIFECYCLE_STATUSES.includes(item?.lifecycleStatus)
-      ? item.lifecycleStatus
-      : (item?.archived === true || item?.completed === true ? 'archived' : 'in-progress'),
+    lifecycleStatus: (() => {
+      // Explicit lifecycle field takes priority
+      if (LIFECYCLE_STATUSES.includes(item?.lifecycleStatus)) return item.lifecycleStatus;
+      if (item?.archived === true || item?.completed === true) return 'archived';
+      // Infer from status field (set by monitor engine: Resolved, Blocked, etc.)
+      const s = String(item?.status || '').toLowerCase();
+      if (s.includes('complete') || s.includes('resolved') || s.includes('closed') || s.includes('done')) return 'complete';
+      if (s.includes('block')) return 'blocked';
+      if (s.includes('wait') || s.includes('pending')) return 'waiting';
+      return 'in-progress';
+    })(),
     scannerId: item?.scannerId || null,
     isNew: item?.isNew === true,
     updateHistory: Array.isArray(item?.updateHistory)
