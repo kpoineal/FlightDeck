@@ -79,7 +79,7 @@ describe('renderPopoutMode() integration', () => {
 
     loadFile(ctx, 'renderer/constants.js');
     loadFile(ctx, 'renderer/utils.js');
-    loadFile(ctx, 'renderer/models/tracking.js');
+    loadFile(ctx, 'renderer/models/item.js');
     loadFile(ctx, 'renderer/renderers/tracking.js');
     ctx.severityClass = (value) => `severity-${String(value || '').toLowerCase()}`;
     loadFile(ctx, 'renderer/popout.js');
