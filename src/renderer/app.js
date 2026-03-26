@@ -342,6 +342,7 @@ async function init() {
     setUpdatedNow();
   } else {
     startMonitoringLoop();
+    startScannerEngine();
     runDueMonitoringChecks();
     renderAll();
     addHistory('startup', 'FlightDeck cockpit initialized');

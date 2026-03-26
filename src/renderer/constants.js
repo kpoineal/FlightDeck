@@ -173,6 +173,18 @@ const LIFECYCLE_LABELS = {
   'archived': 'Archived',
 };
 
+const SCANNER_ENGINE_TICK_MS = 60 * 1000; // 1 minute check cycle
+
+const DEFAULT_SCANNER_PROMPT = `Analyze my recent Microsoft 365 work signals (email, Teams chats, meetings, and documents).
+Focus specifically on: [describe what to look for]
+
+Look for items since {lastRunAt}.
+
+Only include items that are actionable or require attention.
+Include inline citations for every referenced source.
+
+Return 1-10 items.`;
+
 const ALL_SIGNAL_TYPES = ['email', 'chat', 'meeting', 'doc'];
 const SIGNAL_TYPE_OPTIONS = [
   { value: 'email', label: 'Email', icon: '✉️' },

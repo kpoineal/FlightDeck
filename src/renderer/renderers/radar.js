@@ -135,12 +135,17 @@ function renderRadarList() {
   const savedUiState = captureRadarUiState();
 
   const html = [];
+
+  // "Create Scanner" button at the top
+  html.push('<div class="scanner-create-row"><button class="small-btn primary" data-create-scanner-btn>+ New Scanner</button></div>');
+
   for (const [groupKey, items] of groups) {
     const scanner = groupKey !== '__radar__'
       ? state.scanners.find((s) => s.id === groupKey)
       : null;
     const groupName = scanner ? scanner.name : 'Radar';
     const isCollapsed = state.collapsedSections.includes(groupKey);
+    const enabled = scanner ? scanner.enabled !== false : true;
 
     html.push(`<div class="scanner-group" data-group-id="${escapeHtml(groupKey)}">`);
     html.push(`<div class="scanner-group-header" data-collapse-group-id="${escapeHtml(groupKey)}">`);
@@ -148,7 +153,10 @@ function renderRadarList() {
     html.push(`<span class="scanner-group-name">${escapeHtml(groupName)}</span>`);
     html.push(`<span class="scanner-group-count">${items.length}</span>`);
     if (scanner) {
-      html.push(`<button class="small-btn scanner-pause-btn" data-scanner-toggle-id="${escapeHtml(scanner.id)}" title="${scanner.enabled !== false ? 'Pause scanner' : 'Resume scanner'}">${scanner.enabled !== false ? '\u23f8' : '\u25b6'}</button>`);
+      const nextRun = scanner.nextRunAt ? safeDate(scanner.nextRunAt) : 'Not scheduled';
+      html.push(`<span class="scanner-group-schedule">${escapeHtml(nextRun)}</span>`);
+      html.push(`<button class="icon-btn" data-scanner-header-toggle="${escapeHtml(String(scanner.id))}" title="${enabled ? 'Pause scanner' : 'Resume scanner'}">${enabled ? '\u23f8' : '\u25b6'}</button>`);
+      html.push(`<button class="icon-btn" data-scanner-header-settings="${escapeHtml(String(scanner.id))}" title="Scanner settings">\u2699\ufe0f</button>`);
     }
     html.push('</div>');
 
@@ -172,6 +180,39 @@ function renderRadarList() {
   filtered.forEach((item) => {
     inlineUpdateScheduleControls(elements.radarList, item.id, item.scheduleType);
   });
+}
+
+function renderScannerSettingsModal(scannerId) {
+  const modal = document.getElementById('scannerSettingsModal');
+  if (!modal) return;
+
+  const scanner = scannerId ? getScannerById(scannerId) : null;
+  const formHtml = buildScannerForm(scanner);
+  const isEdit = scanner != null;
+
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>${isEdit ? 'Scanner Settings' : 'Create Scanner'}</h3>
+        <button class="modal-close-btn" data-scanner-modal-close>&times;</button>
+      </div>
+      ${formHtml}
+      ${isEdit ? `
+        <div class="modal-footer">
+          <button class="small-btn" data-scanner-run-now="${escapeHtml(String(scanner.id))}">Run Now</button>
+          <button class="small-btn warn" data-scanner-modal-delete="${escapeHtml(String(scanner.id))}">Delete Scanner</button>
+        </div>` : ''}
+    </div>`;
+
+  modal.classList.add('open');
+}
+
+function closeScannerSettingsModal() {
+  const modal = document.getElementById('scannerSettingsModal');
+  if (modal) {
+    modal.classList.remove('open');
+    modal.innerHTML = '';
+  }
 }
 
 function renderRadarMode() {

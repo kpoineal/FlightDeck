@@ -387,15 +387,149 @@ function bindEvents() {
     }
   });
 
+  // Scanner settings modal events (global since modal is outside radarList)
+  const scannerSettingsModal = document.getElementById('scannerSettingsModal');
+  if (scannerSettingsModal) {
+    scannerSettingsModal.addEventListener('click', async (event) => {
+      const closeBtn = event.target.closest('[data-scanner-modal-close]');
+      if (closeBtn) { closeScannerSettingsModal(); return; }
+
+      const saveBtn = event.target.closest('[data-scanner-save]');
+      if (saveBtn) {
+        const editId = saveBtn.getAttribute('data-scanner-save');
+        const nameInput = scannerSettingsModal.querySelector('[data-scanner-input="name"]');
+        const promptInput = scannerSettingsModal.querySelector('[data-scanner-input="prompt"]');
+        const scheduleTypeInput = scannerSettingsModal.querySelector('[data-scanner-input="scheduleType"]');
+        const scheduleValueInput = scannerSettingsModal.querySelector('[data-scanner-input="scheduleValue"]');
+        const name = nameInput?.value?.trim() || '';
+        const prompt = promptInput?.value?.trim() || '';
+        if (!name) { showToast('Enter a scanner name.', { icon: '\u26A0' }); nameInput?.focus(); return; }
+        const scheduleType = scheduleTypeInput?.value || 'interval';
+        const scheduleValue = scheduleValueInput?.value || '30m';
+        // Collect weekly settings
+        const weeklyDays = [...scannerSettingsModal.querySelectorAll('[data-scanner-weekly-day]:checked')].map((cb) => cb.value);
+        const weeklyTimes = [...scannerSettingsModal.querySelectorAll('[data-scanner-weekly-time]')].map((inp) => inp.value).filter(Boolean);
+        if (editId) {
+          updateScanner(editId, { name, prompt, scheduleType, scheduleValue, weeklyDays, weeklyTimes });
+          showToast(`Scanner updated: ${name}`, { icon: '\u2713' });
+        } else {
+          const scanner = createScanner(name, prompt);
+          updateScanner(scanner.id, { scheduleType, scheduleValue, weeklyDays, weeklyTimes });
+          showToast(`Scanner created: ${name}`, { icon: '\u2713' });
+        }
+        closeScannerSettingsModal();
+        renderRadarMode();
+        return;
+      }
+
+      const deleteBtn = event.target.closest('[data-scanner-modal-delete]');
+      if (deleteBtn) {
+        const id = deleteBtn.getAttribute('data-scanner-modal-delete');
+        const scanner = getScannerById(id);
+        if (scanner && !scanner.isDefault) {
+          deleteScanner(id);
+          showToast(`Scanner deleted: ${scanner.name}`, { icon: '\ud83d\uddd1' });
+          closeScannerSettingsModal();
+          renderRadarMode();
+        }
+        return;
+      }
+
+      const runNowBtn = event.target.closest('[data-scanner-run-now]');
+      if (runNowBtn) {
+        const id = runNowBtn.getAttribute('data-scanner-run-now');
+        const scanner = getScannerById(id);
+        if (scanner) {
+          closeScannerSettingsModal();
+          showToast(`Running scanner: ${scanner.name}...`, { icon: '\uD83D\uDD0D' });
+          try {
+            await runScanner(scanner);
+            renderRadarMode();
+          } catch (e) {
+            showToast(`Scanner failed: ${e.message}`, { icon: '\u26A0' });
+          }
+        }
+        return;
+      }
+
+      const addTimeBtn = event.target.closest('[data-scanner-add-time]');
+      if (addTimeBtn) {
+        const slotsContainer = scannerSettingsModal.querySelector('[data-scanner-time-slots]');
+        if (slotsContainer) {
+          const existing = [...slotsContainer.querySelectorAll('[data-scanner-weekly-time]')].map((inp) => inp.value).filter(Boolean);
+          existing.push('12:00');
+          slotsContainer.innerHTML = existing.map((t, i) => `
+            <div class="weekly-time-slot">
+              <input type="time" class="tracking-input weekly-time-picker" data-scanner-weekly-time value="${escapeHtml(t)}" />
+              ${existing.length > 1 ? '<button type="button" class="weekly-time-remove" data-scanner-remove-time title="Remove">&times;</button>' : ''}
+            </div>
+          `).join('');
+        }
+        return;
+      }
+
+      const removeTimeBtn = event.target.closest('[data-scanner-remove-time]');
+      if (removeTimeBtn) {
+        const slotsContainer = scannerSettingsModal.querySelector('[data-scanner-time-slots]');
+        if (slotsContainer) {
+          const remaining = [...slotsContainer.querySelectorAll('[data-scanner-weekly-time]')].map((inp) => inp.value).filter(Boolean);
+          const slotEl = removeTimeBtn.closest('.weekly-time-slot');
+          if (slotEl && remaining.length > 1) { slotEl.remove(); }
+        }
+        return;
+      }
+    });
+
+    scannerSettingsModal.addEventListener('change', (event) => {
+      const scheduleTypeInput = event.target.closest('[data-scanner-input="scheduleType"]');
+      if (scheduleTypeInput) {
+        const val = scheduleTypeInput.value;
+        const intervalField = scannerSettingsModal.querySelector('[data-scanner-interval-field]');
+        const weeklyPanel = scannerSettingsModal.querySelector('[data-scanner-weekly-panel]');
+        if (intervalField) intervalField.classList.toggle('d-none', val !== 'interval');
+        if (weeklyPanel) weeklyPanel.classList.toggle('d-none', val !== 'weekly');
+      }
+    });
+
+    // Close modal when clicking overlay
+    scannerSettingsModal.addEventListener('mousedown', (event) => {
+      if (event.target === scannerSettingsModal) closeScannerSettingsModal();
+    });
+  }
+
   elements.radarList.addEventListener('click', async (event) => {
     // Scanner group collapse toggle
     const groupHeader = event.target.closest('[data-collapse-group-id]');
-    if (groupHeader && !event.target.closest('button.scanner-pause-btn')) {
+    if (groupHeader && !event.target.closest('.icon-btn') && !event.target.closest('[data-create-scanner-btn]')) {
       const groupId = groupHeader.getAttribute('data-collapse-group-id');
       const idx = state.collapsedSections.indexOf(groupId);
       if (idx >= 0) { state.collapsedSections.splice(idx, 1); } else { state.collapsedSections.push(groupId); }
       savePersistentState();
       renderRadarMode();
+      return;
+    }
+
+    // Scanner play/pause toggle
+    const headerToggle = event.target.closest('[data-scanner-header-toggle]');
+    if (headerToggle) {
+      const id = headerToggle.getAttribute('data-scanner-header-toggle');
+      toggleScanner(id);
+      renderRadarMode();
+      return;
+    }
+
+    // Scanner settings (open modal)
+    const headerSettings = event.target.closest('[data-scanner-header-settings]');
+    if (headerSettings) {
+      const id = headerSettings.getAttribute('data-scanner-header-settings');
+      renderScannerSettingsModal(id);
+      return;
+    }
+
+    // Create new scanner
+    const createBtn = event.target.closest('[data-create-scanner-btn]');
+    if (createBtn) {
+      renderScannerSettingsModal(null);
       return;
     }
 
