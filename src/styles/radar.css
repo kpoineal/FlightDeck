@@ -70,6 +70,31 @@
 }
 .scanner-group-count::before { content: '('; }
 .scanner-group-count::after { content: ')'; }
+.scanner-group-schedule {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 0.72rem;
+  margin-left: auto;
+}
+.scanner-create-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 8px;
+}
+.icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.icon-btn:hover {
+  background: var(--bg-hover, var(--bg-inset));
+  color: var(--text);
+}
 .scanner-group-items {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="styles/components.css" />
   <link rel="stylesheet" href="styles/radar.css" />
   <link rel="stylesheet" href="styles/tracking.css" />
+  <link rel="stylesheet" href="styles/scanner.css" />
   <link rel="stylesheet" href="styles/briefing.css" />
   <link rel="stylesheet" href="styles/search.css" />
   <link rel="stylesheet" href="styles/modal.css" />
@@ -287,6 +288,8 @@
     </div>
   </div>
 
+  <div id="scannerSettingsModal" class="modal" role="dialog" aria-modal="true"></div>
+
   <!-- Demo mode (must load before foundation to intercept early) -->
   <script src="renderer/demo.js"></script>
 
@@ -298,10 +301,12 @@
   <script src="renderer/state.js"></script>
   <script src="renderer/prompts.js"></script>
   <script src="renderer/models/item.js"></script>
+  <script src="renderer/models/scanner.js"></script>
   <script src="renderer/models/tracking.js"></script>
   <script src="renderer/models/radar.js"></script>
   <script src="renderer/models/briefing.js"></script>
   <script src="renderer/monitor-engine.js"></script>
+  <script src="renderer/scanner-engine.js"></script>
   <script src="renderer/search.js"></script>
 
   <!-- Renderers -->
@@ -309,6 +314,7 @@
   <script src="renderer/renderers/actions.js"></script>
   <script src="renderer/renderers/radar.js"></script>
   <script src="renderer/renderers/tracking.js"></script>
+  <script src="renderer/renderers/scanner.js"></script>
   <script src="renderer/renderers/briefing.js"></script>
   <script src="renderer/renderers/history.js"></script>
 

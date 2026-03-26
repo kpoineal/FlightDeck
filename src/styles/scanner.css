@@ -1,0 +1,46 @@
+/* ── FlightDeck Scanner Management ── */
+
+/* ── Scanner form ── */
+.scanner-form {
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+}
+.scanner-form-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.scanner-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+}
+.scanner-form-field-grow {
+  flex: 1;
+  min-width: 200px;
+}
+.scanner-form-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.scanner-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  .scanner-form-row {
+    flex-direction: column;
+  }
+}

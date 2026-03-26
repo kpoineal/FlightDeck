@@ -215,6 +215,51 @@ Exclude items like:
 ${exclusionLines}`;
 }
 
+function getScannerExclusionLabels(scannerId) {
+  const labels = [];
+  const seen = new Set();
+  const limit = MAX_TRACKED_EXCLUSIONS;
+
+  for (const item of state.items || []) {
+    if (labels.length >= limit) break;
+    if (item.scannerId !== scannerId) continue;
+    if (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived') continue;
+    const title = normalizePromptLabel(item?.title);
+    if (!title) continue;
+    const dedupeKey = title.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    labels.push(title);
+  }
+
+  return labels;
+}
+
+function buildScannerPrompt(scanner) {
+  let prompt = scanner.prompt || '';
+
+  const lastRunAt = scanner.lastRunAt || new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  prompt = prompt.replace(/\{lastRunAt\}/g, lastRunAt);
+
+  prompt += RADAR_SCAN_JSON_SCHEMA;
+
+  const existingItems = (state.items || [])
+    .filter((item) => item.scannerId === scanner.id)
+    .map((item) => `- ${cleanDisplayText(item.title || '')}`)
+    .slice(0, 20);
+
+  if (existingItems.length) {
+    prompt += `\n\nItems I already know about (do NOT re-report these):\n${existingItems.join('\n')}`;
+  }
+
+  const scannerExclusions = getScannerExclusionLabels(scanner.id);
+  if (scannerExclusions.length) {
+    prompt += `\n\nDe-duplication guidance — exclude items substantially matching these (already on radar or being tracked):\n${scannerExclusions.map((l) => `- ${l}`).join('\n')}`;
+  }
+
+  return prompt;
+}
+
 function buildMeetingBriefingPrompt(meeting) {
   const startAt = meeting?.startAt ? safeDate(meeting.startAt, meeting.startAt) : 'Unknown time';
   const joinUrl = meeting?.joinUrl || 'No link';
