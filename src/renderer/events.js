@@ -757,6 +757,12 @@ function bindEvents() {
           // Remove green glow outline
           const row = wrapper.querySelector('.tracker-row');
           if (row) row.classList.remove('has-new-update');
+          // Remove "Updated" banner
+          const updatedBanner = wrapper.querySelector('.tracker-updated-at');
+          if (updatedBanner) updatedBanner.remove();
+          // Remove unseen styling from timeline entries
+          wrapper.querySelectorAll('.at-event--unseen').forEach((el) => el.classList.remove('at-event--unseen'));
+          wrapper.querySelectorAll('.tracker-history-entry.unseen').forEach((el) => el.classList.remove('unseen'));
           // Hide the "Mark as Seen" button
           markSeenButton.style.display = 'none';
         }
