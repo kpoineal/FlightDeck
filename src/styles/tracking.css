@@ -1,5 +1,12 @@
 /* ── FlightDeck Tracking ── */
 
+/* ── Transition suppression (used during incremental DOM patching) ── */
+.no-transition,
+.no-transition * {
+  transition: none !important;
+  animation: none !important;
+}
+
 /* ── Card Tabs ── */
 .card-tabs {
   container-type: inline-size;
@@ -95,6 +102,30 @@
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
+}
+.monitor-source-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.monitor-source-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.monitor-source-select {
+  flex: 1;
+  font-size: 0.78rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border-input);
+  background: var(--bg-inset);
+  color: var(--text);
+}
+.monitor-source-select option {
+  background: var(--bg-surface);
+  color: var(--text);
 }
 
 /* ── Status Select ── */
@@ -618,13 +649,33 @@
   display: inline-flex;
   align-items: center;
 }
+
+/* ── Persistent "new" glow — stays until hover ── */
+.tracker-card.is-new,
+.tracker-row-wrapper.is-new .tracker-row {
+  outline: 2px solid var(--color-success, #30d158);
+  outline-offset: 2px;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--color-success, #30d158) 35%, transparent),
+              0 0 32px color-mix(in srgb, var(--color-success, #30d158) 12%, transparent);
+  border-color: var(--color-success, #30d158) !important;
+  transition: outline-color 0.8s ease, outline-offset 0.8s ease,
+              box-shadow 0.8s ease, border-color 0.8s ease;
+}
+.tracker-card.is-new:hover,
+.tracker-row-wrapper.is-new:hover .tracker-row {
+  outline-color: transparent;
+  outline-offset: 6px;
+  box-shadow: 0 0 0 transparent, 0 0 0 transparent;
+  border-color: var(--border-card) !important;
+}
 .tracker-head {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 8px;
   padding: 10px 12px;
   min-height: 36px;
+  flex-wrap: nowrap;
 }
 .tracker-title {
   margin: 0;
@@ -1030,13 +1081,15 @@ html[data-theme="light"] .weekly-time-picker::-webkit-calendar-picker-indicator 
 .tracker-head-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .tracker-head-right {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 /* ── Tracking header controls ── */
@@ -1376,6 +1429,9 @@ html[data-theme="light"] .weekly-time-picker::-webkit-calendar-picker-indicator 
   color: var(--link);
   text-decoration: none;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
   transition: border-color 0.15s, background 0.15s;
 }
 .at-link-chip:hover {
@@ -1427,5 +1483,90 @@ html[data-theme="light"] .at-event:hover .at-card {
   html:not([data-theme="dark"]) .at-event:hover .at-card {
     background: color-mix(in srgb, var(--at-color) 5%, var(--bg-inset));
   }
+}
+
+/* ── Enriched timeline: hero entry, current badge, summary, unseen, suggestions ── */
+.at-event--newest .at-card {
+  border-color: color-mix(in srgb, var(--at-color) 30%, transparent);
+  background: color-mix(in srgb, var(--at-color) 6%, var(--bg-raised));
+}
+.at-event--newest .at-node-dot {
+  width: 18px;
+  height: 18px;
+  top: -1px;
+  left: -1px;
+}
+.at-event--newest .at-changes {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+
+/* ── Hide timeline track inside cards — show entries only ── */
+.tracker-card .at-track,
+.tracker-row-detail .at-track {
+  display: none;
+}
+.tracker-card .at-event,
+.tracker-row-detail .at-event {
+  gap: 0;
+}
+.tracker-card .at-show-older,
+.tracker-row-detail .at-show-older {
+  margin-left: 0;
+  text-align: center;
+}
+.at-current-badge {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+.at-summary {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.at-event--unseen .at-card {
+  border-left: 3px solid var(--color-success);
+}
+.at-suggestions {
+  margin-top: 6px;
+}
+.at-suggestions .next-step-hint {
+  font-size: 0.75rem;
+}
+.at-show-older {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin: 4px 0 4px 40px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.at-show-older:hover {
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+.at-hidden-events {
+  display: contents;
+}
+.at-hidden-events.d-none {
+  display: none;
+}
+
+
+
+/* ── Single-panel popout layout ── */
+.popout-panels.popout-single-panel {
+  grid-template-columns: 1fr;
+}
+.popout-single-panel .popout-panel-left {
+  border-right: none;
 }
 

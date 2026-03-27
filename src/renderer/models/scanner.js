@@ -19,6 +19,35 @@ function normalizeScannerDefinition(raw) {
       ? raw.weeklyTimes.filter((t) => /^\d{2}:\d{2}$/.test(t))
       : [...DEFAULT_WEEKLY_TIMES],
     workHoursOnly: raw?.workHoursOnly === true,
+    autoMonitorNewItems: raw?.autoMonitorNewItems === true,
+    notificationMode: ['all', 'critical-only', 'silent'].includes(raw?.notificationMode) ? raw.notificationMode : 'all',
+    signalTypes: Array.isArray(raw?.signalTypes) && raw.signalTypes.length
+      ? raw.signalTypes.filter((s) => ALL_SIGNAL_TYPES.includes(s))
+      : [...ALL_SIGNAL_TYPES],
+    crossScannerDedup: raw?.crossScannerDedup !== false,
+    autoMonitorSeverityThreshold: SEVERITY_THRESHOLD_OPTIONS.some((o) => o.value === raw?.autoMonitorSeverityThreshold) ? raw.autoMonitorSeverityThreshold : 'all',
+    maxItemsPerScan: Number.isFinite(Number(raw?.maxItemsPerScan)) && Number(raw.maxItemsPerScan) >= 1 && Number(raw.maxItemsPerScan) <= 25 ? Number(raw.maxItemsPerScan) : 10,
+    runOnStartup: raw?.runOnStartup === true,
+    missedRunPolicy: MISSED_RUN_POLICY_OPTIONS.some((o) => o.value === raw?.missedRunPolicy) ? raw.missedRunPolicy : 'run-once',
+    dedupStrategy: DEDUP_STRATEGY_OPTIONS.some((o) => o.value === raw?.dedupStrategy) ? raw.dedupStrategy : 'evidence-url',
+    excludeKeywords: Array.isArray(raw?.excludeKeywords) ? raw.excludeKeywords.filter((v) => typeof v === 'string' && v.trim()) : [],
+    defaultMonitorSchedule: SCHEDULE_INTERVAL_OPTIONS.some((o) => o.value === raw?.defaultMonitorSchedule) ? raw.defaultMonitorSchedule : '30m',
+    defaultMonitorScheduleType: raw?.defaultMonitorScheduleType === 'one-time' ? 'one-time' : raw?.defaultMonitorScheduleType === 'weekly' ? 'weekly' : 'interval',
+    defaultMonitorWorkHoursOnly: raw?.defaultMonitorWorkHoursOnly === true,
+    defaultMonitorSignals: Array.isArray(raw?.defaultMonitorSignals) && raw.defaultMonitorSignals.length
+      ? raw.defaultMonitorSignals.filter((s) => ALL_SIGNAL_TYPES.includes(s))
+      : [...ALL_SIGNAL_TYPES],
+    defaultMonitorNotifyEnabled: raw?.defaultMonitorNotifyEnabled !== false,
+    defaultMonitorWeeklyDays: Array.isArray(raw?.defaultMonitorWeeklyDays) && raw.defaultMonitorWeeklyDays.length
+      ? raw.defaultMonitorWeeklyDays.filter((d) => WEEKLY_DAY_OPTIONS.some((o) => o.value === d))
+      : [...DEFAULT_WEEKLY_DAYS],
+    defaultMonitorWeeklyTimes: Array.isArray(raw?.defaultMonitorWeeklyTimes) && raw.defaultMonitorWeeklyTimes.length
+      ? raw.defaultMonitorWeeklyTimes.filter((t) => /^\d{2}:\d{2}$/.test(t))
+      : [...DEFAULT_WEEKLY_TIMES],
+    autoArchiveAfterDays: Number.isFinite(Number(raw?.autoArchiveAfterDays)) && Number(raw.autoArchiveAfterDays) >= 0 ? Number(raw.autoArchiveAfterDays) : 0,
+    retentionDays: Number.isFinite(Number(raw?.retentionDays)) && Number(raw.retentionDays) >= 1 && Number(raw.retentionDays) <= 365 ? Number(raw.retentionDays) : 365,
+    webhookUrl: typeof raw?.webhookUrl === 'string' && raw.webhookUrl.trim() ? raw.webhookUrl.trim() : '',
+    scannerGroupId: typeof raw?.scannerGroupId === 'string' && raw.scannerGroupId.trim() ? raw.scannerGroupId.trim() : '',
     excludedItemIds: Array.isArray(raw?.excludedItemIds) ? raw.excludedItemIds.filter((v) => typeof v === 'string') : [],
     lastRunAt: raw?.lastRunAt || null,
     nextRunAt: raw?.nextRunAt || null,
@@ -70,8 +99,18 @@ function deleteScanner(id) {
   if (!scanner || scanner.isDefault) return false;
 
   state.scanners = state.scanners.filter((s) => String(s.id) !== String(id));
-  // Remove inbox items from this scanner
-  state.items = state.items.filter((item) => String(item.scannerId) !== String(id));
+
+  const KEEP_STATUSES = new Set(['complete', 'archived']);
+  const kept = [];
+  for (const item of state.items) {
+    if (String(item.scannerId) !== String(id)) { kept.push(item); continue; }
+    if (KEEP_STATUSES.has(item.lifecycleStatus)) {
+      item.scannerId = null;
+      kept.push(item);
+    }
+    // active / in-progress / blocked / waiting / no status → discard
+  }
+  state.items = kept;
   state.radarItems = state.items;
   state.trackingItems = state.items;
   savePersistentState();
@@ -104,6 +143,28 @@ function getScannerById(id) {
 
 function getActiveScanners() {
   return state.scanners.filter((s) => s.enabled);
+}
+
+function ensureDefaultRadarScanner() {
+  const existing = state.scanners.find((s) => s.isDefault === true || String(s.id) === RADAR_SCANNER_ID);
+  if (existing) return existing;
+
+  const scanner = normalizeScannerDefinition({
+    id: RADAR_SCANNER_ID,
+    name: 'Radar',
+    prompt: promptCache.radarScan || '',
+    enabled: true,
+    isDefault: true,
+    scheduleType: 'interval',
+    scheduleValue: '4h',
+  });
+  scanner.nextRunAt = computeScannerNextRunAt(scanner);
+  state.scanners.push(scanner);
+  return scanner;
+}
+
+function getDefaultRadarScanner() {
+  return state.scanners.find((s) => s.isDefault === true) || null;
 }
 
 function computeScannerNextRunAt(scanner, fromDate = new Date()) {

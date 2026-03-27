@@ -245,6 +245,21 @@ async function loadPersistentState() {
     state.scanners = Array.isArray(parsed.scanners)
       ? parsed.scanners.map((entry) => normalizeScannerDefinition(entry))
       : [];
+
+    // Ensure the default radar scanner exists (migration + first-run)
+    if (typeof ensureDefaultRadarScanner === 'function') {
+      ensureDefaultRadarScanner();
+    }
+
+    // Migration: assign radar scanner ID to items without a scannerId
+    const defaultRadar = typeof getDefaultRadarScanner === 'function' ? getDefaultRadarScanner() : null;
+    if (defaultRadar) {
+      for (const item of state.items) {
+        if (!item.scannerId) {
+          item.scannerId = defaultRadar.id;
+        }
+      }
+    }
     state.history = Array.isArray(parsed.history) ? parsed.history : [];
     state.density = parsed.density === 'minimal' ? 'minimal'
       : (parsed.trackingDensity === 'minimal' ? 'minimal' : 'full');

@@ -232,6 +232,9 @@ function normalizeItem(item) {
       ? item.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2)
       : [],
 
+    // Discovery timestamp — set once when the item is first seen, never overwritten
+    discoveredAt: item?.discoveredAt || nowIso(),
+
     // Tracking / monitoring fields — default to OFF for inbound items
     trackedAt: item?.trackedAt || null,
     monitorPrompt: cleanDisplayText(item?.monitorPrompt || '') || buildDefaultMonitorPrompt(item),
@@ -461,7 +464,7 @@ function applyLedgerPayload(payload) {
 
 // ── Payload application (radar scan results → state.items) ─────────
 
-function applyRadarPayload(payload) {
+function applyRadarPayload(payload, scannerId = null) {
   const kpis = payload.kpis || {};
   state.kpis = {
     critical: Number(kpis.critical || 0),
@@ -495,6 +498,7 @@ function applyRadarPayload(payload) {
       mergedItems.push({
         ...incoming,
         // Preserve all monitoring/tracking state from existing item
+        discoveredAt: existing.discoveredAt || incoming.discoveredAt,
         trackedAt: existing.trackedAt || incoming.trackedAt,
         monitorPrompt: existing.monitorPrompt || incoming.monitorPrompt,
         monitorEnabled: existing.monitorEnabled,
@@ -540,6 +544,15 @@ function applyRadarPayload(payload) {
   for (const existing of (state.items || [])) {
     if (!processedIds.has(existing.id)) {
       mergedItems.push(existing);
+    }
+  }
+
+  // Stamp items with scannerId if provided (for default radar scanner integration)
+  if (scannerId) {
+    for (const item of mergedItems) {
+      if (!item.scannerId) {
+        item.scannerId = scannerId;
+      }
     }
   }
 
@@ -854,4 +867,37 @@ function setItemLifecycleStatus(id, newStatus) {
 // Legacy alias
 function setTrackingLifecycleStatus(id, newStatus) {
   setItemLifecycleStatus(id, newStatus);
+}
+
+function moveItemToScanner(itemId, targetScannerId) {
+  const item = (state.items || []).find((entry) => entry.id === itemId);
+  if (!item) return null;
+
+  const oldScannerId = item.scannerId || null;
+  const newScannerId = targetScannerId || null;
+  if (oldScannerId === newScannerId) return item;
+
+  // Update source scanner itemCount
+  if (oldScannerId) {
+    const oldScanner = getScannerById(oldScannerId);
+    if (oldScanner) oldScanner.itemCount = Math.max(0, (oldScanner.itemCount || 0) - 1);
+  }
+
+  item.scannerId = newScannerId;
+
+  // Update target scanner itemCount
+  if (newScannerId) {
+    const newScanner = getScannerById(newScannerId);
+    if (newScanner) newScanner.itemCount = (newScanner.itemCount || 0) + 1;
+  }
+
+  state.trackingItems = state.items;
+  state.radarItems = state.items;
+  savePersistentState();
+
+  const oldLabel = oldScannerId ? (getScannerById(oldScannerId)?.name || 'Scanner') : 'Radar';
+  const newLabel = newScannerId ? (getScannerById(newScannerId)?.name || 'Scanner') : 'Radar';
+  addHistory('move', `Moved "${item.title}" from ${oldLabel} to ${newLabel}`, { itemId });
+
+  return item;
 }

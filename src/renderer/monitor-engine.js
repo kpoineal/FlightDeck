@@ -125,7 +125,15 @@ async function monitorTaskItem(item, { manual = false } = {}) {
       curatedLinks.push(link);
       seenUrls.add(link.url);
     }
-    item.evidenceLinks = curatedLinks;
+    // Merge: preserve previous links not in the new set, then add new ones
+    const mergedLinks = [...curatedLinks];
+    const curatedUrls = new Set(curatedLinks.map((e) => e.url));
+    for (const prev of prevLinks) {
+      if (prev.url && !curatedUrls.has(prev.url)) {
+        mergedLinks.push(prev);
+      }
+    }
+    item.evidenceLinks = mergedLinks;
     // Identify truly new links for change-tracking purposes
     const prevUrls = new Set(prevLinks.map((e) => e.url));
     discoveredLinks = curatedLinks.filter((e) => !prevUrls.has(e.url));
@@ -164,7 +172,7 @@ async function monitorTaskItem(item, { manual = false } = {}) {
     // stands out in the timeline and isn't conflated with content updates.
     if (severityChanged) {
       item.updateHistory.unshift({
-        timestamp: prevRunAt || nowIso(),
+        timestamp: nowIso(),
         changes: [`Severity: ${prevSeverity} → ${item.severity}`],
         summary: '',
         status: item.status,
@@ -176,7 +184,7 @@ async function monitorTaskItem(item, { manual = false } = {}) {
     // Record the content/links update entry (skip if severity was the only change)
     if (changes.length) {
       item.updateHistory.unshift({
-        timestamp: prevRunAt || nowIso(),
+        timestamp: nowIso(),
         changes,
         summary: prevSummary || '',
         status: item.status,
@@ -253,18 +261,18 @@ async function runDueMonitoringChecks() {
         item.nextRunAt = computeNextRunAt(item);
         addHistory('failure', `Task monitor failed for ${item.title}: ${error.message}`, { itemId: item.id });
       }
-      // Re-render after each item so the UI updates as soon as each check
-      // completes — keeps toast notifications and card state in sync.
-      renderTrackingMode();
+      // Incremental DOM update — patch only the item that changed
+      // instead of rebuilding the entire list (avoids visible flash).
+      patchSingleItem(item.id);
+      renderKpis();
     }
   } finally {
     monitorCycleInProgress = false;
     setStatus('Updated');
     setUpdatedNow();
     savePersistentState();
-    // Guaranteed final render — covers edge cases where per-item renders
-    // were skipped or the loop exited unexpectedly.
-    renderTrackingMode();
+    // Final KPI sync — individual items were already patched in-place.
+    renderKpis();
   }
 }
 

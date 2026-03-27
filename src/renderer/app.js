@@ -79,51 +79,9 @@ async function refreshAllData() {
 
   state.loading = true;
   elements.refreshBtn.disabled = true;
-  setStatus('Refreshing...');
+  setStatus('Refreshing meetings...');
 
   try {
-    let completedCount = 0;
-    let successCount = 0;
-
-    const updateRefreshStatus = () => {
-      if (completedCount < 2) {
-        setStatus('Refreshing...');
-      } else if (successCount === 2) {
-        setStatus('Updated');
-      } else if (successCount === 0) {
-        setStatus('Refresh failed');
-      } else {
-        setStatus('Partial update');
-      }
-      setUpdatedNow();
-    };
-
-    const radarTask = runWorkiqJson(
-      buildRadarScanPrompt(),
-      (payload) => payload && Array.isArray(payload.radarItems),
-      'radar',
-      {
-        maxRetries: 1,
-        onRetry: (attempt, max) => {
-          setStatus(`Retrying radar scan (${attempt}/${max})…`);
-        },
-      }
-    )
-      .then((payload) => {
-        applyRadarPayload(payload);
-        addHistory('scan', 'Radar + ledger scan completed');
-        successCount += 1;
-        renderRadarMode();
-      })
-      .catch((error) => {
-        addHistory('failure', `Radar scan issue: ${error.message}`);
-        elements.radarList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
-      })
-      .finally(() => {
-        completedCount += 1;
-        updateRefreshStatus();
-      });
-
     const meetingsTask = runWorkiqJson(
       TODAY_MEETINGS_PROMPT,
       (payload) => payload && Array.isArray(payload.meetings),
@@ -132,20 +90,17 @@ async function refreshAllData() {
       .then((payload) => {
         applyMeetingsPayload(payload);
         addHistory('scan', 'Meetings list refreshed');
-        successCount += 1;
         renderBriefingsMode();
       })
       .catch((error) => {
         addHistory('failure', `Meetings refresh failed: ${error.message}`);
         applyMeetingsPayload(buildFallbackMeetingPayload());
         renderBriefingsMode();
-      })
-      .finally(() => {
-        completedCount += 1;
-        updateRefreshStatus();
       });
 
-    await Promise.allSettled([radarTask, meetingsTask]);
+    await meetingsTask;
+    setStatus('Updated');
+    setUpdatedNow();
   } catch (error) {
     setStatus('Refresh failed');
     addHistory('failure', `Refresh failed: ${error.message}`);
@@ -161,25 +116,18 @@ async function refreshRadarData() {
     return;
   }
 
+  const scanner = getDefaultRadarScanner();
+  if (!scanner) {
+    setStatus('No radar scanner configured');
+    return;
+  }
+
   state.loading = true;
   elements.refreshBtn.disabled = true;
-  setStatus('Refreshing radar...');
+  setStatus('Running radar scan...');
 
   try {
-    const radarPayload = await runWorkiqJson(
-      buildRadarScanPrompt(),
-      (payload) => payload && Array.isArray(payload.radarItems),
-      'radar',
-      {
-        maxRetries: 1,
-        onRetry: (attempt, max) => {
-          setStatus(`Retrying radar scan (${attempt}/${max})…`);
-        },
-      }
-    );
-
-    applyRadarPayload(radarPayload);
-    addHistory('scan', 'Radar + ledger scan completed');
+    await runScanner(scanner);
     setStatus('Updated');
     setUpdatedNow();
     renderAll();
@@ -238,7 +186,9 @@ async function refreshCurrentMode() {
   }
 
   if (state.mode === 'Radar') {
-    await refreshRadarData();
+    // Refresh button re-renders and refreshes meetings in background (no auto-scan)
+    renderRadarMode();
+    await refreshBriefingData();
     return;
   }
 

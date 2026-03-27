@@ -310,6 +310,14 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
   - Starts expanded by default
 - **CSS** in `tracking.css`:
   - Full `.tl-*` class system: `.tl-track` (flex container), `.tl-node`, `.tl-connector`, `.tl-dot`, `.tl-line-before/after`, `.tl-time`, `.tl-label`, `.tl-tooltip`
+
+### 2026-03-26 — Move to Scanner Feature
+- **Goal**: Allow moving items between Radar and Scanners from the card Monitor tab.
+- **Model** (`renderer/models/item.js`): Added `moveItemToScanner(itemId, targetScannerId)` — updates `item.scannerId`, adjusts `scanner.itemCount` on both source and target, persists state, logs to history.
+- **UI** (`renderer/renderers/tracking.js`): Added "Source" dropdown at top of Monitor tab panel with Radar + all scanners as options, pre-selecting current source.
+- **Events** (`renderer/events.js`): Wired `change` event on `[data-move-to-scanner-id]` select in existing `radarList` change delegation. Calls `moveItemToScanner()` then `renderRadarMode()`.
+- **CSS** (`styles/tracking.css`): Added `.monitor-source-section`, `.monitor-source-label`, `.monitor-source-select` styles.
+- **Pattern**: `item.scannerId` = `null` means Radar; non-null = scanner id. `groupItemsBySource()` in `renderers/radar.js` partitions items by this field automatically.
   - Dot glows via `color-mix()` with severity color, scales 1.4× on hover
   - Tooltip uses `--bg-surface`, blur backdrop, shadow — matches existing popout panel style
   - All colors via CSS tokens — works in both dark and light themes
@@ -339,3 +347,17 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
   - All colors via CSS custom property `--at-color` set per-node via inline style.
 - **Key files**: `src/renderer/renderers/tracking.js`, `src/renderer/popout.js`, `src/styles/tracking.css`
 - **All 438 tests pass** after changes.
+
+### 2026-03-26 — Fix Screen Flicker on Monitor Refresh Cycle
+- **Problem**: Every time the monitor engine ran background checks, the entire radar list visually flashed/flickered. The user saw a disruptive full-screen refresh on every monitoring tick.
+- **Root cause**: `renderTrackingMode()` (alias for `renderRadarMode()`) was called after EACH individual monitored item AND once at the end of the cycle. Each call did `elements.radarList.innerHTML = html` — a full DOM teardown and rebuild. This caused: (1) all CSS transitions to replay on fresh elements, (2) scroll position to jump momentarily, (3) visible flicker as the container is emptied then repopulated.
+- **Fix — incremental DOM patching**:
+  1. New `patchSingleItem(itemId)` function in `renderers/radar.js` — replaces only the single item's DOM node that changed, preserving all other DOM state (scroll, expanded panels, active tabs). Captures and restores per-item UI state (tabs, prompt panels, section panels).
+  2. Monitor engine now calls `patchSingleItem(item.id)` + `renderKpis()` per item instead of full `renderTrackingMode()`.
+  3. Final render at end of cycle reduced to `renderKpis()` only — items already patched.
+  4. New `.no-transition` CSS utility class suppresses `transition` and `animation` replay during both incremental patches and full re-renders.
+  5. `renderRadarList()` now adds `.no-transition` to the container during full innerHTML rebuilds (manual refresh, scanner, filter changes) and removes it after `requestAnimationFrame`.
+- **Result**: Background monitor refreshes are now invisible to the user unless data actually changed (new badge appears, severity updates, etc.). No more full-screen flash.
+- **All 446 tests pass** after changes.
+- **Key files**: `src/renderer/renderers/radar.js`, `src/renderer/monitor-engine.js`, `src/styles/tracking.css`.
+- **Pattern**: For background refresh cycles that update existing items, use targeted DOM replacement (`element.replaceWith()`) instead of full container `innerHTML` rebuilds. Reserve full rebuilds for structural changes (new items added, items removed, filter/sort changes). Suppress CSS transitions on freshly-inserted elements with a `.no-transition` class removed after `requestAnimationFrame`.

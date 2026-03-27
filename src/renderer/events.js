@@ -32,6 +32,7 @@ async function handleMarkSeenClick(itemId, renderFn) {
   const item = state.trackingItems.find((entry) => entry.id === itemId);
   if (item) {
     item.hasNewUpdate = false;
+    item.isNew = false;
     if (Array.isArray(item.updateHistory)) {
       item.updateHistory.forEach((e) => { e.seen = true; });
     }
@@ -410,6 +411,22 @@ function bindEvents() {
   // ── Scanner settings modal delegation ─────────────────────────────
   const scannerSettingsModal = document.getElementById('scannerSettingsModal');
   if (scannerSettingsModal) {
+    // Toggle active class on signal type labels and weekly-day labels when checkboxes change
+    scannerSettingsModal.addEventListener('change', (event) => {
+      const signalCb = event.target.closest('.scanner-signal-cb');
+      if (signalCb) {
+        const label = signalCb.closest('.scanner-signal-label');
+        if (label) label.classList.toggle('active', signalCb.checked);
+        return;
+      }
+      const dayCb = event.target.closest('.weekly-day-cb');
+      if (dayCb) {
+        const label = dayCb.closest('.weekly-day-label');
+        if (label) label.classList.toggle('active', dayCb.checked);
+        return;
+      }
+    });
+
     // Close on overlay click
     scannerSettingsModal.addEventListener('click', (event) => {
       if (event.target === scannerSettingsModal) {
@@ -432,6 +449,13 @@ function bindEvents() {
           return;
         }
         if (editId) {
+          const scanner = getScannerById(editId);
+          // For default radar scanner, sync prompt with promptCache
+          if (scanner && scanner.isDefault && values.prompt) {
+            promptCache.radarScan = values.prompt;
+            saveCustomPrompt('radarScan', values.prompt);
+            if (elements.radarPromptEditor) elements.radarPromptEditor.value = values.prompt;
+          }
           updateScanner(editId, values);
         } else {
           createScanner(values.name, values.prompt, values);
@@ -445,11 +469,29 @@ function bindEvents() {
       if (deleteBtn) {
         const id = deleteBtn.getAttribute('data-scanner-modal-delete');
         const scanner = getScannerById(id);
+        if (scanner && scanner.isDefault) return; // Cannot delete default scanner
         const name = scanner ? scanner.name : id;
         if (!confirm(`Delete scanner "${name}"?`)) return;
         deleteScanner(id);
         closeScannerSettingsModal();
         renderRadarMode();
+        return;
+      }
+
+      // Reset radar prompt to default (from file)
+      const resetPromptBtn = event.target.closest('[data-radar-prompt-reset]');
+      if (resetPromptBtn) {
+        (async () => {
+          clearCustomPrompt('radarScan');
+          const result = await window.workiq.readPromptFile('radar-scan.md');
+          if (result.success) {
+            promptCache.radarScan = result.content.trim();
+            if (elements.radarPromptEditor) elements.radarPromptEditor.value = promptCache.radarScan;
+            // Update the textarea in the modal
+            const promptInput = scannerSettingsModal.querySelector('[data-scanner-input="prompt"]');
+            if (promptInput) promptInput.value = promptCache.radarScan;
+          }
+        })();
         return;
       }
 
@@ -504,51 +546,38 @@ function bindEvents() {
         `).join('');
         return;
       }
-    });
-  }
 
-  // ── Radar prompt modal delegation ─────────────────────────────────
-  const radarPromptModal = document.getElementById('radarPromptModal');
-  if (radarPromptModal) {
-    radarPromptModal.addEventListener('click', (event) => {
-      if (event.target === radarPromptModal) {
-        closeRadarPromptModal();
+      // Monitor weekly time add/remove
+      const monitorAddTimeBtn = event.target.closest('[data-scanner-monitor-add-time]');
+      if (monitorAddTimeBtn) {
+        const slotsContainer = scannerSettingsModal.querySelector('[data-scanner-monitor-time-slots]');
+        if (!slotsContainer) return;
+        const existing = [...slotsContainer.querySelectorAll('[data-scanner-monitor-weekly-time]')].map((inp) => inp.value).filter(Boolean);
+        existing.push('09:00');
+        slotsContainer.innerHTML = existing.map((t) => `
+          <div class="weekly-time-slot">
+            <input type="time" class="tracking-input weekly-time-picker" data-scanner-monitor-weekly-time value="${escapeHtml(t)}" />
+            ${existing.length > 1 ? '<button type="button" class="weekly-time-remove" data-scanner-monitor-remove-time title="Remove">&times;</button>' : ''}
+          </div>
+        `).join('');
         return;
       }
 
-      const closeBtn = event.target.closest('[data-radar-prompt-modal-close]');
-      if (closeBtn) {
-        closeRadarPromptModal();
-        return;
-      }
-
-      const applyBtn = event.target.closest('#radarPromptModalApply');
-      if (applyBtn) {
-        const editor = document.getElementById('radarPromptModalEditor');
-        const edited = (editor?.value || '').trim();
-        if (!edited) return;
-        promptCache.radarScan = edited;
-        if (elements.radarPromptEditor) elements.radarPromptEditor.value = edited;
-        saveCustomPrompt('radarScan', edited);
-        const statusEl = document.getElementById('radarPromptModalStatus');
-        if (statusEl) showPromptEditorStatus(statusEl, 'Prompt applied \u2014 next scan will use this version');
-        return;
-      }
-
-      const resetBtn = event.target.closest('#radarPromptModalReset');
-      if (resetBtn) {
-        (async () => {
-          clearCustomPrompt('radarScan');
-          const result = await window.workiq.readPromptFile('radar-scan.md');
-          if (result.success) {
-            promptCache.radarScan = result.content.trim();
-            const editor = document.getElementById('radarPromptModalEditor');
-            if (editor) editor.value = promptCache.radarScan;
-            if (elements.radarPromptEditor) elements.radarPromptEditor.value = promptCache.radarScan;
-            const statusEl = document.getElementById('radarPromptModalStatus');
-            if (statusEl) showPromptEditorStatus(statusEl, 'Reset to default');
-          }
-        })();
+      const monitorRemoveTimeBtn = event.target.closest('[data-scanner-monitor-remove-time]');
+      if (monitorRemoveTimeBtn) {
+        const slot = monitorRemoveTimeBtn.closest('.weekly-time-slot');
+        const slotsContainer = scannerSettingsModal.querySelector('[data-scanner-monitor-time-slots]');
+        if (!slot || !slotsContainer) return;
+        const allSlots = [...slotsContainer.querySelectorAll('.weekly-time-slot')];
+        if (allSlots.length <= 1) return;
+        slot.remove();
+        const remaining = [...slotsContainer.querySelectorAll('[data-scanner-monitor-weekly-time]')].map((inp) => inp.value).filter(Boolean);
+        slotsContainer.innerHTML = remaining.map((t) => `
+          <div class="weekly-time-slot">
+            <input type="time" class="tracking-input weekly-time-picker" data-scanner-monitor-weekly-time value="${escapeHtml(t)}" />
+            ${remaining.length > 1 ? '<button type="button" class="weekly-time-remove" data-scanner-monitor-remove-time title="Remove">&times;</button>' : ''}
+          </div>
+        `).join('');
         return;
       }
     });
@@ -562,14 +591,6 @@ function bindEvents() {
       event.preventDefault();
       const id = headerSettings.getAttribute('data-scanner-header-settings');
       renderScannerSettingsModal(id);
-      return;
-    }
-
-    const radarPromptBtn = event.target.closest('[data-radar-prompt-settings]');
-    if (radarPromptBtn) {
-      event.stopPropagation();
-      event.preventDefault();
-      renderRadarPromptModal();
       return;
     }
 
@@ -693,6 +714,18 @@ function bindEvents() {
         const isExpanding = detail.classList.toggle('show');
         trackerRow.classList.toggle('expanded', isExpanding);
         if (chevron) chevron.classList.toggle('open', isExpanding);
+      }
+      return;
+    }
+
+    // "Show N older" button in activity timeline
+    const showOlderBtn = event.target.closest('[data-at-show-older]');
+    if (showOlderBtn) {
+      const timeline = showOlderBtn.closest('.activity-timeline');
+      const hidden = timeline?.querySelector('.at-hidden-events');
+      if (hidden) {
+        hidden.classList.remove('d-none');
+        showOlderBtn.remove();
       }
       return;
     }
@@ -823,6 +856,15 @@ function bindEvents() {
     const signalCheckbox = event.target.closest('[data-signal-item-id]');
     if (signalCheckbox) {
       handleSignalCheckboxChange(signalCheckbox.getAttribute('data-signal-item-id'), elements.radarList, signalCheckbox);
+      return;
+    }
+
+    const moveToScannerSelect = event.target.closest('[data-move-to-scanner-id]');
+    if (moveToScannerSelect) {
+      const itemId = moveToScannerSelect.getAttribute('data-move-to-scanner-id');
+      const targetScannerId = moveToScannerSelect.value || null;
+      moveItemToScanner(itemId, targetScannerId);
+      renderRadarMode();
       return;
     }
 

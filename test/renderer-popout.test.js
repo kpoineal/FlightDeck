@@ -85,15 +85,23 @@ describe('renderPopoutMode() integration', () => {
     loadFile(ctx, 'renderer/popout.js');
   });
 
-  it('renders popout history via renderPopoutMode with unseen entry details', () => {
+  it('renders popout with unified activity timeline', () => {
     ctx.renderPopoutMode();
 
     const html = popoutContainer.innerHTML;
-    assert.match(html, /Change History \(1\)/);
-    assert.match(html, /tracker-history-entry unseen/);
+    // Unified timeline replaces separate summary + change history
+    assert.match(html, /activity-timeline/);
+    assert.match(html, /at-event--newest/);
+    assert.match(html, /at-event--unseen/);
     assert.match(html, /Status changed/);
-    assert.match(html, /history-summary/);
-    assert.match(html, /source-list--inline/);
-    assert.match(html, /Suggested: Send reminder/);
+    assert.match(html, /at-summary/);
+    // Current badge and severity pill removed from newest entry (redundant with card header)
+    assert.doesNotMatch(html, /at-current-badge/);
+    // Next steps removed from timeline entries; citation links kept
+    assert.doesNotMatch(html, /at-suggestions/);
+    // Right panel (Change History) removed — single-panel layout
+    assert.match(html, /popout-single-panel/);
+    assert.doesNotMatch(html, /popout-panel-right/);
+    assert.doesNotMatch(html, /Change History/);
   });
 });
