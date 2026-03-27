@@ -39,7 +39,7 @@
     "electron-builder": "^26.8.1"
   },
   "dependencies": {
-    "@microsoft/workiq": "^0.2.8",
+    "@microsoft/workiq": "^0.4.0",
     "electron-store": "^11.0.2",
     "node-pty": "1.1.0"
   }
