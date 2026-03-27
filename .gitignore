@@ -38,6 +38,10 @@ window-state.json
 
 # Package lock (uncomment if you prefer to commit it)
 # package-lock.json
+
+# git-filter-repo temp files
+replacements.txt
+mailmap.txt
 # Squad: ignore runtime state (logs, inbox, sessions)
 .squad/orchestration-log/
 .squad/log/

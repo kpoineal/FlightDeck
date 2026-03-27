@@ -46,13 +46,27 @@ jobs:
               
               // If this is not a force push and base exists, compare commits
               if (base && base !== '0000000000000000000000000000000000000000') {
-                const comparison = await github.rest.repos.compareCommits({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  base,
-                  head
-                });
-                files = comparison.data.files || [];
+                try {
+                  const comparison = await github.rest.repos.compareCommits({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    base,
+                    head
+                  });
+                  files = comparison.data.files || [];
+                } catch (err) {
+                  // Force push with rewritten history: base SHA has no common ancestor
+                  core.info('Compare failed (likely force push with rewritten history), checking tree state');
+                  const { data: tree } = await github.rest.git.getTree({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    tree_sha: head,
+                    recursive: 'true'
+                  });
+                  files = tree.tree
+                    .filter(item => item.type === 'blob')
+                    .map(item => ({ filename: item.path, status: 'added' }));
+                }
               } else {
                 // Force push or initial commit: list all files in the current tree
                 core.info('Force push detected or initial commit, checking tree state');
