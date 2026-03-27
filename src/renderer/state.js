@@ -106,6 +106,7 @@ const state = {
   density: 'full',
   filter: 'all',
   collapsedSections: [],
+  scannerFilters: {},  // Ephemeral per-scanner inline filters, NOT persisted
   // Legacy aliases for density
   trackingDensity: 'full',
   radarDensity: 'full',

@@ -597,7 +597,7 @@ function buildTrackingCard(item) {
   const unseenCount = unseenHistoryCount(item);
 
   return `
-    <article class="tracker-card ${hasNew ? 'has-new-update is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}">
+    <article class="tracker-card ${hasNew ? 'has-new-update is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}" data-item-severity="${escapeHtml(item.severity || 'Observe')}" data-item-status="${escapeHtml(item.lifecycleStatus || 'in-progress')}" data-item-new="${hasNew ? 'true' : 'false'}">
       <div class="tracker-head">
         <div class="tracker-head-left">
           <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
@@ -657,7 +657,7 @@ function buildTrackingRow(item, expandedRowId) {
   })();
 
   return `
-  <div class="tracker-row-wrapper ${hasNew ? 'is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}">
+  <div class="tracker-row-wrapper ${hasNew ? 'is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}" data-item-severity="${escapeHtml(item.severity || 'Observe')}" data-item-status="${escapeHtml(item.lifecycleStatus || 'in-progress')}" data-item-new="${hasNew ? 'true' : 'false'}">
     <div class="tracker-row ${hasNew ? 'has-new-update' : ''} ${isExpanded ? 'expanded' : ''}" data-row-toggle-id="${escapeHtml(item.id)}">
       <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
         <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>

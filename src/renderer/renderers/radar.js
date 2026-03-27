@@ -1,5 +1,66 @@
 // ── Unified rendering — all items in one pane ────────────────────────
 
+// ── DOM-based inline filter (no rebuild) ─────────────────────────────
+function applyInlineFilterDOM(sourceId) {
+  const filter = state.scannerFilters?.[sourceId] || null;
+  const section = elements.radarList.querySelector(`[data-section-items="${CSS.escape(sourceId)}"]`);
+  if (!section) return;
+
+  // Show/hide items based on filter
+  const items = section.querySelectorAll('[data-item-severity]');
+  let visibleCount = 0;
+  items.forEach((el) => {
+    let show = true;
+    if (filter) {
+      if (filter.type === 'severity') show = el.getAttribute('data-item-severity') === filter.value;
+      else if (filter.type === 'status') show = el.getAttribute('data-item-status') === filter.value;
+      else if (filter.type === 'new') show = el.getAttribute('data-item-new') === 'true';
+    }
+    el.style.display = show ? '' : 'none';
+    if (show) visibleCount++;
+  });
+
+  // Handle empty state
+  let emptyEl = section.querySelector('.inline-filter-empty');
+  if (filter && visibleCount === 0 && items.length > 0) {
+    if (!emptyEl) {
+      emptyEl = document.createElement('div');
+      emptyEl.className = 'empty inline-filter-empty';
+      emptyEl.textContent = 'No items matching filter.';
+      section.appendChild(emptyEl);
+    }
+    emptyEl.style.display = '';
+  } else if (emptyEl) {
+    emptyEl.style.display = 'none';
+  }
+
+  // Update pill active states in the header
+  const header = elements.radarList.querySelector(`[data-source-id="${CSS.escape(sourceId)}"]`);
+  if (!header) return;
+
+  header.querySelectorAll('[data-scanner-filter]').forEach((pill) => {
+    const attr = pill.getAttribute('data-scanner-filter');
+    let pillType, pillValue;
+    if (attr === 'new') { pillType = 'new'; pillValue = 'new'; }
+    else { const p = attr.split(':'); pillType = p[0]; pillValue = p.slice(1).join(':'); }
+    pill.classList.toggle('active', filter !== null && filter.type === pillType && filter.value === pillValue);
+  });
+
+  // Toggle clear button
+  let clearBtn = header.querySelector('.scanner-filter-clear');
+  if (filter && !clearBtn) {
+    clearBtn = document.createElement('span');
+    clearBtn.className = 'scanner-filter-clear';
+    clearBtn.setAttribute('data-scanner-filter-clear', sourceId);
+    clearBtn.title = 'Clear filter';
+    clearBtn.innerHTML = '&times;';
+    const left = header.querySelector('.radar-section-header-left');
+    if (left) left.appendChild(clearBtn);
+  } else if (!filter && clearBtn) {
+    clearBtn.remove();
+  }
+}
+
 // ── UI state helpers ─────────────────────────────────────────────────
 function captureRadarUiState() {
   const container = elements.radarList;
@@ -114,14 +175,62 @@ function groupItemsBySource(filteredItems) {
 }
 
 // ── Section header (from scanner branch) ─────────────────────────────
-function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, enabled = true, isDefault = false } = {}) {
+function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, enabled = true, isDefault = false, items = [] } = {}) {
   const collapsed = Array.isArray(state.collapsedSections) && state.collapsedSections.includes(sourceId);
+
+  // Severity micro-counts
+  let critical = 0, elevated = 0, observe = 0;
+  let blocked = 0, waiting = 0, newCount = 0;
+  let latestActivity = 0;
+  for (const item of items) {
+    if (item.severity === 'Critical') critical++;
+    else if (item.severity === 'Elevated') elevated++;
+    else observe++;
+    if (item.lifecycleStatus === 'blocked') blocked++;
+    if (item.lifecycleStatus === 'waiting') waiting++;
+    if (item.isNew || item.hasNewUpdate) newCount++;
+    const ts = new Date(item.lastChangedAt || item.lastRunAt || 0).getTime();
+    if (ts > latestActivity) latestActivity = ts;
+  }
+
+  const highestSev = critical > 0 ? 'critical' : elevated > 0 ? 'elevated' : items.length > 0 ? 'observe' : '';
+  const sevBorderClass = highestSev ? `sev-border-${highestSev}` : '';
+
+  // Active inline filter for this scanner
+  const activeFilter = state.scannerFilters?.[sourceId] || null;
+  const isFilterActive = (type, value) => activeFilter && activeFilter.type === type && activeFilter.value === value;
+
+  // Severity dots
+  let sevDots = '';
+  if (critical > 0) sevDots += `<span class="radar-sev-dot sev-critical${isFilterActive('severity', 'Critical') ? ' active' : ''}" data-scanner-filter="severity:Critical" data-scanner-source-id="${escapeHtml(sourceId)}" title="${critical} Critical — click to filter">${critical}</span>`;
+  if (elevated > 0) sevDots += `<span class="radar-sev-dot sev-elevated${isFilterActive('severity', 'Elevated') ? ' active' : ''}" data-scanner-filter="severity:Elevated" data-scanner-source-id="${escapeHtml(sourceId)}" title="${elevated} Elevated — click to filter">${elevated}</span>`;
+  if (observe > 0) sevDots += `<span class="radar-sev-dot sev-observe${isFilterActive('severity', 'Observe') ? ' active' : ''}" data-scanner-filter="severity:Observe" data-scanner-source-id="${escapeHtml(sourceId)}" title="${observe} Observe — click to filter">${observe}</span>`;
+
+  // Attention badges (blocked/waiting)
+  let attentionHtml = '';
+  if (blocked > 0) attentionHtml += `<span class="radar-attn-badge attn-blocked${isFilterActive('status', 'blocked') ? ' active' : ''}" data-scanner-filter="status:blocked" data-scanner-source-id="${escapeHtml(sourceId)}" title="${blocked} blocked — click to filter">${blocked} blocked</span>`;
+  if (waiting > 0) attentionHtml += `<span class="radar-attn-badge attn-waiting${isFilterActive('status', 'waiting') ? ' active' : ''}" data-scanner-filter="status:waiting" data-scanner-source-id="${escapeHtml(sourceId)}" title="${waiting} waiting — click to filter">${waiting} waiting</span>`;
+
+  // New indicator
+  const newHtml = newCount > 0 ? `<span class="radar-new-indicator${isFilterActive('new', 'new') ? ' active' : ''}" data-scanner-filter="new" data-scanner-source-id="${escapeHtml(sourceId)}" title="${newCount} new or updated — click to filter">${newCount} new</span>` : '';
+
+  // Clear filter button (only shown when a filter is active)
+  const clearHtml = activeFilter ? `<span class="scanner-filter-clear" data-scanner-filter-clear="${escapeHtml(sourceId)}" title="Clear filter">&times;</span>` : '';
+
+  // Last activity
+  const activityHtml = latestActivity > 0 ? `<span class="radar-last-activity">${escapeHtml(relativeTime(latestActivity) || '')}</span>` : '';
+
   return `
-    <div class="radar-section-header ${enabled ? '' : 'disabled'}" data-source-id="${escapeHtml(sourceId)}">
+    <div class="radar-section-header ${enabled ? '' : 'disabled'} ${sevBorderClass}" data-source-id="${escapeHtml(sourceId)}">
       <div class="radar-section-header-left">
         <span class="radar-section-icon">${icon}</span>
         <span class="radar-section-name">${escapeHtml(name)}</span>
         <span class="radar-section-count">(${count})</span>
+        ${sevDots ? `<span class="radar-sev-dots">${sevDots}</span>` : ''}
+        ${attentionHtml}
+        ${newHtml}
+        ${clearHtml}
+        ${activityHtml}
       </div>
       <div class="radar-section-header-actions">
         <button class="icon-btn" data-scanner-header-toggle="${escapeHtml(String(scannerId))}" title="${enabled ? 'Pause scanner' : 'Resume scanner'}">${enabled ? '\u23f8' : '\u25b6'}</button>
@@ -186,7 +295,10 @@ function renderRadarList() {
       scannerId: scanner.id,
       enabled,
       isDefault: scanner.isDefault,
+      items: group.items,
     });
+
+    // Always render ALL items — inline filter is applied via DOM show/hide after render
     html += `<div class="radar-section-items ${isMinimal ? 'list--minimal' : ''} ${collapsed ? 'collapsed' : ''}" data-section-items="${escapeHtml(sourceId)}">`;
     html += group.items.length
       ? group.items.map((item) => isMinimal ? buildTrackingRow(item, savedUiState.expandedRowId) : buildTrackingCard(item)).join('')
@@ -196,9 +308,30 @@ function renderRadarList() {
 
   // Suppress transition/animation flash during full DOM rebuild
   elements.radarList.classList.add('no-transition');
+
+  // Lock container height to prevent scroll bounce during innerHTML swap.
+  // The page scrolls via <body>/<html>, not radarList, so we lock radarList's
+  // min-height to its current rendered size to prevent the viewport from
+  // collapsing and snapping the window scroll position to 0.
+  const prevScrollY = window.scrollY;
+  const prevHeight = elements.radarList.offsetHeight;
+  if (prevHeight > 0) {
+    elements.radarList.style.minHeight = prevHeight + 'px';
+  }
+
   elements.radarList.innerHTML = html;
   autoSizeSeveritySelects(elements.radarList);
   restoreRadarUiState(savedUiState);
+
+  // Apply any active inline filters via DOM show/hide (no second rebuild)
+  for (const sourceId of Object.keys(state.scannerFilters || {})) {
+    applyInlineFilterDOM(sourceId);
+  }
+
+  // Restore window scroll synchronously before any repaint
+  window.scrollTo(0, prevScrollY);
+  elements.radarList.style.minHeight = '';
+
   // Re-enable transitions after the browser has painted
   requestAnimationFrame(() => {
     elements.radarList.classList.remove('no-transition');

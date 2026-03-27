@@ -594,11 +594,64 @@ function bindEvents() {
       return;
     }
 
+    // ── Inline pill filter click (BEFORE collapse handlers) ──
+    const pillFilter = event.target.closest('[data-scanner-filter]');
+    if (pillFilter) {
+      event.stopPropagation();
+      event.preventDefault();
+      const filterAttr = pillFilter.getAttribute('data-scanner-filter');
+      const sourceId = pillFilter.getAttribute('data-scanner-source-id');
+      if (!filterAttr || !sourceId) return;
+
+      // Parse filter type and value
+      let type, value;
+      if (filterAttr === 'new') {
+        type = 'new'; value = 'new';
+      } else {
+        const parts = filterAttr.split(':');
+        type = parts[0]; value = parts.slice(1).join(':');
+      }
+
+      // Toggle: clicking active pill clears, clicking different pill switches
+      const current = state.scannerFilters[sourceId];
+      if (current && current.type === type && current.value === value) {
+        delete state.scannerFilters[sourceId];
+      } else {
+        state.scannerFilters[sourceId] = { type, value };
+      }
+
+      // If scanner is collapsed, we need a full render to expand it
+      const colIdx = state.collapsedSections.indexOf(sourceId);
+      if (colIdx >= 0) {
+        state.collapsedSections.splice(colIdx, 1);
+        savePersistentState();
+        renderRadarMode();
+      } else {
+        // Scanner already expanded — just show/hide cards in place, no rebuild
+        applyInlineFilterDOM(sourceId);
+      }
+      return;
+    }
+
+    // ── Clear inline filter button ──
+    const filterClear = event.target.closest('[data-scanner-filter-clear]');
+    if (filterClear) {
+      event.stopPropagation();
+      event.preventDefault();
+      const sourceId = filterClear.getAttribute('data-scanner-filter-clear');
+      if (sourceId) {
+        delete state.scannerFilters[sourceId];
+        applyInlineFilterDOM(sourceId);
+      }
+      return;
+    }
+
     const collapseBtn = event.target.closest('[data-section-collapse]');
     if (collapseBtn) {
       event.stopPropagation();
       event.preventDefault();
       const sectionId = collapseBtn.getAttribute('data-section-collapse');
+      delete state.scannerFilters[sectionId];
       const idx = state.collapsedSections.indexOf(sectionId);
       if (idx >= 0) {
         state.collapsedSections.splice(idx, 1);
@@ -622,6 +675,29 @@ function bindEvents() {
       return;
     }
 
+    // ── Clicking anywhere on the section header toggles collapse ──
+    const sectionHeader = event.target.closest('.radar-section-header');
+    if (sectionHeader) {
+      event.stopPropagation();
+      event.preventDefault();
+      const sectionId = sectionHeader.getAttribute('data-source-id');
+      if (sectionId) {
+        const idx = state.collapsedSections.indexOf(sectionId);
+        if (idx >= 0) {
+          state.collapsedSections.splice(idx, 1);
+        } else {
+          state.collapsedSections.push(sectionId);
+          delete state.scannerFilters[sectionId];
+        }
+        const chevron = sectionHeader.querySelector('[data-section-collapse]');
+        if (chevron) chevron.classList.toggle('collapsed');
+        const itemsContainer = elements.radarList.querySelector(`[data-section-items="${CSS.escape(sectionId)}"]`);
+        if (itemsContainer) itemsContainer.classList.toggle('collapsed');
+        savePersistentState();
+      }
+      return;
+    }
+
     // Create new scanner
     const createBtn = event.target.closest('[data-create-scanner-btn]');
     if (createBtn) {
@@ -633,6 +709,7 @@ function bindEvents() {
     const filterBtn = event.target.closest('[data-filter]');
     if (filterBtn && filterBtn.closest('.filter-bar')) {
       state.filter = filterBtn.dataset.filter || 'all';
+      state.scannerFilters = {};
       savePersistentState();
       renderRadarMode();
       return;

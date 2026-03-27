@@ -16,8 +16,8 @@ function severityRankValue(value) {
 
 function sortBySeverity(items, useHasNewUpdate = false) {
   return [...items].sort((a, b) => {
-    const newA = useHasNewUpdate ? (a.hasNewUpdate === true ? 0 : 1) : 0;
-    const newB = useHasNewUpdate ? (b.hasNewUpdate === true ? 0 : 1) : 0;
+    const newA = useHasNewUpdate ? ((a.hasNewUpdate === true || a.isNew === true) ? 0 : 1) : 0;
+    const newB = useHasNewUpdate ? ((b.hasNewUpdate === true || b.isNew === true) ? 0 : 1) : 0;
     if (newA !== newB) return newA - newB;
     return severityRankValue(a.severity) - severityRankValue(b.severity);
   });
