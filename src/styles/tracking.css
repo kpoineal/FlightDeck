@@ -349,8 +349,7 @@
   transform: translateY(-1px);
 }
 .tracker-row.has-new-update {
-  border-color: var(--color-success);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--color-success) 20%, transparent);
+  /* Glow handled by .is-new on the wrapper — only marks the row for badge display */
 }
 .tracker-row.expanded {
   border-bottom-left-radius: 0;
@@ -628,8 +627,7 @@
 }
 
 .tracker-card.has-new-update {
-  border-color: var(--color-success);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--color-success) 20%, transparent);
+  /* Glow handled by .is-new — only show the badge here */
 }
 .tracker-new-badge {
   display: none;
