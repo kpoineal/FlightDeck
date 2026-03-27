@@ -1041,3 +1041,166 @@
 **Priority divergence from Iceman:** Maverick recommends Todo → Sparkline → Scanners (by complexity). Iceman recommends Sparkline → Scanners → Todos (by strategic value).
 
 **Source:** `.squad/decisions/inbox/maverick-feature-feasibility.md`
+
+---
+
+## DEC-053: Tasks Feature — Technical Architecture Proposal
+
+**Author:** Maverick (Lead) | **Date:** 2026-03-20 | **Status:** Proposed (brainstorm — no code) | **Requested by:** Kyle Poineal
+
+**Summary:** Architecture proposal for a Tasks feature — user-committable actions derived from AI suggestions or manually created.
+
+**Key decisions:**
+- Separate `state.tasks = []` top-level array (NOT embedded in trackingItems). Independent lifecycle from trackers.
+- Task shape: `id`, `title`, `trackerId` (FK, nullable), `sourceStepText`, `dedupKey`, `status` (open|done|dismissed), `origin` (suggested|manual), `notes`. No severity, no dueAt.
+- 3-state lifecycle only (open → done, open → dismissed). No FSM complexity per DEC-041 lesson.
+- Deduplication via normalized keyword fingerprint: lowercase → strip stopwords → sort tokens → FNV-1a hash.
+- `suggestedNextSteps` remain ephemeral hints. Tasks are commitments — different data, different lifecycle.
+
+**Source:** `.squad/decisions/inbox/maverick-tasks-architecture.md`
+
+---
+
+## DEC-054: LLM-Driven Tasks — Product Specification
+
+**Author:** Iceman (Product Owner) | **Date:** 2026-03-20 | **Status:** Proposal — awaiting approval | **Requested by:** Kyle Poineal
+
+**Summary:** Product spec for opt-in AI-powered task creation during scans and monitor updates.
+
+**Key decisions:**
+- LLM returns a separate `tasks` array (NOT derived from `suggestedNextSteps`). Each task has `title`, `trackerId`, `reason`, `confidence`.
+- Global opt-in toggle (`state.aiTasksEnabled`, default OFF). No per-tracker toggle.
+- Guardrails: max 3 tasks/radar scan, max 2 tasks/monitor update, dedup against open tasks, confidence threshold medium+.
+- Tasks appear directly with `origin: 'ai'` badge — no confirmation dialog. Dismiss = one click.
+- Coexists with manual promotion flow (`[+ Task]` buttons on suggestedNextSteps).
+
+**Source:** `.squad/decisions/inbox/iceman-llm-tasks-product-spec.md`
+
+---
+
+## DEC-055: Multi-Scanner Radar — Feature Specification
+
+**Author:** Iceman (Product Owner) | **Date:** 2026-03-24 | **Status:** Proposed — Feature Specification | **Requested by:** Kyle Poineal
+
+**Summary:** Radar becomes multi-prompt with persistent inbox. Users define N scanners, each with custom prompt, schedule, and exclusion list. All scanners feed into existing radar view.
+
+**Key decisions:**
+- Scanner 0 = existing broad radar scan (always present, long cadence). User scanners 1..N = focused, frequent checks.
+- Radar becomes inbox — items persist until Track (→ tracker card) or Dismiss (→ per-scanner exclusion list).
+- Per-scanner exclusions: dismissing from one scanner doesn't affect others.
+- Schedule reuses `computeNextRunAt()` from tracking. `{lastRunAt}` placeholder in prompt for time anchoring.
+- Scanner config shape: `id`, `name`, `prompt`, `enabled`, `scheduleType`, `weeklyDays`, `weeklyTimes`, `excludedItemIds`, `lastRunAt`, `nextRunAt`, `maxInboxItems`.
+- 3-layer dedup: prompt-level (existing titles fed back), engine-level (evidence URL matching), UI-level (dismiss list).
+
+**Source:** `.squad/decisions/inbox/iceman-multi-scanner-spec.md`
+
+---
+
+## DEC-056: Multi-Scanner Radar Backend Implementation
+
+**Author:** Viper (Backend Dev) | **Date:** 2026-03-24 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Summary:** Full backend/model layer for multi-scanner radar per DEC-055.
+
+**Key decisions:**
+- `state.radarItems` now persisted (breaking change from DEC-010). Required for scanner inbox persistence.
+- Schedule reuse: `computeScannerNextRunAt()` wraps `computeNextRunAt()` via adapter object.
+- Scanner results append to `state.radarItems` (inbox accumulation). Existing `applyRadarPayload()` still replaces (backward compat for Scanner 0).
+- `scannerId` tag on every scanner-produced radar item for UI grouping.
+- Two-layer dedup: prompt-level (feed existing titles back) + engine-level (evidence URL matching).
+- `normalizeRadarItemFromScanner` mirrors `applyRadarPayload` mapping including inline citation extraction.
+
+**Files:** `src/renderer/models/scanner.js`, `src/renderer/scanner-engine.js`, `src/prompts/scanner-template.md` (created). `src/renderer/constants.js`, `src/renderer/state.js`, `src/renderer/prompts.js`, `src/renderer/models/radar.js` (modified).
+
+**Source:** `.squad/decisions/inbox/viper-multi-scanner-backend.md`
+
+---
+
+## DEC-057: Monitor Badge Visibility Enhancement
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-24 | **Status:** Implemented
+
+**Summary:** Upgraded `.monitor-badge` from a bare floating icon (opacity 0.6) to a frosted-glass pill with translucent blue background, border, soft glow, and full opacity. z-index bumped to 2 to layer above "NEW" badge.
+
+**Why:** Monitor indicator was too hard to see alongside the green "NEW" badge pill. New style uses accent-blue tones consistent with existing pill design language.
+
+**Source:** `.squad/decisions/inbox/goose-monitor-badge-visibility.md`
+
+---
+
+## DEC-058: Monitor Prompt Restructuring
+
+**Author:** Charlie (Prompt Engineer) | **Date:** 2026-03-25 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Summary:** Restructured `buildTaskMonitorPrompt()` to reduce token waste and elevate monitoring context visibility.
+
+**Key changes:**
+- User's monitoring instructions moved from buried metadata bullet to dedicated `--- MONITORING CONTEXT ---` section.
+- Procedure steps renamed from "Monitoring instructions:" to "Analysis procedure:" to fix label collision.
+- Consolidated overlapping content (8→5 procedure steps). ~25% token reduction.
+- Tightened rule sections: due date (5→2), evidence (3→2), hasNewInfo (6→4), next steps (4→2).
+
+**Impact:** 481 tests pass. No schema, function signature, or external API changes.
+
+**Source:** `.squad/decisions/inbox/charlie-monitor-prompt-opt.md`
+
+---
+
+## DEC-059: Move to Scanner — Data Model Convention
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-26 | **Status:** Implemented
+
+**Summary:** Items can be moved between Radar and Scanners from the card Monitor tab. `item.scannerId` is single source of truth: `null` = Radar, non-null = scanner ID.
+
+**Key decisions:**
+- `moveItemToScanner()` eagerly adjusts `scanner.itemCount` on source and target for immediate UI consistency (scanner-engine recomputes on next cycle).
+- UI: "Source" dropdown at top of Monitor tab panel listing Radar + all scanners.
+- `groupItemsBySource()` in `renderers/radar.js` partitions by `scannerId` — no rendering logic changes needed.
+
+**Source:** `.squad/decisions/inbox/goose-move-to-scanner.md`
+
+---
+
+## DEC-060: PII Scrub — Test Fixtures
+
+**Author:** Merlin (Tester) | **Date:** 2026-03-26 | **Status:** Implemented
+
+**Summary:** Replaced real person/company names in `test/renderer-utils.test.js` with generic test data (Contoso, datacenter migration, weekly sync). All test logic preserved; 481 tests pass.
+
+**Why:** Test files are committed to source control and must never contain real customer names, employee names, or client identifiers.
+
+**Source:** `.squad/decisions/inbox/merlin-pii-scrub.md`
+
+---
+
+## DEC-061: Unified Radar + Tracker Consolidation
+
+**Author:** Project Owner (via Copilot) | **Date:** 2026-03-26 | **Status:** Directive — captured for team memory
+
+**Summary:** Merge Radar and Tracking into a single unified pane with one card type (tracking-quality cards). Scanner results render as full cards with monitoring OFF by default. No separate Tracking pane.
+
+**Key decisions:**
+- Filter bar replaces mode switching: All | Monitored | New | Due Today | Blocked | Archived.
+- Items grouped by scanner, with null-scanner items under "Radar" section.
+- Migration: merge `state.radarItems` + `state.trackingItems` into `state.items`, deduplicate by ID (prefer tracking version).
+- Existing tracked items appear under Radar heading — zero visual disruption for current users.
+
+**Source:** `.squad/decisions/inbox/coordinator-unified-radar-tracker.md`
+
+---
+
+## DEC-062: Incremental DOM Patching for Monitor Refresh
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-26 | **Status:** Implemented
+
+**Summary:** Monitor engine refresh cycles now use targeted single-item DOM patching instead of full `innerHTML` rebuilds. Full re-renders reserved for structural changes only.
+
+**Key decisions:**
+- New `patchSingleItem(itemId)` in `renderers/radar.js` — replaces only the changed item's DOM node, preserving all other DOM state (scroll, expanded panels, active tabs).
+- Monitor engine calls `patchSingleItem(item.id)` + `renderKpis()` per item instead of `renderTrackingMode()`.
+- `.no-transition` CSS class suppresses transition/animation replay during both incremental patches and full rebuilds.
+- `renderRadarList()` adds `.no-transition` during full innerHTML rebuilds and removes after `requestAnimationFrame`.
+
+**Impact:** Background monitor refreshes invisible to user unless data changed. 446 tests pass.
+
+**Source:** `.squad/decisions/inbox/goose-fix-screen-flicker.md`

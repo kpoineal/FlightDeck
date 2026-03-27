@@ -196,8 +196,12 @@ function getTrackedExclusionLabels() {
   return labels;
 }
 
-function buildRadarScanPrompt() {
-  const basePrompt = `${promptCache.radarScan}${RADAR_SCAN_JSON_SCHEMA}`;
+function buildRadarScanPrompt(lastRunAt) {
+  let basePrompt = promptCache.radarScan;
+  if (lastRunAt) {
+    basePrompt = basePrompt.replace(/\{lastRunAt\}/g, lastRunAt);
+  }
+  basePrompt += RADAR_SCAN_JSON_SCHEMA;
 
   const exclusions = getTrackedExclusionLabels();
   if (!exclusions.length) {
@@ -235,29 +239,98 @@ function getScannerExclusionLabels(scannerId) {
   return labels;
 }
 
+function extractScannerTopic(prompt, fallbackName) {
+  const text = (prompt || '').replace(/\{lastRunAt\}/g, '').trim();
+
+  const focusMatch = text.match(/focus\s+(?:specifically\s+)?on[:：]\s*(.+)/i);
+  if (focusMatch) {
+    const focus = focusMatch[1].trim();
+    return focus.length > 80 ? focus.slice(0, 77) + '...' : focus;
+  }
+
+  const firstLine = text
+    .split(/\n/)
+    .map((l) => l.trim())
+    .find((l) => l.length > 15 && !/^#|^-|^Return|^Rules|^Look for items/i.test(l));
+
+  if (firstLine) {
+    return firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;
+  }
+
+  return fallbackName;
+}
+
+function buildCrossScannerDedupBlock(currentScannerId) {
+  const others = (state.scanners || [])
+    .filter((s) => s.id !== currentScannerId && s.enabled && s.prompt);
+
+  if (!others.length) return '';
+
+  const lines = others.slice(0, 5).map((s) => {
+    const topic = extractScannerTopic(s.prompt, s.name);
+    return `- "${s.name}" covers: ${topic}`;
+  });
+
+  return `\n\nOther active scanners (skip items that clearly belong to another scanner's focus area):\n${lines.join('\n')}`;
+}
+
 function buildScannerPrompt(scanner) {
-  let prompt = scanner.prompt || '';
-
+  const userPrompt = scanner.prompt || '';
   const lastRunAt = scanner.lastRunAt || new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-  prompt = prompt.replace(/\{lastRunAt\}/g, lastRunAt);
+  const maxItems = scanner.maxItemsPerScan || 10;
 
-  prompt += RADAR_SCAN_JSON_SCHEMA;
+  // Signal type filtering
+  const signalTypes = Array.isArray(scanner.signalTypes) && scanner.signalTypes.length
+    ? scanner.signalTypes
+    : ALL_SIGNAL_TYPES;
+  const isFiltered = signalTypes.length < ALL_SIGNAL_TYPES.length;
+  const signalFilterBlock = isFiltered
+    ? `\n\nSignal source filter (IMPORTANT):\n- ONLY search for and consider these signal types: ${signalTypes.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(', ')}.\n- IGNORE all other signal types entirely. Do not include evidence from excluded signal types.\n- The signal type labels map as follows: Email = Outlook emails, Chat = Teams chat messages, Meeting = Calendar events and meeting transcripts/notes, Doc = SharePoint/OneDrive documents.`
+    : '';
 
-  const existingItems = (state.items || [])
-    .filter((item) => item.scannerId === scanner.id)
-    .map((item) => `- ${cleanDisplayText(item.title || '')}`)
-    .slice(0, 20);
-
-  if (existingItems.length) {
-    prompt += `\n\nItems I already know about (do NOT re-report these):\n${existingItems.join('\n')}`;
+  // Consolidated dedup list — one block, no duplicates
+  const existingTitles = new Set();
+  const dedupLines = [];
+  for (const item of state.items || []) {
+    if (item.scannerId !== scanner.id) continue;
+    if (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived') continue;
+    const title = cleanDisplayText(item.title || '');
+    if (!title || existingTitles.has(title.toLowerCase())) continue;
+    existingTitles.add(title.toLowerCase());
+    dedupLines.push(`- ${title}`);
+    if (dedupLines.length >= 20) break;
   }
+  const dedupBlock = dedupLines.length
+    ? `\n\nItems already on my radar from this scanner (do NOT re-report these):\n${dedupLines.join('\n')}`
+    : '';
 
-  const scannerExclusions = getScannerExclusionLabels(scanner.id);
-  if (scannerExclusions.length) {
-    prompt += `\n\nDe-duplication guidance — exclude items substantially matching these (already on radar or being tracked):\n${scannerExclusions.map((l) => `- ${l}`).join('\n')}`;
-  }
+  // Cross-scanner domain awareness
+  const crossScannerBlock = buildCrossScannerDedupBlock(scanner.id);
 
-  return prompt;
+  // Assemble the full prompt with clear structure
+  return `You are a work-signal scanner agent. Analyze recent Microsoft 365 signals and surface new items that need attention.
+
+--- SCANNER MISSION ---
+${userPrompt.replace(/\{lastRunAt\}/g, lastRunAt)}
+
+Time window: Last scan was at ${lastRunAt}. Only return items with signals created or updated AFTER this time. Do not report older items.${signalFilterBlock}
+
+Analysis procedure:
+1. Search for recent Microsoft 365 signals (emails, chats, meetings, documents) matching the scanner mission above.
+2. Identify actionable work items, commitments made to or by the user, and time-sensitive matters.
+3. Classify each item as Critical, Elevated, or Observe based on urgency and impact.
+4. Include inline citations in summary and reason fields for every signal referenced.
+5. Return at most ${maxItems} items. Prefer quality over quantity.
+
+${RADAR_SCAN_JSON_SCHEMA}
+
+Due date rules:
+- Extract deadlines from signals ('by end of week', 'due Friday', etc.) and set dueAt as ISO-8601. Use today as reference for relative expressions.
+- If no temporal signal is present, return null for dueAt. Never fabricate deadlines.
+
+Evidence & citation rules:
+- Use markdown formatting in summary and reason fields. Include inline citations for every referenced source.
+- Only include citations grounded in actual Microsoft 365 signals.${dedupBlock}${crossScannerBlock}`;
 }
 
 function buildMeetingBriefingPrompt(meeting) {
@@ -305,32 +378,31 @@ function buildTaskMonitorPrompt(item) {
   // Build previous summaries context from update history to prevent oscillation
   const previousSummaries = buildPreviousSummariesContext(item);
 
-  return `You are a work-tracking monitor agent. Your job is to review the latest Microsoft 365 signals (emails, Teams chats, meetings, documents) and provide an updated status report for the task described below.
+  return `You are a work-tracking monitor agent. Review the latest Microsoft 365 signals and provide an updated status report for the task below.
 
 Task to monitor:
 - Title: ${title}
-- Current severity: ${severity}
-- Last known status: ${lastStatus}
+- Severity: ${severity}
+- Status: ${lastStatus}
 - ${dueInfo}
 - Owner: ${owner}
-- Key people involved: ${people}
+- People: ${people}
 - ${lastCheckInfo}
-- Monitoring instructions: ${context}${lastSummary ? `\n- Previous summary: ${lastSummary}` : ''}${existingLinks ? `\n- Previously known evidence links:\n${existingLinks}` : ''}${signalFilterInstruction}
+
+--- MONITORING CONTEXT ---
+${context}${lastSummary ? `\n\nPrevious summary: ${lastSummary}` : ''}${existingLinks ? `\n\nPreviously known evidence:\n${existingLinks}` : ''}${signalFilterInstruction}
 ${previousSummaries}
-Monitoring instructions:
-1. Search for the most recent signals (emails, chats, meetings, documents) related to this task.
-2. Identify any new developments, blockers, decisions, ownership changes, or timeline shifts since the last check.
-3. ONLY consider signals that were sent, received, or modified AFTER the last check time shown above. Signals from before that time are already accounted for in the previous summary and must NOT be treated as new information.
-4. Assess whether severity should change (Critical = blocking or overdue, Elevated = needs attention soon, Observe = on track).
-5. Update the summary to reflect the current state, not just repeat old information.
-6. List all people currently involved based on recent signals.
-7. If no new signals are found since the last check time, indicate that no updates were detected but preserve the last known state.
-8. You MUST include inline markdown citations in the summary and reason fields using [label](url) syntax for every source signal you reference. This is how the application extracts evidence links — without inline citations, no links will appear.
+Analysis procedure:
+1. Search for recent signals (emails, chats, meetings, documents) related to this task.
+2. Identify new developments, blockers, decisions, ownership changes, or timeline shifts since the last check.
+3. Assess whether severity should change and update the summary to reflect current state.
+4. List all people currently involved based on recent signals.
+5. Include inline markdown [label](url) citations in summary and reason fields for every signal referenced — this is how evidence links are extracted.
 
 Return strict valid JSON only:
 {
   "hasNewInfo": true | false,
-  "status": "string (e.g. In Progress, Blocked, Waiting on Response, Resolved, No Update)",
+  "status": "In Progress|Blocked|Waiting|Complete|No Update",
   "summary": "string (2-4 sentence current-state summary incorporating latest signals)",
   "reason": "string (why this severity level is appropriate right now)",
   "severity": "Critical|Elevated|Observe",
@@ -340,7 +412,7 @@ Return strict valid JSON only:
   "evidenceLinks": [
     {
       "label": "descriptive label for the source signal",
-      "type": "email|chat|meeting|doc",
+      "type": "string (e.g. email, chat, meeting, doc, devops, planner, etc. — use your best judgment to describe the signal source)",
       "signalAt": "ISO-8601 timestamp when the signal was sent/written/updated, or null"
     }
   ],
@@ -348,32 +420,29 @@ Return strict valid JSON only:
 }
 
 Due date rules:
-- If the source signals mention deadlines, due dates, or temporal expectations ('by end of week', 'due Friday', 'need this by March 1'), update dueAt with the concrete ISO-8601 date.
-- Use today's date as a reference for relative time expressions.
-- If a previously null dueAt should now have a value based on new signals, set it.
-- If no deadline signal is found and dueAt was already set, preserve the existing value.
-- Never fabricate deadlines — only set dueAt when grounded in actual signals.
+- Extract deadlines from signals ('by end of week', 'due Friday', etc.) and set dueAt as ISO-8601. Use today as reference for relative expressions.
+- Preserve existing dueAt if no new deadline found. Never fabricate deadlines.
 
-Evidence link and citation rules:
-- You MUST use inline markdown citations in summary and reason using [label](url) syntax for every referenced source. For example: 'Alex sent a [status update](https://outlook.office.com/...) confirming the timeline.'
-- The summary and reason fields are the primary way evidence links are extracted. If you do not include [label](url) citations inline, the user will see no source links.
-- Include your normal response markdown formatting for the summary and reason fields.
-- Review previously known evidence links listed above. Preserve any that remain relevant. Add new ones from new signals.
-- Only include URLs that are real and grounded in actual Microsoft 365 signals. If a signal has no URL, still describe it but omit the link for that specific signal.
+Evidence & citation rules:
+- Use markdown formatting in summary and reason fields. Preserve relevant previously known evidence links; add new ones from new signals.
+- Only include citations grounded in actual Microsoft 365 signals.
 
 IMPORTANT — hasNewInfo rules:
-- Set hasNewInfo to true ONLY if you found genuinely new signals (new emails, chats, meetings, or documents) that were created or modified AFTER the last check time shown above.
-- Signals that existed before the last check time are NOT new, even if they are relevant to this task. They are already reflected in the previous summary.
-- Set hasNewInfo to false if you found no new signals since the last check, or the signals contain no substantive new information.
-- When hasNewInfo is false, you MUST return the previous summary and status EXACTLY as provided above — copy them verbatim. Do NOT rephrase, reword, or add language like "since the last check" or "a new email." Any rewording when hasNewInfo is false is an error.
-- Consistency check: if your summary mentions "new" signals, "since the last check," or "a new email/chat/meeting," then hasNewInfo MUST be true. Never describe new activity while setting hasNewInfo to false.
-- "No Update" as a status means nothing new was found. Never pair hasNewInfo: true with status: "No Update".
+- true ONLY if genuinely new signals exist that were created or modified AFTER the last check time above. Pre-existing signals are NOT new — they are already in the previous summary.
+- false if no new signals or no substantive new information since last check.
+- When false: return previous summary and status EXACTLY as provided — copy verbatim. Do NOT rephrase or add phrases like "since the last check." Any rewording when false is an error.
+- Consistency: if summary mentions "new" signals or "since the last check," hasNewInfo MUST be true. Never pair hasNewInfo: true with status: "No Update".
+
+Status rules:
+- "In Progress" — active work, normal signal activity.
+- "Blocked" — stalled on a dependency, missing response, or unresolved issue.
+- "Waiting" — ball is in someone else's court (response, approval, deliverable).
+- "Complete" — clear evidence of resolution (confirmation email, explicit closure).
+- "No Update" — no new signals found. Only use with hasNewInfo: false.
 
 Suggested next steps rules:
-- Suggest 0-2 specific, concrete next actions the user should take based on the latest signals.
-- Each should be a short phrase naming who and what (e.g. 'Reply to Sarah with the revised Q3 timeline', 'Escalate to VP Engineering before Friday deadline').
-- Only suggest actions when genuinely useful and new. When hasNewInfo is false, return an empty array.
-- Never suggest vague actions like 'follow up' without naming who or what specifically.`;
+- 0-2 specific, completable actions starting with a verb naming WHO and WHAT (e.g. 'Reply to Sarah with the revised Q3 timeline').
+- Empty array when hasNewInfo is false. No vague language ("consider", "follow up", "look into") — every action must be concrete.`;
 }
 
 function buildDayBriefingPrompt() {

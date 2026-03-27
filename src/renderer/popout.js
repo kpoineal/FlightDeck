@@ -33,17 +33,16 @@ function renderPopoutMode() {
   document.title = item.title || 'Tracked Item';
 
   const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
-  const hasNew = item.hasNewUpdate === true;
+  const hasNew = item.hasNewUpdate === true || item.isNew === true;
   const people = Array.isArray(item.counterparties) && item.counterparties.length
     ? item.counterparties.join(', ')
     : 'No counterparties listed';
 
   const unseenCount = unseenHistoryCount(item);
-  const historyMarkup = buildTrackerHistoryMarkup(item);
 
   const popoutContainer = document.getElementById('popoutContainer');
   popoutContainer.innerHTML = `
-    <article class="tracker-card tracker-card--popout ${hasNew ? 'has-new-update' : ''}" data-tracker-id="${escapeHtml(item.id)}">
+    <article class="tracker-card tracker-card--popout ${hasNew ? 'has-new-update is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}">
       <div class="tracker-head">
         <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
           <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
@@ -57,12 +56,11 @@ function renderPopoutMode() {
           <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
         </div>
       </div>
-      <div class="popout-panels">
+      <div class="popout-panels popout-single-panel">
         <div class="popout-panel-left">
           ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
           <h3 class="tracker-title">${escapeHtml(item.title || 'Untitled item')}</h3>
-          <p class="tracker-summary">${renderMarkdownLinks(item.summary || 'No summary available.')}</p>
-          ${buildNextStepHintsHtml(item, true)}
+          ${buildActivityTimelineHtml(item.updateHistory, { itemId: item.id, item })}
           <div class="tracker-meta">
             <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
             <span>Due: ${escapeHtml(safeDate(item.dueAt))}</span>
@@ -71,7 +69,6 @@ function renderPopoutMode() {
           <div class="tracker-timestamp">
             Tracked: ${escapeHtml(safeDate(item.trackedAt, 'Unknown'))} · Last checked: ${escapeHtml(safeDate(item.lastRunAt, 'Never'))}
           </div>
-          ${buildActivityTimelineHtml(item.updateHistory)}
           <button class="tracker-section-toggle expanded" data-people-toggle-id="${escapeHtml(item.id)}">
             <span class="chevron chevron--expanded">&#9654;</span> People (${(Array.isArray(item.counterparties) ? item.counterparties.length : 0)})
           </button>
@@ -117,12 +114,7 @@ function renderPopoutMode() {
             </div>
           </div>
         </div>
-        <div class="popout-panel-right">
-          <h4 class="popout-history-heading">Change History (${historyEntries.length})${unseenCount > 1 ? ` · <span class="history-unseen-count">${unseenCount} unseen</span>` : ''}</h4>
-          <div class="popout-history-scroll">
-            ${historyMarkup}
-          </div>
-        </div>
+
       </div>
     </article>
   `;
@@ -207,31 +199,14 @@ async function initPopoutMode() {
       return;
     }
 
-    const timelineToggle = event.target.closest('[data-timeline-toggle-id]');
-    if (timelineToggle) {
-      const panel = popoutContainer.querySelector('[data-timeline-panel-id="timeline"]');
-      if (panel) {
-        const isExpanded = timelineToggle.classList.toggle('expanded');
-        panel.classList.toggle('show', isExpanded);
-        const chevron = timelineToggle.querySelector('.chevron');
-        if (chevron) chevron.classList.toggle('chevron--expanded', isExpanded);
-      }
-      return;
-    }
-
-    // Activity Timeline node/card click → scroll right panel to matching history entry
-    const atEvent = event.target.closest('[data-at-index]');
-    if (atEvent) {
-      const idx = parseInt(atEvent.getAttribute('data-at-index'), 10);
-      const historyScroll = popoutContainer.querySelector('.popout-history-scroll');
-      if (historyScroll) {
-        const entries = historyScroll.querySelectorAll('.tracker-history-entry');
-        const target = entries[idx];
-        if (target) {
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          target.classList.add('at-pulse');
-          setTimeout(() => target.classList.remove('at-pulse'), 1200);
-        }
+    // "Show N older" button in activity timeline
+    const showOlderBtn = event.target.closest('[data-at-show-older]');
+    if (showOlderBtn) {
+      const timeline = showOlderBtn.closest('.activity-timeline');
+      const hidden = timeline?.querySelector('.at-hidden-events');
+      if (hidden) {
+        hidden.classList.remove('d-none');
+        showOlderBtn.remove();
       }
       return;
     }

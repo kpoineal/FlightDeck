@@ -322,3 +322,19 @@ All 481 tests pass after changes. No test logic was altered — only string lite
 8. Parse failure count logged correctly per label via console.warn
 
 **Final suite result:** 438 tests, 93 suites, 0 failures.
+
+### 2026-03-26 — moveItemToScanner Tests (8 tests, 1 suite)
+
+**Test file:** `test/renderer-move-item.test.js` — covers `moveItemToScanner(itemId, targetScannerId)` for the new "Move to Scanner" feature.
+
+**Pattern used:** Standard `createRendererContext` + `loadFile` approach (same as `renderer-models-tracking.test.js`). State is seeded in `beforeEach` with 3 items (1 Radar, 2 on scanner-A) and 2 scanners (scanner-A with itemCount=2, scanner-B with itemCount=0). `savePersistentState` is mocked via a call-tracking array.
+
+**Coverage (8 tests):**
+1. Move item from Radar to Scanner — scannerId updated from null to target
+2. Move item from Scanner to Radar — scannerId set to null when targetScannerId is null
+3. Move item from Scanner A to Scanner B — scannerId changes correctly
+4. Scanner itemCount updates — source decremented, target incremented
+5. No crash when moving from Radar (no source scanner to decrement)
+6. No crash when moving to Radar (no target scanner to increment)
+7. Returns null for non-existent item
+8. savePersistentState called after successful move

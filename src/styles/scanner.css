@@ -38,6 +38,66 @@
   gap: 8px;
 }
 
+/* ── Options section ── */
+.scanner-form-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-top: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border-card);
+}
+.scanner-form-options {
+  align-items: flex-start;
+}
+.scanner-signal-types {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.scanner-signal-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-card);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.scanner-signal-label.active {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+.scanner-signal-label input {
+  display: none;
+}
+.scanner-form-toggles {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.scanner-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.scanner-toggle-label input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+.scanner-input-narrow {
+  width: 70px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 860px) {
   .scanner-form-row {
