@@ -324,6 +324,20 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Key files**: `src/renderer/renderers/tracking.js`, `src/renderer/popout.js`, `src/styles/tracking.css`
 - **All 438 tests pass** after changes.
 
+### 2026-03-27 — Add Task UX Redesign Feasibility Analysis
+- **Goal**: Evaluate 5 UX patterns for redesigning the "Add Monitored Task" experience in the scanner-grouped radar view.
+- **Patterns evaluated**: (1) Per-scanner "+" button in header, (2) Inline quick-add row, (3) Context menu/dropdown, (4) Modal form, (5) Scanner dropdown on existing form.
+- **Recommendation**: Pattern 1+4 combo — per-scanner "+" button as trigger, modal form pre-filled with scanner context as the form surface. Reuses existing `#scannerSettingsModal` pattern and `.modal` CSS.
+- **Key refactor identified**: `createCustomTrackingItem()` is DOM-coupled to static form element IDs. Needs extraction into a params-based `createTrackingItemFromParams(params)` function to support both modal and inline-add patterns.
+- **Key code inventory**:
+  - `buildSectionHeader()` in `renderers/radar.js` (line 178) — `.radar-section-header-actions` div is the insertion point for "+" button.
+  - `renderScannerSettingsModal()` in `renderers/radar.js` (line 347) — proven modal pattern to replicate.
+  - `createCustomTrackingItem()` in `renderers/tracking.js` (line 282) — the creation logic to refactor.
+  - `moveItemToScanner()` in `models/item.js` (line 872) — already handles `scannerId` assignment.
+  - `groupItemsBySource()` in `renderers/radar.js` (line 146) — items auto-sort into scanner groups by `scannerId`.
+  - Existing modal CSS in `styles/modal.css` — `.modal`, `.modal-card`, `.modal.show` all reusable.
+- **Decision written to**: `.squad/decisions/inbox/goose-add-task-ux-patterns.md`.
+
 ### 2026-03-27 — Interactive Scanner Header Pills (Inline Filtering)
 - **Goal**: Make severity dots, attention badges, and "N new" pills in scanner headers clickable to filter items within that scanner.
 - **State** (`renderer/state.js`): Added `scannerFilters: {}` to state object — ephemeral, session-only, NOT persisted to disk. Keys are `sourceId` strings (e.g. `scanner-abc`), values are `{ type, value }` filter descriptors.

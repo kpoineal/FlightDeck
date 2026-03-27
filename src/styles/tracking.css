@@ -650,17 +650,11 @@
   align-items: center;
 }
 
-/* ── Persistent "new" glow — stays until hover ── */
+/* ── Persistent "new" glow — stays until Mark as Seen is clicked ── */
 .tracker-card.is-new,
 .tracker-row-wrapper.is-new .tracker-row {
   border-color: color-mix(in srgb, var(--color-success, #30d158) 60%, transparent) !important;
   box-shadow: 0 0 12px color-mix(in srgb, var(--color-success, #30d158) 18%, transparent);
-  transition: border-color 0.6s ease, box-shadow 0.6s ease;
-}
-.tracker-card.is-new:hover,
-.tracker-row-wrapper.is-new:hover .tracker-row {
-  border-color: var(--border-card) !important;
-  box-shadow: var(--shadow-hover);
 }
 .tracker-head {
   display: flex;

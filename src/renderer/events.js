@@ -2,6 +2,30 @@
 // Each handler accepts a `container` element (the event delegation root)
 // and an optional `renderFn` callback for re-rendering (e.g. renderTrackingMode or renderPopoutMode).
 
+/**
+ * Accordion helper: collapse all scanner sections except the given one.
+ * Updates state.collapsedSections so only sectionId is expanded.
+ */
+function collapseAllSectionsExcept(sectionId) {
+  const allSectionIds = [...elements.radarList.querySelectorAll('[data-section-items]')]
+    .map((el) => el.getAttribute('data-section-items'))
+    .filter(Boolean);
+  state.collapsedSections = allSectionIds.filter((id) => id !== sectionId);
+}
+
+/**
+ * Sync DOM collapsed state for all scanner sections to match state.collapsedSections.
+ */
+function syncCollapsedSectionsDOM() {
+  elements.radarList.querySelectorAll('[data-section-items]').forEach((itemsContainer) => {
+    const sectionId = itemsContainer.getAttribute('data-section-items');
+    const shouldCollapse = state.collapsedSections.includes(sectionId);
+    itemsContainer.classList.toggle('collapsed', shouldCollapse);
+    const chevron = elements.radarList.querySelector(`[data-section-collapse="${CSS.escape(sectionId)}"]`);
+    if (chevron) chevron.classList.toggle('collapsed', shouldCollapse);
+  });
+}
+
 function handleSectionToggleClick(container, toggleEl, attrName) {
   const itemId = toggleEl.getAttribute(`data-${attrName}-toggle-id`);
   const panel = container.querySelector(`[data-${attrName}-panel-id="${CSS.escape(itemId)}"]`);
@@ -285,13 +309,13 @@ function bindEvents() {
 
   elements.refreshBtn.addEventListener('click', refreshCurrentMode);
 
-  // Add Task collapsible toggle
+  // Add Task collapsible toggle — now opens modal instead
   const addTaskToggle = document.getElementById('addTaskToggle');
-  const addTaskPanel = document.getElementById('addTaskPanel');
-  if (addTaskToggle && addTaskPanel) {
+  if (addTaskToggle) {
     addTaskToggle.addEventListener('click', () => {
-      const isExpanded = addTaskPanel.classList.toggle('show');
-      addTaskToggle.classList.toggle('expanded', isExpanded);
+      // Open the add-task modal with default radar scanner pre-selected
+      const defaultScanner = (Array.isArray(state.scanners) ? state.scanners : []).find((s) => s.isDefault);
+      renderAddTaskModal(defaultScanner ? defaultScanner.id : null);
     });
   }
 
@@ -584,6 +608,16 @@ function bindEvents() {
   }
 
   elements.radarList.addEventListener('click', async (event) => {
+    // ── Per-scanner add item button ──
+    const addItemBtn = event.target.closest('[data-scanner-add-item]');
+    if (addItemBtn) {
+      event.stopPropagation();
+      event.preventDefault();
+      const id = addItemBtn.getAttribute('data-scanner-add-item');
+      renderAddTaskModal(id);
+      return;
+    }
+
     // ── Section header actions (check FIRST, before card/row handlers) ──
     const headerSettings = event.target.closest('[data-scanner-header-settings]');
     if (headerSettings) {
@@ -652,15 +686,18 @@ function bindEvents() {
       event.preventDefault();
       const sectionId = collapseBtn.getAttribute('data-section-collapse');
       delete state.scannerFilters[sectionId];
-      const idx = state.collapsedSections.indexOf(sectionId);
-      if (idx >= 0) {
-        state.collapsedSections.splice(idx, 1);
+      const isCollapsed = state.collapsedSections.indexOf(sectionId) >= 0;
+      if (isCollapsed) {
+        // Expanding — collapse all others (accordion)
+        collapseAllSectionsExcept(sectionId);
       } else {
         state.collapsedSections.push(sectionId);
       }
       collapseBtn.classList.toggle('collapsed');
       const itemsContainer = elements.radarList.querySelector(`[data-section-items="${CSS.escape(sectionId)}"]`);
       if (itemsContainer) itemsContainer.classList.toggle('collapsed');
+      // Sync all other sections' DOM to match collapsed state
+      syncCollapsedSectionsDOM();
       savePersistentState();
       return;
     }
@@ -682,9 +719,10 @@ function bindEvents() {
       event.preventDefault();
       const sectionId = sectionHeader.getAttribute('data-source-id');
       if (sectionId) {
-        const idx = state.collapsedSections.indexOf(sectionId);
-        if (idx >= 0) {
-          state.collapsedSections.splice(idx, 1);
+        const isCollapsed = state.collapsedSections.indexOf(sectionId) >= 0;
+        if (isCollapsed) {
+          // Expanding — collapse all others (accordion)
+          collapseAllSectionsExcept(sectionId);
         } else {
           state.collapsedSections.push(sectionId);
           delete state.scannerFilters[sectionId];
@@ -693,6 +731,8 @@ function bindEvents() {
         if (chevron) chevron.classList.toggle('collapsed');
         const itemsContainer = elements.radarList.querySelector(`[data-section-items="${CSS.escape(sectionId)}"]`);
         if (itemsContainer) itemsContainer.classList.toggle('collapsed');
+        // Sync all other sections' DOM to match collapsed state
+        syncCollapsedSectionsDOM();
         savePersistentState();
       }
       return;
@@ -1233,6 +1273,11 @@ function bindEvents() {
     const hasTask = state.trackingItems.some((entry) => entry.id === taskId);
     if (!hasTask) return;
 
+    // Reset filter to 'all' so the target item is guaranteed to render
+    state.filter = 'all';
+    // Clear any per-scanner inline filters that might hide the item
+    state.scannerFilters = {};
+
     setMode('Radar');
     state.expandedBriefingMeetingIds = state.expandedBriefingMeetingIds || [];
     renderRadarMode();
@@ -1240,6 +1285,20 @@ function bindEvents() {
     requestAnimationFrame(() => {
       const el = elements.radarList.querySelector(`[data-tracker-id="${CSS.escape(taskId)}"]`);
       if (!el) return;
+
+      // Expand parent scanner section if collapsed
+      const sectionItems = el.closest('.radar-section-items');
+      if (sectionItems && sectionItems.classList.contains('collapsed')) {
+        const sectionId = sectionItems.getAttribute('data-section-items');
+        if (sectionId) {
+          sectionItems.classList.remove('collapsed');
+          const idx = state.collapsedSections.indexOf(sectionId);
+          if (idx >= 0) state.collapsedSections.splice(idx, 1);
+          const chevron = elements.radarList.querySelector(`[data-section-collapse="${CSS.escape(sectionId)}"]`);
+          if (chevron) chevron.classList.remove('collapsed');
+          savePersistentState();
+        }
+      }
 
       if (state.trackingDensity === 'minimal') {
         const row = el.querySelector('[data-row-toggle-id]');
@@ -1263,6 +1322,15 @@ function bindEvents() {
       }
 
       el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      // Highlight the card so the user knows which one the notification refers to
+      el.classList.add('just-created');
+      setTimeout(() => {
+        el.classList.add('glow-fade');
+        setTimeout(() => {
+          el.classList.remove('just-created', 'glow-fade');
+        }, 1300);
+      }, 1500);
     });
   });
 }

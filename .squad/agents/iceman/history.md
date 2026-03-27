@@ -217,4 +217,25 @@
 
 **Decisions captured:** `.squad/decisions/inbox/iceman-interactive-pills.md`
 
+### 2026-03-27 — Add Task UX Brainstorm for Scanner-Grouped Radar
+
+**User request:** Kyle asked how users should create their own items now that everything lives in the unified scanner-grouped radar view. The old "+ Add Monitored Task" button creates items with `scannerId: null` (orphans in the default group).
+
+**5 UX options analyzed:**
+1. **Per-Scanner "+" Button** — inline "+" in each scanner header, form opens inside that section. Low-medium complexity.
+2. **Scanner Picker in Existing Form** — add a scanner dropdown to the current top form. Lowest complexity (~15 lines).
+3. **Drag-and-Drop to Scanner Section** — create in default, drag to target scanner. Medium-high complexity (HTML5 Drag API).
+4. **Quick-Add Inline Input (Todoist-style)** — persistent text input at bottom of each scanner section. Medium complexity.
+5. **Right-Click Context Menu** — context menu on scanner headers with "Add item" action. Medium complexity.
+
+**Recommendation:** Ship Option 2 first (scanner picker — smallest change), then Option 1 (per-scanner "+") as the proper long-term UX. Options are not mutually exclusive; they layer naturally.
+
+**Key architecture notes for implementation:**
+- `createCustomTrackingItem()` in `renderers/tracking.js` (line 282) is the creation function — needs `scannerId` parameter
+- Scanner dropdown should populate from `state.scanners` array
+- `buildSectionHeader()` in `renderers/radar.js` (line ~190) is where per-scanner "+" button would go
+- Existing add-task form in `index.html` lines 126-180, events in `events.js` lines 289-355
+
+**Decisions captured:** `.squad/decisions/inbox/iceman-add-task-ux.md`
+
 <!-- Append learnings here as they are discovered -->

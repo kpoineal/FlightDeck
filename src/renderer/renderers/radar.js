@@ -233,6 +233,7 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
         ${activityHtml}
       </div>
       <div class="radar-section-header-actions">
+        <button class="icon-btn" data-scanner-add-item="${escapeHtml(String(scannerId))}" title="Add item to this scanner"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg></button>
         <button class="icon-btn" data-scanner-header-toggle="${escapeHtml(String(scannerId))}" title="${enabled ? 'Pause scanner' : 'Resume scanner'}">${enabled ? '\u23f8' : '\u25b6'}</button>
         <button class="icon-btn" data-scanner-header-settings="${escapeHtml(String(scannerId))}" title="Scanner settings">\u2699\ufe0f</button>
         <button class="icon-btn radar-section-collapse ${collapsed ? 'collapsed' : ''}" data-section-collapse="${escapeHtml(sourceId)}" title="${collapsed ? 'Expand' : 'Collapse'}">\u25be</button>
@@ -426,6 +427,258 @@ function renderScannerSettingsModal(scannerId) {
 
 function closeScannerSettingsModal() {
   const modal = document.getElementById('scannerSettingsModal');
+  if (modal) {
+    modal.classList.remove('show');
+    modal.innerHTML = '';
+  }
+}
+
+// ── Add Task modal ───────────────────────────────────────────────────
+function renderAddTaskModal(scannerId) {
+  const modal = document.getElementById('addTaskModal');
+  if (!modal) return;
+
+  const scanner = scannerId ? getScannerById(scannerId) : null;
+  const scannerName = scanner ? (scanner.name || 'Unnamed Scanner') : 'Radar';
+
+  // Build scanner picker options
+  const scanners = Array.isArray(state.scanners) ? state.scanners : [];
+  const scannerOptions = scanners.map((s) => {
+    const selected = s.id === scannerId ? ' selected' : '';
+    const label = s.isDefault ? `${escapeHtml(s.name || 'Radar')} (default)` : escapeHtml(s.name || 'Unnamed');
+    return `<option value="${escapeHtml(s.id)}"${selected}>${label}</option>`;
+  }).join('');
+
+  modal.innerHTML = `
+    <div class="modal-card">
+      <h3>Add Item to ${escapeHtml(scannerName)}</h3>
+      <div class="add-task-modal-form">
+        <div class="add-task-modal-row">
+          <div class="add-task-field add-task-field-grow">
+            <label class="add-task-label" for="modalTaskTitle">Title</label>
+            <input id="modalTaskTitle" class="tracking-input" type="text" placeholder="e.g., Customer agreement for Project X" autofocus />
+          </div>
+        </div>
+        <div class="add-task-modal-row">
+          <div class="add-task-field">
+            <label class="add-task-label" for="modalTaskScanner">Scanner</label>
+            <select id="modalTaskScanner" class="tracking-select">${scannerOptions}</select>
+          </div>
+          <div class="add-task-field">
+            <label class="add-task-label" for="modalTaskSeverity">Severity</label>
+            <select id="modalTaskSeverity" class="tracking-select">
+              <option value="Observe" selected>Observe</option>
+              <option value="Elevated">Elevated</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+          <div class="add-task-field">
+            <label class="add-task-label" for="modalTaskScheduleType">Schedule</label>
+            <select id="modalTaskScheduleType" class="tracking-select">
+              <option value="interval">Interval</option>
+              <option value="weekly">Scheduled</option>
+              <option value="one-time">One-time</option>
+            </select>
+          </div>
+          <div class="add-task-field" id="modalTaskIntervalField">
+            <label class="add-task-label" for="modalTaskScheduleValue">Interval</label>
+            <select id="modalTaskScheduleValue" class="tracking-select">
+              <option value="15m">Every 15m</option>
+              <option value="30m" selected>Every 30m</option>
+              <option value="1h">Every 1h</option>
+              <option value="2h">Every 2h</option>
+              <option value="4h">Every 4h</option>
+            </select>
+          </div>
+          <div class="add-task-field d-none" id="modalTaskOneTimeField">
+            <label class="add-task-label" for="modalTaskOneTimeAt">Run at</label>
+            <input id="modalTaskOneTimeAt" class="tracking-input" type="datetime-local" />
+          </div>
+        </div>
+        <div class="add-task-modal-row d-none" id="modalTaskWeeklyPanel">
+          <div class="add-task-field">
+            <label class="add-task-label">Days &amp; Times</label>
+            <div class="weekly-days-row">
+              <label class="weekly-day-label active"><input type="checkbox" class="modal-weekly-day-cb" value="mon" checked />Mon</label>
+              <label class="weekly-day-label active"><input type="checkbox" class="modal-weekly-day-cb" value="tue" checked />Tue</label>
+              <label class="weekly-day-label active"><input type="checkbox" class="modal-weekly-day-cb" value="wed" checked />Wed</label>
+              <label class="weekly-day-label active"><input type="checkbox" class="modal-weekly-day-cb" value="thu" checked />Thu</label>
+              <label class="weekly-day-label active"><input type="checkbox" class="modal-weekly-day-cb" value="fri" checked />Fri</label>
+              <label class="weekly-day-label"><input type="checkbox" class="modal-weekly-day-cb" value="sat" />Sat</label>
+              <label class="weekly-day-label"><input type="checkbox" class="modal-weekly-day-cb" value="sun" />Sun</label>
+            </div>
+            <div class="weekly-times-row">
+              <label class="add-task-label">Times</label>
+              <div class="weekly-time-slots" id="modalTaskTimeSlots">
+                <div class="weekly-time-slot">
+                  <input type="time" class="tracking-input weekly-time-picker" value="08:00" />
+                </div>
+                <div class="weekly-time-slot">
+                  <input type="time" class="tracking-input weekly-time-picker" value="12:00" />
+                  <button type="button" class="weekly-time-remove" title="Remove">&times;</button>
+                </div>
+              </div>
+              <button type="button" class="small-btn weekly-time-add" id="modalTaskAddTime">+ Add</button>
+            </div>
+          </div>
+        </div>
+        <div class="add-task-modal-row">
+          <div class="signal-filter signal-filter--flush" id="modalTaskSignals">
+            <span class="signal-filter-label">Signals:</span>
+            <label class="signal-checkbox active"><input type="checkbox" value="email" checked /><span class="signal-icon">\u2709\ufe0f</span><span class="signal-label">Email</span></label>
+            <label class="signal-checkbox active"><input type="checkbox" value="chat" checked /><span class="signal-icon">\uD83D\uDCAC</span><span class="signal-label">Chat</span></label>
+            <label class="signal-checkbox active"><input type="checkbox" value="meeting" checked /><span class="signal-icon">\uD83D\uDCC5</span><span class="signal-label">Meetings</span></label>
+            <label class="signal-checkbox active"><input type="checkbox" value="doc" checked /><span class="signal-icon">\uD83D\uDCC4</span><span class="signal-label">Documents</span></label>
+          </div>
+        </div>
+        <div class="add-task-modal-row">
+          <div class="add-task-field add-task-field-grow">
+            <label class="add-task-label" for="modalTaskContext">Monitoring Context</label>
+            <textarea id="modalTaskContext" class="tracking-textarea" placeholder="What should WorkIQ look for when refreshing this task?"></textarea>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="small-btn primary" id="modalTaskCreate">Create Task</button>
+          <button class="small-btn" data-add-task-modal-close>Cancel</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Bind schedule type toggle
+  const typeSelect = modal.querySelector('#modalTaskScheduleType');
+  if (typeSelect) {
+    typeSelect.addEventListener('change', () => {
+      const val = typeSelect.value;
+      const intervalField = modal.querySelector('#modalTaskIntervalField');
+      const oneTimeField = modal.querySelector('#modalTaskOneTimeField');
+      const weeklyPanel = modal.querySelector('#modalTaskWeeklyPanel');
+      if (intervalField) intervalField.classList.toggle('d-none', val !== 'interval');
+      if (oneTimeField) oneTimeField.classList.toggle('d-none', val !== 'one-time');
+      if (weeklyPanel) weeklyPanel.classList.toggle('d-none', val !== 'weekly');
+    });
+  }
+
+  // Bind weekly day checkboxes
+  const weeklyPanel = modal.querySelector('#modalTaskWeeklyPanel');
+  if (weeklyPanel) {
+    weeklyPanel.addEventListener('change', (event) => {
+      const cb = event.target.closest('.modal-weekly-day-cb');
+      if (cb) {
+        const label = cb.closest('.weekly-day-label');
+        if (label) label.classList.toggle('active', cb.checked);
+        const anyChecked = weeklyPanel.querySelector('.modal-weekly-day-cb:checked');
+        if (!anyChecked) { cb.checked = true; if (label) label.classList.add('active'); }
+      }
+    });
+  }
+
+  // Bind weekly time add/remove
+  const addTimeBtn = modal.querySelector('#modalTaskAddTime');
+  if (addTimeBtn) {
+    addTimeBtn.addEventListener('click', () => {
+      const slotsContainer = modal.querySelector('#modalTaskTimeSlots');
+      if (!slotsContainer) return;
+      const existing = [...slotsContainer.querySelectorAll('.weekly-time-picker')].map((inp) => inp.value).filter(Boolean);
+      existing.push('09:00');
+      slotsContainer.innerHTML = existing.map((t) => `
+        <div class="weekly-time-slot">
+          <input type="time" class="tracking-input weekly-time-picker" value="${escapeHtml(t)}" />
+          ${existing.length > 1 ? '<button type="button" class="weekly-time-remove" title="Remove">&times;</button>' : ''}
+        </div>
+      `).join('');
+    });
+  }
+  modal.addEventListener('click', (event) => {
+    const removeBtn = event.target.closest('.weekly-time-remove');
+    if (removeBtn) {
+      const slot = removeBtn.closest('.weekly-time-slot');
+      const slotsContainer = modal.querySelector('#modalTaskTimeSlots');
+      if (!slot || !slotsContainer) return;
+      const allSlots = [...slotsContainer.querySelectorAll('.weekly-time-slot')];
+      if (allSlots.length <= 1) return;
+      slot.remove();
+    }
+  });
+
+  // Bind signal checkboxes
+  const signalContainer = modal.querySelector('#modalTaskSignals');
+  if (signalContainer) {
+    signalContainer.addEventListener('change', (event) => {
+      const cb = event.target.closest('input[type="checkbox"]');
+      if (!cb) return;
+      const label = cb.closest('.signal-checkbox');
+      if (label) label.classList.toggle('active', cb.checked);
+      const anyChecked = signalContainer.querySelector('input[type="checkbox"]:checked');
+      if (!anyChecked) { cb.checked = true; if (label) label.classList.add('active'); }
+    });
+  }
+
+  // Bind create button
+  const createBtn = modal.querySelector('#modalTaskCreate');
+  if (createBtn) {
+    createBtn.addEventListener('click', () => {
+      const selectedScannerId = modal.querySelector('#modalTaskScanner')?.value || null;
+      const scheduleType = modal.querySelector('#modalTaskScheduleType')?.value || 'interval';
+
+      let weeklyDays, weeklyTimes;
+      if (scheduleType === 'weekly') {
+        weeklyDays = [...modal.querySelectorAll('.modal-weekly-day-cb:checked')].map((cb) => cb.value).filter(Boolean);
+        weeklyTimes = [...modal.querySelectorAll('#modalTaskTimeSlots .weekly-time-picker')].map((inp) => inp.value).filter(Boolean);
+      }
+
+      const signals = [...modal.querySelectorAll('#modalTaskSignals input[type="checkbox"]:checked')].map((cb) => cb.value).filter(Boolean);
+
+      const trackingItem = createTrackingItemFromParams({
+        title: modal.querySelector('#modalTaskTitle')?.value || '',
+        context: modal.querySelector('#modalTaskContext')?.value || '',
+        severity: modal.querySelector('#modalTaskSeverity')?.value || 'Observe',
+        scheduleType,
+        scheduleValue: modal.querySelector('#modalTaskScheduleValue')?.value || '30m',
+        oneTimeAt: modal.querySelector('#modalTaskOneTimeAt')?.value || '',
+        weeklyDays,
+        weeklyTimes,
+        signals,
+        notifyEnabled: true,
+        scannerId: selectedScannerId,
+      });
+
+      if (!trackingItem) return;
+
+      closeAddTaskModal();
+      renderRadarMode();
+      highlightNewItem(trackingItem.id);
+      showToast(`Task created: ${trackingItem.title}`, { icon: '\u2713' });
+    });
+  }
+
+  // Bind close/cancel
+  modal.querySelector('[data-add-task-modal-close]')?.addEventListener('click', closeAddTaskModal);
+
+  // Close on backdrop click
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) closeAddTaskModal();
+  });
+
+  // Enter key submits
+  const titleInput = modal.querySelector('#modalTaskTitle');
+  if (titleInput) {
+    titleInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        createBtn?.click();
+      }
+    });
+  }
+
+  modal.classList.add('show');
+
+  // Focus the title input
+  titleInput?.focus();
+}
+
+function closeAddTaskModal() {
+  const modal = document.getElementById('addTaskModal');
   if (modal) {
     modal.classList.remove('show');
     modal.innerHTML = '';
