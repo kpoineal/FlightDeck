@@ -741,7 +741,44 @@ function bindEvents() {
 
     const markSeenButton = event.target.closest('[data-mark-seen-id]');
     if (markSeenButton) {
-      handleMarkSeenClick(markSeenButton.getAttribute('data-mark-seen-id'), renderRadarMode);
+      const itemId = markSeenButton.getAttribute('data-mark-seen-id');
+      handleMarkSeenClick(itemId, () => {
+        // Update card/row in-place instead of full DOM rebuild
+        const wrapper = elements.radarList.querySelector(`[data-tracker-id="${CSS.escape(itemId)}"]`);
+        if (wrapper) {
+          // Remove new-item visual states
+          wrapper.classList.remove('has-new-update', 'is-new');
+          wrapper.setAttribute('data-item-new', 'false');
+          // Remove "New" badge
+          const badge = wrapper.querySelector('.tracker-new-badge');
+          if (badge) badge.remove();
+          const badgePill = wrapper.querySelector('.badge-pill');
+          if (badgePill) badgePill.remove();
+          // Remove green glow outline
+          const row = wrapper.querySelector('.tracker-row');
+          if (row) row.classList.remove('has-new-update');
+          // Hide the "Mark as Seen" button
+          markSeenButton.style.display = 'none';
+        }
+        // Update the scanner header pill counts (new count changed)
+        const section = wrapper?.closest('.radar-section');
+        const sourceId = section?.querySelector('.radar-section-header')?.getAttribute('data-source-id');
+        if (sourceId) {
+          // Recount new items in this section
+          const items = section.querySelectorAll('[data-item-new]');
+          let newCount = 0;
+          items.forEach((el) => { if (el.getAttribute('data-item-new') === 'true') newCount++; });
+          const newIndicator = section.querySelector('.radar-new-indicator');
+          if (newIndicator) {
+            if (newCount > 0) {
+              newIndicator.textContent = newCount + ' new';
+              newIndicator.title = newCount + ' new or updated — click to filter';
+            } else {
+              newIndicator.remove();
+            }
+          }
+        }
+      });
       return;
     }
 
