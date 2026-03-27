@@ -56,6 +56,29 @@ async function monitorTaskItem(item, { manual = false } = {}) {
     item.summary = cleanDisplayText(payload.summary || item.summary || '');
     item.reason = cleanDisplayText(payload.reason || item.reason || '');
     item.status = cleanDisplayText(payload.status || item.status || 'Monitoring');
+
+    // Auto-update lifecycle status based on AI-reported status
+    const statusLower = (item.status || '').toLowerCase();
+    if (statusLower.includes('blocked') || statusLower.includes('stalled')) {
+      if (item.lifecycleStatus === 'in-progress') {
+        item.lifecycleStatus = 'blocked';
+      }
+    } else if (statusLower.includes('waiting') || statusLower.includes('pending')) {
+      if (item.lifecycleStatus === 'in-progress') {
+        item.lifecycleStatus = 'waiting';
+      }
+    } else if (statusLower.includes('resolved') || statusLower.includes('complete') || statusLower.includes('closed')) {
+      if (item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived') {
+        item.lifecycleStatus = 'complete';
+        item.monitorEnabled = false;
+        item.nextRunAt = null;
+      }
+    } else if (statusLower.includes('in progress') || statusLower.includes('active') || statusLower.includes('ongoing')) {
+      if (item.lifecycleStatus === 'blocked' || item.lifecycleStatus === 'waiting') {
+        item.lifecycleStatus = 'in-progress';
+      }
+    }
+
     item.severity = normalizeSeverity(payload.severity || item.severity);
     item.dueAt = payload.dueAt || item.dueAt || null;
     item.owner = cleanDisplayText(payload.owner || item.owner || 'You');
@@ -102,7 +125,15 @@ async function monitorTaskItem(item, { manual = false } = {}) {
       curatedLinks.push(link);
       seenUrls.add(link.url);
     }
-    item.evidenceLinks = curatedLinks;
+    // Merge: preserve previous links not in the new set, then add new ones
+    const mergedLinks = [...curatedLinks];
+    const curatedUrls = new Set(curatedLinks.map((e) => e.url));
+    for (const prev of prevLinks) {
+      if (prev.url && !curatedUrls.has(prev.url)) {
+        mergedLinks.push(prev);
+      }
+    }
+    item.evidenceLinks = mergedLinks;
     // Identify truly new links for change-tracking purposes
     const prevUrls = new Set(prevLinks.map((e) => e.url));
     discoveredLinks = curatedLinks.filter((e) => !prevUrls.has(e.url));
@@ -141,7 +172,7 @@ async function monitorTaskItem(item, { manual = false } = {}) {
     // stands out in the timeline and isn't conflated with content updates.
     if (severityChanged) {
       item.updateHistory.unshift({
-        timestamp: prevRunAt || nowIso(),
+        timestamp: nowIso(),
         changes: [`Severity: ${prevSeverity} → ${item.severity}`],
         summary: '',
         status: item.status,
@@ -153,7 +184,7 @@ async function monitorTaskItem(item, { manual = false } = {}) {
     // Record the content/links update entry (skip if severity was the only change)
     if (changes.length) {
       item.updateHistory.unshift({
-        timestamp: prevRunAt || nowIso(),
+        timestamp: nowIso(),
         changes,
         summary: prevSummary || '',
         status: item.status,
@@ -208,7 +239,7 @@ async function runDueMonitoringChecks() {
   }
 
   const nowMs = Date.now();
-  const dueItems = state.trackingItems.filter((item) => {
+  const dueItems = state.items.filter((item) => {
     if (!item.monitorEnabled || !item.nextRunAt) return false;
     const dueAt = new Date(item.nextRunAt).getTime();
     return Number.isFinite(dueAt) && dueAt <= nowMs;
@@ -230,18 +261,18 @@ async function runDueMonitoringChecks() {
         item.nextRunAt = computeNextRunAt(item);
         addHistory('failure', `Task monitor failed for ${item.title}: ${error.message}`, { itemId: item.id });
       }
-      // Re-render after each item so the UI updates as soon as each check
-      // completes — keeps toast notifications and card state in sync.
-      renderTrackingMode();
+      // Incremental DOM update — patch only the item that changed
+      // instead of rebuilding the entire list (avoids visible flash).
+      patchSingleItem(item.id);
+      renderKpis();
     }
   } finally {
     monitorCycleInProgress = false;
     setStatus('Updated');
     setUpdatedNow();
     savePersistentState();
-    // Guaranteed final render — covers edge cases where per-item renders
-    // were skipped or the loop exited unexpectedly.
-    renderTrackingMode();
+    // Final KPI sync — individual items were already patched in-place.
+    renderKpis();
   }
 }
 

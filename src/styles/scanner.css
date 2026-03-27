@@ -1,0 +1,106 @@
+/* ── FlightDeck Scanner Management ── */
+
+/* ── Scanner form ── */
+.scanner-form {
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+}
+.scanner-form-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.scanner-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+}
+.scanner-form-field-grow {
+  flex: 1;
+  min-width: 200px;
+}
+.scanner-form-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.scanner-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Options section ── */
+.scanner-form-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-top: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border-card);
+}
+.scanner-form-options {
+  align-items: flex-start;
+}
+.scanner-signal-types {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.scanner-signal-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-card);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.scanner-signal-label.active {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+.scanner-signal-label input {
+  display: none;
+}
+.scanner-form-toggles {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.scanner-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.scanner-toggle-label input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+.scanner-input-narrow {
+  width: 70px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  .scanner-form-row {
+    flex-direction: column;
+  }
+}

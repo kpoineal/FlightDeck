@@ -153,31 +153,47 @@ function timelineRelativeLabel(isoStr) {
     + ', ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-function buildActivityTimelineHtml(updateHistory) {
-  if (!Array.isArray(updateHistory) || updateHistory.length < 2) return '';
-  // newest first (top → bottom)
-  const entries = updateHistory.slice();
+function buildActivityTimelineHtml(updateHistory, options = {}) {
+  const { maxVisible, itemId, item } = options;
+  let entries = Array.isArray(updateHistory) ? updateHistory.slice() : [];
 
-  const events = entries.map((e, i) => {
+  // Synthesize an initial timeline entry from the item when history is empty
+  if (!entries.length && item) {
+    entries = [{
+      timestamp: item.trackedAt || item.lastRunAt || item.discoveredAt || new Date().toISOString(),
+      changes: ['Initial scan'],
+      summary: item.summary || '',
+      severity: item.severity,
+      status: item.status,
+      newLinks: Array.isArray(item.evidenceLinks) ? item.evidenceLinks.slice(0, 3) : [],
+    }];
+  }
+
+  if (!entries.length) return '';
+
+  function renderEvent(e, i) {
     const color = severityColor(e.severity);
     const label = severityLabel(e.severity);
     const timeLabel = timelineRelativeLabel(e.timestamp);
     const changeSummary = Array.isArray(e.changes) ? e.changes.join(' · ') : '';
     const isNewest = i === 0;
     const isLast = i === entries.length - 1;
+    const isUnseen = e.seen === false;
 
-    // Show severity transition indicator between events
     const prevSeverity = i > 0 ? (entries[i - 1].severity || '').toLowerCase() : null;
     const curSeverity = (e.severity || '').toLowerCase();
     const sevChanged = prevSeverity && prevSeverity !== curSeverity;
     const escalated = sevChanged && (curSeverity === 'critical' || (curSeverity === 'elevated' && prevSeverity === 'observe'));
 
-    // Build link chips if newLinks exist
     const linkChips = Array.isArray(e.newLinks) && e.newLinks.length
       ? `<span class="at-links">${e.newLinks.map((l) => `<a class="at-link-chip" href="${escapeHtml(l.url)}" target="_blank" rel="noreferrer">${escapeHtml(l.label || 'link')}</a>`).join('')}</span>`
       : '';
 
-    return `<div class="at-event${isNewest ? ' at-event--newest' : ''}" style="--at-color: ${color}; --at-delay: ${i * 30}ms" data-at-index="${i}">
+    const summaryText = e.summary || '';
+    const showSummary = summaryText && summaryText !== changeSummary;
+    const summaryHtml = showSummary ? `<p class="at-summary">${escapeHtml(summaryText)}</p>` : '';
+
+    return `<div class="at-event${isNewest ? ' at-event--newest' : ''}${isUnseen ? ' at-event--unseen' : ''}" style="--at-color: ${color}; --at-delay: ${i * 30}ms" data-at-index="${i}">
       <div class="at-track">
         <div class="at-node">
           ${isNewest ? '<div class="at-node-ring"></div>' : ''}
@@ -188,22 +204,26 @@ function buildActivityTimelineHtml(updateHistory) {
       <div class="at-card">
         <div class="at-card-head">
           <span class="at-time">${escapeHtml(timeLabel)}</span>
-          <span class="at-severity pill severity-${escapeHtml(curSeverity)}">${escapeHtml(label)}</span>
+          ${!isNewest ? `<span class="at-severity pill severity-${escapeHtml(curSeverity)}">${escapeHtml(label)}</span>` : ''}
           ${sevChanged ? `<span class="at-transition-badge">${escalated ? '▲' : '▼'}</span>` : ''}
         </div>
         <p class="at-changes">${escapeHtml(changeSummary || 'No changes recorded')}</p>
+        ${summaryHtml}
         ${linkChips}
       </div>
     </div>`;
-  });
+  }
 
-  return `
-    <button class="tracker-section-toggle expanded" data-timeline-toggle-id="timeline">
-      <span class="chevron chevron--expanded">&#9654;</span> Activity Timeline (${entries.length} events)
-    </button>
-    <div class="tracker-section-panel show" data-timeline-panel-id="timeline">
-      <div class="activity-timeline">${events.join('')}</div>
-    </div>`;
+  const allEventsHtml = entries.map((e, i) => renderEvent(e, i));
+
+  if (maxVisible && maxVisible < entries.length) {
+    const visible = allEventsHtml.slice(0, maxVisible).join('');
+    const hidden = allEventsHtml.slice(maxVisible).join('');
+    const hiddenCount = entries.length - maxVisible;
+    return `<div class="activity-timeline">${visible}<button class="at-show-older" data-at-show-older>Show ${hiddenCount} older</button><div class="at-hidden-events d-none">${hidden}</div></div>`;
+  }
+
+  return `<div class="activity-timeline">${allEventsHtml.join('')}</div>`;
 }
 function buildNextStepHintsHtml(item, alwaysShow = false) {
   const steps = Array.isArray(item?.suggestedNextSteps) ? item.suggestedNextSteps : [];
@@ -487,14 +507,239 @@ function restoreTrackingUiState(saved) {
   }
 }
 
-function renderTrackingMode() {
-  if (!state.trackingItems.length) {
-    elements.trackingList.innerHTML = '<div class="empty">No tracked items yet. Add a custom monitored task above or track an item from Radar.</div>';
-    renderKpis();
-    return;
-  }
+function buildCardTabsHtml(item) {
+  const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
+  const unseenCount = unseenHistoryCount(item);
+  const hasNew = item.hasNewUpdate === true || item.isNew === true;
+  const people = Array.isArray(item.counterparties) && item.counterparties.length
+    ? item.counterparties.join(', ')
+    : 'No counterparties listed';
 
-  // Sync density toggle icon state
+  const historyCount = historyEntries.length;
+  let historyBadgeClass = '';
+  if (unseenCount >= 6) historyBadgeClass = 'history-badge--critical';
+  else if (unseenCount >= 3) historyBadgeClass = 'history-badge--elevated';
+  else if (unseenCount >= 1) historyBadgeClass = 'history-badge--observe';
+
+  const linksHtml = (() => {
+    const links = Array.isArray(item.evidenceLinks) ? item.evidenceLinks.filter((e) => e && e.url) : [];
+    if (!links.length) return '<div class="empty text-sm">No links yet.</div>';
+    return `<ul class="source-list">${links.map((e) => {
+      const recency = signalRecencyLabel(e.signalAt);
+      return `<li><a href="${escapeHtml(e.url)}" target="_blank" rel="noreferrer">${escapeHtml(e.label || 'source')}</a>${recency ? ` <span class="source-recency">(${escapeHtml(recency)})</span>` : ''}</li>`;
+    }).join('')}</ul>`;
+  })();
+
+  return `
+    <div class="card-tabs" data-card-tabs-id="${escapeHtml(item.id)}">
+      <div class="card-tab-bar">
+        <button class="card-tab active" title="Activity Timeline" data-card-tab="summary" data-card-tab-item-id="${escapeHtml(item.id)}"><span class="card-tab-icon">⏱️</span><span class="card-tab-label">Activity</span>${unseenCount > 0 ? `<span class="card-tab-badge ${historyBadgeClass}">${unseenCount}</span>` : ''}</button>
+        <button class="card-tab" title="Overview" data-card-tab="overview" data-card-tab-item-id="${escapeHtml(item.id)}"><span class="card-tab-icon">\uD83D\uDCCB</span><span class="card-tab-label">Overview</span></button>
+        <button class="card-tab" title="Monitoring" data-card-tab="monitor" data-card-tab-item-id="${escapeHtml(item.id)}"><span class="card-tab-icon">\u2699\uFE0F</span><span class="card-tab-label">Monitor</span></button>
+      </div>
+      <div class="card-tab-panel active" data-card-tab-panel="summary" data-card-tab-panel-item-id="${escapeHtml(item.id)}">
+        ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
+        ${buildActivityTimelineHtml(item.updateHistory, { maxVisible: 3, itemId: item.id, item })}
+      </div>
+      <div class="card-tab-panel" data-card-tab-panel="overview" data-card-tab-panel-item-id="${escapeHtml(item.id)}">
+        ${buildNextStepHintsHtml(item)}
+        <div class="tracker-meta">
+          <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
+          <span>Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
+          <span>Owner: <span class="editable-field" data-edit-field="owner" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.owner ? escapeHtml(item.owner) : '<span class="field-placeholder">Set owner</span>'}</span></span>
+        </div>
+        <div class="tracker-timestamp">
+          Tracked: ${escapeHtml(safeDate(item.trackedAt, 'Unknown'))} \u00b7 Last checked: ${escapeHtml(safeDate(item.lastRunAt, 'Never'))}
+        </div>
+        <div class="card-tab-section">
+          <h4 class="card-tab-section-title">People (${Array.isArray(item.counterparties) ? item.counterparties.length : 0})</h4>
+          <p class="people-text">${escapeHtml(people)}</p>
+        </div>
+        <div class="card-tab-section">
+          <h4 class="card-tab-section-title">Links</h4>
+          ${linksHtml}
+        </div>
+      </div>
+      <div class="card-tab-panel" data-card-tab-panel="monitor" data-card-tab-panel-item-id="${escapeHtml(item.id)}">
+        <div class="monitor-source-section">
+          <label class="monitor-source-label">Source</label>
+          <select class="monitor-source-select" data-move-to-scanner-id="${escapeHtml(item.id)}">
+            <option value=""${!item.scannerId ? ' selected' : ''}>📡 Radar</option>
+            ${(state.scanners || []).map(s => `<option value="${escapeHtml(s.id)}"${item.scannerId === s.id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="tracker-schedule-bar">
+          <div class="tracking-inline">
+            <label><input type="checkbox" data-monitor-enabled-id="${escapeHtml(item.id)}" ${item.monitorEnabled !== false ? 'checked' : ''} /> Enabled</label>
+            <label><input type="checkbox" data-notify-enabled-id="${escapeHtml(item.id)}" ${item.notifyEnabled !== false ? 'checked' : ''} /> Notifications</label>
+            ${buildWorkHoursToggleHtml(item)}
+            ${buildScheduleControlsHtml(item)}
+            <button class="small-btn" data-monitor-run-now-id="${escapeHtml(item.id)}">Run check now</button>
+          </div>
+          ${buildSignalFilterHtml(item)}
+          <p class="task-next-run">Next run: ${escapeHtml(safeDate(item.nextRunAt, 'Not scheduled'))}</p>
+          <button class="tracker-prompt-toggle" data-prompt-toggle-id="${escapeHtml(item.id)}">
+            <span class="chevron">&#9654;</span> Edit monitoring prompt
+          </button>
+          <div class="tracker-prompt-panel" data-prompt-panel-id="${escapeHtml(item.id)}">
+            <textarea class="tracking-textarea" data-monitor-prompt-id="${escapeHtml(item.id)}" placeholder="Monitoring context for WorkIQ">${escapeHtml(item.monitorPrompt || '')}</textarea>
+          </div>
+          <div class="monitor-danger-zone">
+            <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete this item</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function buildTrackingCard(item) {
+  const hasNew = item.hasNewUpdate === true || item.isNew === true;
+  const unseenCount = unseenHistoryCount(item);
+
+  return `
+    <article class="tracker-card ${hasNew ? 'has-new-update is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}">
+      <div class="tracker-head">
+        <div class="tracker-head-left">
+          <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
+            <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
+            <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
+            <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
+          </select>
+          <select class="status-select status-${item.lifecycleStatus || 'in-progress'}" data-status-select-id="${escapeHtml(item.id)}">
+            ${LIFECYCLE_STATUSES.map(s => `<option value="${escapeHtml(s)}" ${item.lifecycleStatus === s ? 'selected' : ''}>${escapeHtml(LIFECYCLE_LABELS[s])}</option>`).join('')}
+          </select>
+        </div>
+        <div class="tracker-head-right">
+          ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
+          ${hasNew ? '<span class="tracker-new-badge">' + (unseenCount > 1 ? unseenCount + ' ' : '') + 'New</span>' : (() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? '<span class="pill last-updated-pill" title="Last update: ' + escapeHtml(safeDate(lastUpdate)) + '">' + escapeHtml(rt) + '</span>' : ''; })()}
+          <button class="popout-icon-btn" data-popout-id="${escapeHtml(item.id)}" title="Pop Out" aria-label="Pop out">\u2197</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="item-title-wrap">
+          <h3 class="tracker-title">
+            <span class="item-title-text editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
+            <button class="edit-field-btn" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Edit title" aria-label="Edit title">\u270f\ufe0f</button>
+          </h3>
+        </div>
+        ${buildCardTabsHtml(item)}
+        <div class="action-row">
+          ${(hasNew || unseenCount > 0) ? '<button class="small-btn primary" data-mark-seen-id="' + escapeHtml(item.id) + '">Mark as Seen</button>' : ''}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function buildTrackingRow(item, expandedRowId) {
+  const hasNew = item.hasNewUpdate === true || item.isNew === true;
+  const unseenCount = unseenHistoryCount(item);
+  const isExpanded = item.id === expandedRowId;
+  const people = Array.isArray(item.counterparties) && item.counterparties.length
+    ? item.counterparties.join(', ')
+    : 'No counterparties listed';
+  const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
+
+  const linksBlock = (() => {
+    const links = Array.isArray(item.evidenceLinks) ? item.evidenceLinks.filter((e) => e && e.url) : [];
+    if (!links.length) return '';
+    const linksHtml = links.map((e) => {
+      const recency = signalRecencyLabel(e.signalAt);
+      return `<li><a href="${escapeHtml(e.url)}" target="_blank" rel="noreferrer">${escapeHtml(e.label || 'source')}</a>${recency ? ` <span class="source-recency">(${escapeHtml(recency)})</span>` : ''}</li>`;
+    }).join('');
+    return `
+      <button class="tracker-section-toggle expanded" data-links-toggle-id="${escapeHtml(item.id)}">
+        <span class="chevron chevron--expanded">&#9654;</span> Links (${links.length})
+      </button>
+      <div class="tracker-section-panel show" data-links-panel-id="${escapeHtml(item.id)}">
+        <ul class="source-list">${linksHtml}</ul>
+      </div>`;
+  })();
+
+  return `
+  <div class="tracker-row-wrapper ${hasNew ? 'is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}">
+    <div class="tracker-row ${hasNew ? 'has-new-update' : ''} ${isExpanded ? 'expanded' : ''}" data-row-toggle-id="${escapeHtml(item.id)}">
+      <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
+        <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
+        <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
+        <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
+      </select>
+      <select class="status-select status-${item.lifecycleStatus || 'in-progress'}" data-status-select-id="${escapeHtml(item.id)}">
+        ${LIFECYCLE_STATUSES.map(s => `<option value="${escapeHtml(s)}" ${item.lifecycleStatus === s ? 'selected' : ''}>${escapeHtml(LIFECYCLE_LABELS[s])}</option>`).join('')}
+      </select>
+      ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
+      ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
+      ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
+      <span class="tracker-row-title">
+        <span class="editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
+      </span>
+      <span class="tracker-row-summary">${escapeHtml((item.summary || '').replace(/\n/g, ' ').slice(0, 140))}${(item.summary || '').length > 140 ? '\u2026' : ''}</span>
+      <span class="tracker-row-due">
+        <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due</span>'}</span>
+      </span>
+      <span class="row-expand-chevron ${isExpanded ? 'open' : ''}">&#9660;</span>
+    </div>
+    <div class="tracker-row-detail ${isExpanded ? 'show' : ''}">
+      ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? '<div class="tracker-updated-at">Updated: ' + escapeHtml(timeStr) + ' (' + escapeHtml(rt) + ')</div>' : ''; })()}
+      ${buildActivityTimelineHtml(item.updateHistory, { maxVisible: 3, itemId: item.id, item })}
+      ${buildNextStepHintsHtml(item)}
+      <div class="tracker-meta">
+        <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
+        <span>Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
+        <span>Owner: <span class="editable-field" data-edit-field="owner" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.owner ? escapeHtml(item.owner) : '<span class="field-placeholder">Set owner</span>'}</span></span>
+      </div>
+      <div class="tracker-timestamp">
+        Tracked: ${escapeHtml(safeDate(item.trackedAt, 'Unknown'))} \u00b7 Last checked: ${escapeHtml(safeDate(item.lastRunAt, 'Never'))}
+      </div>
+      <button class="tracker-section-toggle expanded" data-people-toggle-id="${escapeHtml(item.id)}">
+        <span class="chevron chevron--expanded">&#9654;</span> People (${(Array.isArray(item.counterparties) ? item.counterparties.length : 0)})
+      </button>
+      <div class="tracker-section-panel show" data-people-panel-id="${escapeHtml(item.id)}">
+        <p class="people-text">${escapeHtml(people)}</p>
+      </div>
+      ${linksBlock}
+
+      <button class="tracker-section-toggle" data-monitoring-toggle-id="${escapeHtml(item.id)}">
+        <span class="chevron">&#9654;</span> Monitoring
+      </button>
+      <div class="tracker-section-panel" data-monitoring-panel-id="${escapeHtml(item.id)}">
+        <div class="tracker-schedule-bar">
+          <div class="tracking-inline">
+            <label><input type="checkbox" data-monitor-enabled-id="${escapeHtml(item.id)}" ${item.monitorEnabled !== false ? 'checked' : ''} /> Enabled</label>
+            <label><input type="checkbox" data-notify-enabled-id="${escapeHtml(item.id)}" ${item.notifyEnabled !== false ? 'checked' : ''} /> Notifications</label>
+            ${buildWorkHoursToggleHtml(item)}
+            ${buildScheduleControlsHtml(item)}
+            <button class="small-btn" data-monitor-run-now-id="${escapeHtml(item.id)}">Run check now</button>
+          </div>
+          ${buildSignalFilterHtml(item)}
+          <p class="task-next-run">Next run: ${escapeHtml(safeDate(item.nextRunAt, 'Not scheduled'))}</p>
+          <button class="tracker-prompt-toggle" data-prompt-toggle-id="${escapeHtml(item.id)}">
+            <span class="chevron">&#9654;</span> Edit monitoring prompt
+          </button>
+          <div class="tracker-prompt-panel" data-prompt-panel-id="${escapeHtml(item.id)}">
+            <textarea class="tracking-textarea" data-monitor-prompt-id="${escapeHtml(item.id)}" placeholder="Monitoring context for WorkIQ">${escapeHtml(item.monitorPrompt || '')}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        ${(hasNew || unseenCount > 0) ? '<button class="small-btn primary" data-mark-seen-id="' + escapeHtml(item.id) + '">Mark as Seen</button>' : ''}
+        <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
+        <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+function renderTrackingMode() {
+  renderRadarMode();
+}
+
+// --- Old renderTrackingMode body removed --- unified into renderRadarMode
+/* eslint-disable */
+void function _deadCode() {
+// Sync density toggle icon state
   const densityBtn = document.getElementById('densityToggleBtn');
   if (densityBtn) {
     densityBtn.classList.toggle('is-minimal', state.trackingDensity === 'minimal');
@@ -511,7 +756,7 @@ function renderTrackingMode() {
 
   if (isMinimal) {
     elements.trackingList.innerHTML = sortedItems.map((item) => {
-      const hasNew = item.hasNewUpdate === true;
+      const hasNew = item.hasNewUpdate === true || item.isNew === true;
       const unseenCount = unseenHistoryCount(item);
       const isExpanded = item.id === savedUiState.expandedRowId;
       const people = Array.isArray(item.counterparties) && item.counterparties.length
@@ -538,7 +783,7 @@ function renderTrackingMode() {
       const historyMarkup = buildTrackerHistoryMarkup(item, 'No history yet.');
 
       return `
-      <div class="tracker-row-wrapper" data-tracker-id="${escapeHtml(item.id)}">
+      <div class="tracker-row-wrapper ${hasNew ? 'is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}">
         <div class="tracker-row ${hasNew ? 'has-new-update' : ''} ${isExpanded ? 'expanded' : ''}" data-row-toggle-id="${escapeHtml(item.id)}">
           <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
             <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
@@ -547,7 +792,7 @@ function renderTrackingMode() {
           </select>
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
           ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
-          ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}${timeStr ? ' · ' + escapeHtml(timeStr) : ''}</span>` : ''; })()}
+          ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
           <span class="tracker-row-title">
             <span class="editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
           </span>
@@ -600,15 +845,9 @@ function renderTrackingMode() {
             </div>
           </div>
 
-          <button class="tracker-section-toggle" data-history-toggle-id="${escapeHtml(item.id)}">
-            <span class="chevron">&#9654;</span> Change History (${historyEntries.length})${unseenCount > 1 ? ` · <span class="history-unseen-count">${unseenCount} unseen</span>` : ''}
-          </button>
-          <div class="tracker-section-panel" data-history-panel-id="${escapeHtml(item.id)}">
-            ${historyMarkup}
-          </div>
 
           <div class="action-row">
-            ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
+            ${(hasNew || unseenCount > 0) ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
             <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
             <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
           </div>
@@ -629,7 +868,7 @@ function renderTrackingMode() {
 
   elements.trackingList.innerHTML = sortedItems.map((item) => {
     const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
-    const hasNew = item.hasNewUpdate === true;
+    const hasNew = item.hasNewUpdate === true || item.isNew === true;
     const people = Array.isArray(item.counterparties) && item.counterparties.length
       ? item.counterparties.join(', ')
       : 'No counterparties listed';
@@ -646,6 +885,9 @@ function renderTrackingMode() {
             <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
             <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
           </select>
+          <select class="status-select status-${item.lifecycleStatus || 'in-progress'}" data-status-select-id="${escapeHtml(item.id)}">
+            ${LIFECYCLE_STATUSES.map(s => `<option value="${escapeHtml(s)}" ${item.lifecycleStatus === s ? 'selected' : ''}>${escapeHtml(LIFECYCLE_LABELS[s])}</option>`).join('')}
+          </select>
         </div>
         <div class="tracker-head-right">
           ${item.monitorEnabled !== false ? '<span class="pill automation-pill">Monitored</span>' : ''}
@@ -654,14 +896,7 @@ function renderTrackingMode() {
       </div>
       <div class="card-body">
         ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
-        <div class="item-title-wrap">
-          <h3 class="tracker-title">
-            <span class="item-title-text editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
-            <button class="edit-field-btn" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Edit title" aria-label="Edit title">✏️</button>
-          </h3>
-        </div>
-        <p class="tracker-summary">${renderMarkdownLinks(item.summary || 'No summary available.')}</p>
-        ${buildNextStepHintsHtml(item)}
+        ${buildActivityTimelineHtml(item.updateHistory, { maxVisible: 3, itemId: item.id, item })}
         <div class="tracker-meta">
           <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
           <span>Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
@@ -715,15 +950,9 @@ function renderTrackingMode() {
           </div>
         </div>
 
-        <button class="tracker-section-toggle" data-history-toggle-id="${escapeHtml(item.id)}">
-          <span class="chevron">&#9654;</span> Change History (${historyEntries.length})${unseenCount > 1 ? ` · <span class="history-unseen-count">${unseenCount} unseen</span>` : ''}
-        </button>
-        <div class="tracker-section-panel" data-history-panel-id="${escapeHtml(item.id)}">
-          ${historyMarkup}
-        </div>
 
         <div class="action-row">
-          ${unseenCount > 0 ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
+          ${(hasNew || unseenCount > 0) ? `<button class="small-btn primary" data-mark-seen-id="${escapeHtml(item.id)}">Mark as Seen</button>` : ''}
           <button class="small-btn popout" data-popout-id="${escapeHtml(item.id)}">&#x2197; Pop Out</button>
           <button class="small-btn warn" data-dismiss-radar-id="${escapeHtml(item.id)}">Delete</button>
         </div>
@@ -740,4 +969,4 @@ function renderTrackingMode() {
     inlineUpdateScheduleControls(elements.trackingList, item.id, item.scheduleType);
   });
   renderKpis();
-}
+}; // end dead code

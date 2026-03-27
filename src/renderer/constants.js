@@ -1,8 +1,6 @@
 // ── FlightDeck constants ─────────────────────────────────────────────
 
-const RADAR_SCAN_JSON_SCHEMA = `
-
-Return only valid JSON and nothing else using this schema:
+const RADAR_SCAN_JSON_SCHEMA = `Return only valid JSON and nothing else using this schema:
 {
   "generatedAt": "ISO-8601 timestamp",
   "kpis": { "critical": number, "elevated": number, "observe": number },
@@ -11,7 +9,7 @@ Return only valid JSON and nothing else using this schema:
       "id": "string",
       "title": "string",
       "severity": "Critical|Elevated|Observe",
-      "sourceType": "Email|Chat|Meeting|Doc",
+      "sourceType": "string (e.g. Email, Chat, Meeting, Doc, DevOps, Planner — describe the signal source)",
       "dueAt": "ISO-8601 or null",
       "owner": "string",
       "counterparties": ["string"],
@@ -21,8 +19,8 @@ Return only valid JSON and nothing else using this schema:
       "evidenceLinks": [
         {
           "label": "descriptive label for the source",
-          "type": "email|chat|meeting|doc",
-          "signalAt": "ISO-8601 timestamp when the email/chat/meeting/doc was sent or updated, or null"
+          "type": "string (e.g. email, chat, meeting, doc, devops, planner — describe the signal source)",
+          "signalAt": "ISO-8601 timestamp when the signal was sent or updated, or null"
         }
       ],
       "suggestedNextSteps": ["string"]
@@ -34,12 +32,10 @@ IMPORTANT:
 - Include your normal response markdown formatting for the summary.
 - Include your normal response in reason as well.
 
-
 Suggested next steps rules:
-- For each radar item, suggest 0-2 specific, concrete next actions the user should take.
-- Each should be a short phrase naming who and what (e.g. 'Reply to Sarah with the revised Q3 timeline', 'Escalate to VP Engineering before Friday deadline').
+- 0-2 specific, completable actions starting with a verb naming WHO and WHAT (e.g. 'Reply to Sarah with the revised Q3 timeline', 'Send Jordan the updated budget spreadsheet').
 - Only suggest actions when genuinely useful. Return an empty array if no action is needed.
-- Never suggest vague actions like 'follow up' without naming who or what specifically.`;
+- Never use vague language: "consider", "think about", "follow up", "look into". Every action must be concrete and completable.`;
 
 const BRIEFING_JSON_SCHEMA = `
 
@@ -164,7 +160,50 @@ const DEFAULT_WEEKLY_TIMES = ['08:00', '12:00'];
 const WORK_HOURS_START_HOUR = 8;
 const WORK_HOURS_END_HOUR = 17;
 
+const LIFECYCLE_STATUSES = ['in-progress', 'blocked', 'waiting', 'complete', 'archived'];
+const LIFECYCLE_LABELS = {
+  'in-progress': 'In Progress',
+  'blocked': 'Blocked',
+  'waiting': 'Waiting',
+  'complete': 'Complete',
+  'archived': 'Archived',
+};
+
+const RADAR_SCANNER_ID = 'scanner_radar_default';
+
+const SCANNER_ENGINE_TICK_MS = 60 * 1000; // 1 minute check cycle
+
+const DEFAULT_SCANNER_PROMPT = `Focus specifically on: [describe what to look for]
+
+Look for items with signals since {lastRunAt}.
+
+Rules:
+- Only include items that are actionable or require attention.
+- Include any commitments made to me or made by me, inferred or otherwise.
+- Include inline citations for every referenced source.
+- Prioritize current, time-sensitive work.`;
+
 const ALL_SIGNAL_TYPES = ['email', 'chat', 'meeting', 'doc'];
+const NOTIFICATION_MODE_OPTIONS = [
+  { value: 'all', label: 'All items' },
+  { value: 'critical-only', label: 'Critical only' },
+  { value: 'silent', label: 'Silent' },
+];
+const SEVERITY_THRESHOLD_OPTIONS = [
+  { value: 'all', label: 'All severities' },
+  { value: 'Critical', label: 'Critical only' },
+  { value: 'Elevated', label: 'Elevated & above' },
+];
+const MISSED_RUN_POLICY_OPTIONS = [
+  { value: 'skip', label: 'Skip missed' },
+  { value: 'run-once', label: 'Run once on reopen' },
+  { value: 'catch-up', label: 'Catch up (max 3)' },
+];
+const DEDUP_STRATEGY_OPTIONS = [
+  { value: 'evidence-url', label: 'Evidence URLs' },
+  { value: 'title-similarity', label: 'Title similarity' },
+  { value: 'both', label: 'URLs + title' },
+];
 const SIGNAL_TYPE_OPTIONS = [
   { value: 'email', label: 'Email', icon: '✉️' },
   { value: 'chat', label: 'Chat', icon: '💬' },

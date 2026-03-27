@@ -46,7 +46,6 @@ function getSelectedTone() {
 function renderModeVisibility() {
   const viewMap = {
     Radar: elements.viewRadar,
-    Tracking: elements.viewTracking,
     Briefings: elements.viewBriefings,
     History: elements.viewHistory,
   };
@@ -61,16 +60,13 @@ function renderModeVisibility() {
     button.classList.toggle('active', button.dataset.mode === state.mode);
   });
 
-  if (elements.refreshBtn) {
-    elements.refreshBtn.classList.toggle('d-none', state.mode === 'Tracking');
-  }
+
 }
 
 function renderAll() {
   renderKpis();
   renderModeVisibility();
   renderRadarMode();
-  renderTrackingMode();
   renderBriefingsMode();
   renderHistory();
 }
@@ -83,52 +79,9 @@ async function refreshAllData() {
 
   state.loading = true;
   elements.refreshBtn.disabled = true;
-  setStatus('Refreshing...');
+  setStatus('Refreshing meetings...');
 
   try {
-    let completedCount = 0;
-    let successCount = 0;
-
-    const updateRefreshStatus = () => {
-      if (completedCount < 2) {
-        setStatus('Refreshing...');
-      } else if (successCount === 2) {
-        setStatus('Updated');
-      } else if (successCount === 0) {
-        setStatus('Refresh failed');
-      } else {
-        setStatus('Partial update');
-      }
-      setUpdatedNow();
-    };
-
-    const radarTask = runWorkiqJson(
-      buildRadarScanPrompt(),
-      (payload) => payload && Array.isArray(payload.radarItems),
-      'radar',
-      {
-        maxRetries: 1,
-        onRetry: (attempt, max) => {
-          setStatus(`Retrying radar scan (${attempt}/${max})…`);
-        },
-      }
-    )
-      .then((payload) => {
-        applyRadarPayload(payload);
-        addHistory('scan', 'Radar + ledger scan completed');
-        successCount += 1;
-        renderRadarMode();
-        renderTrackingMode();
-      })
-      .catch((error) => {
-        addHistory('failure', `Radar scan issue: ${error.message}`);
-        elements.radarList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
-      })
-      .finally(() => {
-        completedCount += 1;
-        updateRefreshStatus();
-      });
-
     const meetingsTask = runWorkiqJson(
       TODAY_MEETINGS_PROMPT,
       (payload) => payload && Array.isArray(payload.meetings),
@@ -137,20 +90,17 @@ async function refreshAllData() {
       .then((payload) => {
         applyMeetingsPayload(payload);
         addHistory('scan', 'Meetings list refreshed');
-        successCount += 1;
         renderBriefingsMode();
       })
       .catch((error) => {
         addHistory('failure', `Meetings refresh failed: ${error.message}`);
         applyMeetingsPayload(buildFallbackMeetingPayload());
         renderBriefingsMode();
-      })
-      .finally(() => {
-        completedCount += 1;
-        updateRefreshStatus();
       });
 
-    await Promise.allSettled([radarTask, meetingsTask]);
+    await meetingsTask;
+    setStatus('Updated');
+    setUpdatedNow();
   } catch (error) {
     setStatus('Refresh failed');
     addHistory('failure', `Refresh failed: ${error.message}`);
@@ -166,25 +116,18 @@ async function refreshRadarData() {
     return;
   }
 
+  const scanner = getDefaultRadarScanner();
+  if (!scanner) {
+    setStatus('No radar scanner configured');
+    return;
+  }
+
   state.loading = true;
   elements.refreshBtn.disabled = true;
-  setStatus('Refreshing radar...');
+  setStatus('Running radar scan...');
 
   try {
-    const radarPayload = await runWorkiqJson(
-      buildRadarScanPrompt(),
-      (payload) => payload && Array.isArray(payload.radarItems),
-      'radar',
-      {
-        maxRetries: 1,
-        onRetry: (attempt, max) => {
-          setStatus(`Retrying radar scan (${attempt}/${max})…`);
-        },
-      }
-    );
-
-    applyRadarPayload(radarPayload);
-    addHistory('scan', 'Radar + ledger scan completed');
+    await runScanner(scanner);
     setStatus('Updated');
     setUpdatedNow();
     renderAll();
@@ -243,57 +186,9 @@ async function refreshCurrentMode() {
   }
 
   if (state.mode === 'Radar') {
-    await refreshRadarData();
-    return;
-  }
-
-  if (state.mode === 'Tracking') {
-    const enabledItems = state.trackingItems.filter((item) => item.monitorEnabled);
-    const totalItems = state.trackingItems.length;
-
-    if (!totalItems) {
-      setStatus('No tracked items');
-      setUpdatedNow();
-      renderTrackingMode();
-      return;
-    }
-
-    if (!enabledItems.length) {
-      setStatus(`${totalItems} tracked · none monitored`);
-      setUpdatedNow();
-      renderTrackingMode();
-      return;
-    }
-
-    const now = Date.now();
-    const nextDue = enabledItems
-      .filter((item) => item.nextRunAt)
-      .map((item) => new Date(item.nextRunAt).getTime())
-      .filter((t) => Number.isFinite(t) && t > now)
-      .sort((a, b) => a - b)[0] || null;
-
-    const nextDueLabel = nextDue
-      ? (() => {
-          const diffMin = Math.round((nextDue - now) / 60000);
-          if (diffMin <= 0) return 'any moment';
-          if (diffMin === 1) return 'in 1 min';
-          if (diffMin < 60) return `in ${diffMin} min`;
-          const diffHr = Math.round(diffMin / 60);
-          return `in ${diffHr}h`;
-        })()
-      : null;
-
-    const statusParts = [
-      `${totalItems} tracked`,
-      `${enabledItems.length} monitored`,
-    ];
-    if (nextDueLabel) {
-      statusParts.push(`next check ${nextDueLabel}`);
-    }
-
-    setStatus(statusParts.join(' · '));
-    setUpdatedNow();
-    renderTrackingMode();
+    // Refresh button re-renders and refreshes meetings in background (no auto-scan)
+    renderRadarMode();
+    await refreshBriefingData();
     return;
   }
 
@@ -312,12 +207,13 @@ async function refreshCurrentMode() {
 }
 
 function setMode(mode) {
+  if (mode === 'Tracking') mode = 'Radar';
   state.mode = mode;
   renderModeVisibility();
   renderKpis();
 
-  if (mode === 'Tracking') {
-    renderTrackingMode();
+  if (mode === 'Radar') {
+    renderRadarMode();
   }
 
   if (state.connected && mode === 'Briefings' && !state.meetings.length) {
@@ -396,6 +292,7 @@ async function init() {
     setUpdatedNow();
   } else {
     startMonitoringLoop();
+    startScannerEngine();
     runDueMonitoringChecks();
     renderAll();
     addHistory('startup', 'FlightDeck cockpit initialized');
@@ -437,7 +334,7 @@ async function init() {
   // Listen for state changes from popout windows
   window.workiq.onStateChanged(async () => {
     await loadPersistentState();
-    renderTrackingMode();
+    renderRadarMode();
   });
 
 }

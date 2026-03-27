@@ -49,6 +49,17 @@
 - Product vision and strategy discussions
 - **Keywords:** feature, idea, value, story, backlog, priority, roadmap, product, user need, opportunity, competitive, market
 
+## Charlie — Prompt Engineer
+- Prompt template design and optimization (src/prompts/*.md)
+- Prompt builder functions (src/renderer/prompts.js)
+- JSON schema constants for AI output shaping (src/renderer/constants.js)
+- De-duplication logic in prompt construction
+- Output constraints, citation rules, grounding patterns
+- Variable injection patterns ({lastRunAt}, meeting context, etc.)
+- Prompt fragments in model files (src/renderer/models/tracking.js — buildDefaultMonitorPrompt)
+- Cross-agent prompt quality review
+- **Keywords:** prompt, template, schema, instruction, AI, LLM, grounding, citation, dedup, output format, tone, constraint, scanner prompt, briefing prompt, monitor prompt
+
 ## Scribe — Session Logger
 - Session logs, orchestration logs
 - Decision merging from inbox

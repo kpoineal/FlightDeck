@@ -13,12 +13,12 @@ before(() => {
     savePersistentState: () => {},
     renderTrackingMode: () => {},
     // Minimal state needed by upsertTrackingItemFromRadar
-    state: { trackingItems: [] },
+    state: { trackingItems: [], items: [], radarItems: [] },
   });
   // Load dependencies in order (script-tag loading)
   loadFile(ctx, 'renderer/constants.js');
   loadFile(ctx, 'renderer/utils.js');
-  loadFile(ctx, 'renderer/models/tracking.js');
+  loadFile(ctx, 'renderer/models/item.js');
 });
 
 /* ================================================================== */
@@ -222,8 +222,8 @@ describe('normalizeTrackingItem()', () => {
     assert.ok(result.id.length > 0);
     assert.equal(result.severity, 'Observe');
     assert.equal(result.owner, 'You');
-    assert.equal(result.status, 'Tracked');
-    assert.ok(result.trackedAt);
+    assert.equal(result.status, 'Inbound');
+    assert.equal(result.trackedAt, null); // null until monitoring is enabled
     assert.equal(result.counterparties.length, 0);
     assert.equal(result.evidenceLinks.length, 0);
     assert.ok(Array.isArray(result.weeklyDays));
@@ -520,7 +520,7 @@ describe('monitorTaskItem()', () => {
   function createMonitorContext(payload) {
     const notifications = [];
     const ctx2 = createRendererContext({
-      state: { connected: true, trackingItems: [] },
+      state: { connected: true, trackingItems: [], items: [], radarItems: [] },
       buildTaskMonitorPrompt: () => 'monitor prompt',
       runWorkiqJson: async () => payload,
       addHistory: () => {},
@@ -539,7 +539,7 @@ describe('monitorTaskItem()', () => {
     });
     loadFile(ctx2, 'renderer/constants.js');
     loadFile(ctx2, 'renderer/utils.js');
-    loadFile(ctx2, 'renderer/models/tracking.js');
+    loadFile(ctx2, 'renderer/models/item.js');
     loadFile(ctx2, 'renderer/monitor-engine.js');
     ctx2.__notifications = notifications;
     return ctx2;
@@ -601,5 +601,79 @@ describe('monitorTaskItem()', () => {
     assert.equal(item.summary, 'No new email yet');
     assert.equal(item.hasNewUpdate, false);
     assert.equal(ctx2.__notifications.length, 0);
+  });
+
+  it('preserves previous evidence links when AI omits them from response', async () => {
+    const ctx2 = createMonitorContext({
+      hasNewInfo: true,
+      summary: 'New activity detected in the thread',
+      status: 'In Progress',
+      severity: 'Elevated',
+      evidenceLinks: [
+        { type: 'email', url: 'https://outlook.office.com/mail/inbox/id/NEW456', label: 'New update' },
+      ],
+    });
+    const item = ctx2.normalizeTrackingItem({
+      id: 'monitor_merge_test',
+      title: 'Evidence merge test',
+      sourceType: 'Email',
+      summary: 'Existing summary',
+      status: 'Tracked',
+      severity: 'Observe',
+      monitorEnabled: true,
+      scheduleType: 'interval',
+      scheduleValue: '30m',
+      evidenceLinks: [
+        { type: 'email', url: 'https://outlook.office.com/mail/inbox/id/OLD123', label: 'Original signal' },
+      ],
+      hasNewUpdate: false,
+    });
+
+    await ctx2.monitorTaskItem(item, { manual: true });
+
+    const urls = item.evidenceLinks.map((e) => e.url);
+    assert.ok(urls.includes('https://outlook.office.com/mail/inbox/id/OLD123'),
+      'Previous evidence link should be preserved');
+    assert.ok(urls.includes('https://outlook.office.com/mail/inbox/id/NEW456'),
+      'New evidence link should be added');
+    assert.equal(item.evidenceLinks.length, 2,
+      'Both old and new evidence links should be present');
+  });
+
+  it('does not duplicate evidence links when AI re-reports existing URL', async () => {
+    const sharedUrl = 'https://outlook.office.com/mail/inbox/id/SHARED789';
+    const ctx2 = createMonitorContext({
+      hasNewInfo: true,
+      summary: 'Updated summary with same source',
+      status: 'In Progress',
+      severity: 'Elevated',
+      evidenceLinks: [
+        { type: 'email', url: sharedUrl, label: 'Same email' },
+        { type: 'chat', url: 'https://teams.microsoft.com/l/chat/NEW', label: 'New chat' },
+      ],
+    });
+    const item = ctx2.normalizeTrackingItem({
+      id: 'monitor_no_dup_test',
+      title: 'No duplicate test',
+      sourceType: 'Email',
+      summary: 'Previous summary',
+      status: 'Tracked',
+      severity: 'Observe',
+      monitorEnabled: true,
+      scheduleType: 'interval',
+      scheduleValue: '30m',
+      evidenceLinks: [
+        { type: 'email', url: sharedUrl, label: 'Original email' },
+      ],
+      hasNewUpdate: false,
+    });
+
+    await ctx2.monitorTaskItem(item, { manual: true });
+
+    const urls = item.evidenceLinks.map((e) => e.url);
+    const sharedCount = urls.filter((u) => u === sharedUrl).length;
+    assert.equal(sharedCount, 1, 'Shared URL should appear exactly once');
+    assert.ok(urls.includes('https://teams.microsoft.com/l/chat/NEW'),
+      'New URL should be added');
   });
 });

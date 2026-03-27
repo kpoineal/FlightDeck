@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="styles/components.css" />
   <link rel="stylesheet" href="styles/radar.css" />
   <link rel="stylesheet" href="styles/tracking.css" />
+  <link rel="stylesheet" href="styles/scanner.css" />
   <link rel="stylesheet" href="styles/briefing.css" />
   <link rel="stylesheet" href="styles/search.css" />
   <link rel="stylesheet" href="styles/modal.css" />
@@ -32,7 +33,6 @@
     <div id="searchOverlay" class="search-overlay"></div>
     <div class="topbar-tabs">
       <button class="mode-btn active" data-mode="Radar">Radar</button>
-      <button class="mode-btn" data-mode="Tracking">Tracking</button>
       <button class="mode-btn" data-mode="Briefings">Briefings</button>
       <button class="mode-btn" data-mode="History">History</button>
     </div>
@@ -121,33 +121,6 @@
       </section>
 
       <section id="viewRadar" class="mode-view active">
-        <div class="cockpit-grid">
-          <article class="panel">
-            <div class="tracking-heading-row">
-              <h2>Radar (Inbound)</h2>
-              <button class="density-toggle" id="radarDensityToggleBtn" title="Switch view">
-                <svg class="density-icon-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="3" x2="15" y2="3"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="13" x2="15" y2="13"/></svg>
-                <svg class="density-icon-grid" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
-              </button>
-            </div>
-            <div class="panel-sub">Prioritized signals from email, Teams, meetings, docs</div>
-            <button class="prompt-editor-toggle" id="promptEditorToggle">
-              <span class="chevron">&#9654;</span> Edit Radar Prompt
-            </button>
-            <div class="prompt-editor-body" id="promptEditorBody">
-              <textarea id="radarPromptEditor" spellcheck="false" placeholder="Loading prompt..."></textarea>
-              <div class="prompt-editor-actions">
-                <button class="small-btn primary" id="promptEditorApply">Apply</button>
-                <button class="small-btn" id="promptEditorReset">Reset to Default</button>
-                <span class="prompt-status" id="promptEditorStatus"></span>
-              </div>
-            </div>
-            <div class="list" id="radarList"></div>
-          </article>
-        </div>
-      </section>
-
-      <section id="viewTracking" class="mode-view">
         <div class="add-task-bar">
           <button class="add-task-toggle" id="addTaskToggle">
             <svg class="add-task-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>
@@ -239,17 +212,43 @@
             </div>
           </div>
         </div>
-        <div class="panel panel--full">
-          <div class="tracking-heading-row">
-            <h2>Tracked Items</h2>
-            <div class="tracking-header-controls">
-              <button class="density-toggle" id="densityToggleBtn" title="Switch view">
-                <svg class="density-icon-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="3" x2="15" y2="3"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="13" x2="15" y2="13"/></svg>
-                <svg class="density-icon-grid" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+        <div class="cockpit-grid">
+          <article class="panel">
+            <div class="tracking-heading-row">
+              <h2>Radar</h2>
+              <button class="add-scanner-btn" id="addScannerBtn" title="Add scanner">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>
+                Scanner
               </button>
+              <div class="tracking-header-controls">
+                <div class="filter-bar" id="filterBar">
+                  <button class="filter-btn active" data-filter="all">All</button>
+                  <button class="filter-btn" data-filter="in-progress">In Progress</button>
+                  <button class="filter-btn" data-filter="blocked">Blocked</button>
+                  <button class="filter-btn" data-filter="waiting">Waiting</button>
+                  <button class="filter-btn" data-filter="monitored">Monitored</button>
+                  <button class="filter-btn" data-filter="archived">Archived</button>
+                </div>
+                <button class="density-toggle" id="densityToggleBtn" title="Switch view">
+                  <svg class="density-icon-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="3" x2="15" y2="3"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="13" x2="15" y2="13"/></svg>
+                  <svg class="density-icon-grid" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+                </button>
+              </div>
             </div>
-          </div>
-          <div class="list" id="trackingList"></div>
+            <div class="panel-sub">Prioritized signals from email, Teams, meetings, docs</div>
+            <button class="prompt-editor-toggle" id="promptEditorToggle">
+              <span class="chevron">&#9654;</span> Edit Radar Prompt
+            </button>
+            <div class="prompt-editor-body" id="promptEditorBody">
+              <textarea id="radarPromptEditor" spellcheck="false" placeholder="Loading prompt..."></textarea>
+              <div class="prompt-editor-actions">
+                <button class="small-btn primary" id="promptEditorApply">Apply</button>
+                <button class="small-btn" id="promptEditorReset">Reset to Default</button>
+                <span class="prompt-status" id="promptEditorStatus"></span>
+              </div>
+            </div>
+            <div class="list" id="radarList"></div>
+          </article>
         </div>
       </section>
 
@@ -294,6 +293,9 @@
     </div>
   </div>
 
+  <div id="scannerSettingsModal" class="modal" role="dialog" aria-modal="true"></div>
+  <div id="radarPromptModal" class="modal" role="dialog" aria-modal="true"></div>
+
   <!-- Demo mode (must load before foundation to intercept early) -->
   <script src="renderer/demo.js"></script>
 
@@ -304,10 +306,13 @@
   <script src="renderer/json-parser.js"></script>
   <script src="renderer/state.js"></script>
   <script src="renderer/prompts.js"></script>
+  <script src="renderer/models/item.js"></script>
+  <script src="renderer/models/scanner.js"></script>
   <script src="renderer/models/tracking.js"></script>
   <script src="renderer/models/radar.js"></script>
   <script src="renderer/models/briefing.js"></script>
   <script src="renderer/monitor-engine.js"></script>
+  <script src="renderer/scanner-engine.js"></script>
   <script src="renderer/search.js"></script>
 
   <!-- Renderers -->
@@ -315,6 +320,7 @@
   <script src="renderer/renderers/actions.js"></script>
   <script src="renderer/renderers/radar.js"></script>
   <script src="renderer/renderers/tracking.js"></script>
+  <script src="renderer/renderers/scanner.js"></script>
   <script src="renderer/renderers/briefing.js"></script>
   <script src="renderer/renderers/history.js"></script>
 

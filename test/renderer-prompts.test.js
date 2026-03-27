@@ -106,7 +106,7 @@ before(() => {
     URLSearchParams,
     Promise,
     // Stubs for globals referenced in prompts.js function bodies we don't test
-    state: { trackingItems: [], meetings: [], kpis: {} },
+    state: { trackingItems: [], meetings: [], kpis: {}, items: [], scanners: [] },
     elements: mockElements,
     cleanDisplayText: (t) => t,
     safeDate: (d) => d,
@@ -367,5 +367,154 @@ describe('Reset handler', () => {
       /reset to default/i,
       'Status should indicate reset to default'
     );
+  });
+});
+
+/* ================================================================== */
+/*  extractScannerTopic()                                             */
+/* ================================================================== */
+describe('extractScannerTopic()', () => {
+  it('extracts "Focus specifically on:" line', () => {
+    const prompt = 'Analyze signals.\nFocus specifically on: budget approvals and vendor contracts\n\n# Rules\n- Be precise.';
+    assert.equal(ctx.extractScannerTopic(prompt, 'Fallback'), 'budget approvals and vendor contracts');
+  });
+
+  it('extracts "Focus on:" (without specifically)', () => {
+    const prompt = 'Analyze signals.\nFocus on: hiring pipeline\n# Rules';
+    assert.equal(ctx.extractScannerTopic(prompt, 'Fallback'), 'hiring pipeline');
+  });
+
+  it('truncates long focus lines to 80 chars', () => {
+    const longFocus = 'a'.repeat(100);
+    const prompt = `Focus specifically on: ${longFocus}`;
+    const result = ctx.extractScannerTopic(prompt, 'Fallback');
+    assert.ok(result.length <= 80, 'Should truncate to ≤80 chars');
+    assert.ok(result.endsWith('...'), 'Should end with ellipsis');
+  });
+
+  it('falls back to first meaningful line when no focus match', () => {
+    const prompt = '# Rules\n- short\nAnalyze recent emails about the launch plan\n- another rule';
+    assert.equal(ctx.extractScannerTopic(prompt, 'Fallback'), 'Analyze recent emails about the launch plan');
+  });
+
+  it('falls back to name when no usable lines', () => {
+    const prompt = '# Rules\n- short line\n- another';
+    assert.equal(ctx.extractScannerTopic(prompt, 'My Scanner'), 'My Scanner');
+  });
+
+  it('strips {lastRunAt} placeholders before extraction', () => {
+    const prompt = 'Focus specifically on: items since {lastRunAt} about budgets';
+    assert.equal(ctx.extractScannerTopic(prompt, 'Fallback'), 'items since  about budgets');
+  });
+
+  it('handles empty/null prompt', () => {
+    assert.equal(ctx.extractScannerTopic('', 'Name'), 'Name');
+    assert.equal(ctx.extractScannerTopic(null, 'Name'), 'Name');
+  });
+});
+
+/* ================================================================== */
+/*  buildCrossScannerDedupBlock()                                     */
+/* ================================================================== */
+describe('buildCrossScannerDedupBlock()', () => {
+  beforeEach(() => {
+    ctx.state.scanners = [];
+  });
+
+  it('returns empty string when no other scanners exist', () => {
+    ctx.state.scanners = [
+      { id: 's1', name: 'Current', enabled: true, prompt: 'Focus on: budgets' },
+    ];
+    assert.equal(ctx.buildCrossScannerDedupBlock('s1'), '');
+  });
+
+  it('returns empty string when other scanners are disabled', () => {
+    ctx.state.scanners = [
+      { id: 's1', name: 'Current', enabled: true, prompt: 'Focus on: budgets' },
+      { id: 's2', name: 'Other', enabled: false, prompt: 'Focus on: hiring' },
+    ];
+    assert.equal(ctx.buildCrossScannerDedupBlock('s1'), '');
+  });
+
+  it('includes other enabled scanners with topics', () => {
+    ctx.state.scanners = [
+      { id: 's1', name: 'Budget Watch', enabled: true, prompt: 'Focus on: budgets' },
+      { id: 's2', name: 'HR Monitor', enabled: true, prompt: 'Focus on: hiring pipeline' },
+      { id: 's3', name: 'Vendor Tracker', enabled: true, prompt: 'Focus on: vendor contracts' },
+    ];
+    const result = ctx.buildCrossScannerDedupBlock('s1');
+    assert.ok(result.includes('HR Monitor'), 'Should include other scanner names');
+    assert.ok(result.includes('Vendor Tracker'), 'Should include other scanner names');
+    assert.ok(result.includes('hiring pipeline'), 'Should include extracted topics');
+    assert.ok(!result.includes('Budget Watch'), 'Should NOT include current scanner');
+  });
+
+  it('caps at 5 other scanners', () => {
+    const scanners = [{ id: 'current', name: 'Me', enabled: true, prompt: 'Focus on: me' }];
+    for (let i = 0; i < 7; i++) {
+      scanners.push({ id: `s${i}`, name: `Scanner ${i}`, enabled: true, prompt: `Focus on: topic ${i}` });
+    }
+    ctx.state.scanners = scanners;
+    const result = ctx.buildCrossScannerDedupBlock('current');
+    const lineCount = (result.match(/^- "/gm) || []).length;
+    assert.ok(lineCount <= 5, `Should cap at 5 other scanners, got ${lineCount}`);
+  });
+
+  it('skips scanners without a prompt', () => {
+    ctx.state.scanners = [
+      { id: 's1', name: 'Current', enabled: true, prompt: 'Focus on: budgets' },
+      { id: 's2', name: 'Empty', enabled: true, prompt: '' },
+      { id: 's3', name: 'Valid', enabled: true, prompt: 'Focus on: sales' },
+    ];
+    const result = ctx.buildCrossScannerDedupBlock('s1');
+    assert.ok(!result.includes('Empty'), 'Should skip scanners without prompt');
+    assert.ok(result.includes('Valid'), 'Should include scanners with prompt');
+  });
+
+  it('contains the soft-boundary instruction phrase', () => {
+    ctx.state.scanners = [
+      { id: 's1', name: 'A', enabled: true, prompt: 'Focus on: budgets' },
+      { id: 's2', name: 'B', enabled: true, prompt: 'Focus on: hiring' },
+    ];
+    const result = ctx.buildCrossScannerDedupBlock('s1');
+    assert.ok(result.includes('skip items that clearly belong to another scanner'), 'Should use soft-boundary framing');
+  });
+});
+
+/* ================================================================== */
+/*  buildScannerPrompt() — signal type filtering                      */
+/* ================================================================== */
+describe('buildScannerPrompt() — signalTypes filtering', () => {
+
+  beforeEach(() => {
+    ctx.state.items = [];
+    ctx.state.scanners = [];
+  });
+
+  it('does not inject signal filter when all signal types are selected', () => {
+    ctx.state.scanners = [{ id: 's1', name: 'Test', enabled: true, prompt: 'Look for stuff', signalTypes: ['email', 'chat', 'meeting', 'doc'] }];
+    const result = ctx.buildScannerPrompt(ctx.state.scanners[0]);
+    assert.ok(!result.includes('Signal source filter'), 'Should not restrict when all types selected');
+  });
+
+  it('injects signal filter when a subset of signal types is selected', () => {
+    ctx.state.scanners = [{ id: 's1', name: 'Chat Only', enabled: true, prompt: 'Look for chats', signalTypes: ['chat'] }];
+    const result = ctx.buildScannerPrompt(ctx.state.scanners[0]);
+    assert.ok(result.includes('Signal source filter'), 'Should include signal filter');
+    assert.ok(result.includes('Chat'), 'Should mention Chat');
+  });
+
+  it('includes multiple selected signal types in the filter instruction', () => {
+    ctx.state.scanners = [{ id: 's1', name: 'Mix', enabled: true, prompt: 'Look for things', signalTypes: ['email', 'meeting'] }];
+    const result = ctx.buildScannerPrompt(ctx.state.scanners[0]);
+    assert.ok(result.includes('Email'), 'Should mention Email');
+    assert.ok(result.includes('Meeting'), 'Should mention Meeting');
+    assert.ok(result.includes('ONLY search for and consider'), 'Should use ONLY directive');
+  });
+
+  it('treats undefined signalTypes as all types (no restriction)', () => {
+    ctx.state.scanners = [{ id: 's1', name: 'No Types', enabled: true, prompt: 'Look for stuff' }];
+    const result = ctx.buildScannerPrompt(ctx.state.scanners[0]);
+    assert.ok(!result.includes('Signal source filter'), 'Should not restrict when signalTypes is undefined');
   });
 });

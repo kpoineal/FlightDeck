@@ -146,7 +146,7 @@ function navigateSearchResult(item) {
       }
     });
   } else if (type === 'tracker') {
-    setMode('Tracking');
+    setMode('Radar');
     requestAnimationFrame(() => {
       // Full card view
       const card = document.querySelector(`.tracker-card[data-tracker-id="${CSS.escape(id)}"]`);
@@ -158,7 +158,7 @@ function navigateSearchResult(item) {
         const detail = wrapper.querySelector('.tracker-row-detail');
         const chevron = row?.querySelector('.row-expand-chevron');
         // Collapse any other open row first
-        const currentlyOpen = elements.trackingList.querySelector('.tracker-row-detail.show');
+        const currentlyOpen = elements.radarList.querySelector('.tracker-row-detail.show');
         if (currentlyOpen && currentlyOpen !== detail) {
           currentlyOpen.classList.remove('show');
           const otherRow = currentlyOpen.parentElement?.querySelector('.tracker-row');

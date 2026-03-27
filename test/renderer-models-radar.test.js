@@ -11,6 +11,7 @@ before(() => {
   ctx = createRendererContext({
     // Stubs for globals that radar.js calls but we don't test here
     state: {
+      items: [],
       radarItems: [],
       trackingItems: [],
       actions: [],
@@ -24,7 +25,7 @@ before(() => {
   });
   loadFile(ctx, 'renderer/constants.js');
   loadFile(ctx, 'renderer/utils.js');
-  loadFile(ctx, 'renderer/models/radar.js');
+  loadFile(ctx, 'renderer/models/item.js');
 });
 
 /* ================================================================== */

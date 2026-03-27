@@ -862,8 +862,8 @@ describe('normalizeEvidenceLink() with label-embedded URLs', () => {
     };
     const result = ctx.normalizeEvidenceLink(entry, 'chat');
     assert.ok(result);
-    // cleanDisplayText cleans display text, so Contoso → Fi Serv
-    assert.equal(result.label, 'Teams chat about Fi Serv');
+    // cleanDisplayText leaves 'Contoso' as-is (no camelCase split)
+    assert.equal(result.label, 'Teams chat about Contoso');
     assert.ok(result.url.includes('teams.microsoft.com/l/message'));
     assert.equal(result.type, 'chat');
   });
