@@ -112,6 +112,80 @@ async function savePersistentState() {
   // Prune history before every save to prevent unbounded growth during long sessions
   pruneHistory();
 
+  // Enforce evidence link cap on every item
+  for (const item of state.items) {
+    if (Array.isArray(item.evidenceLinks) && item.evidenceLinks.length > MAX_EVIDENCE_LINKS_PER_ITEM) {
+      item.evidenceLinks = item.evidenceLinks.slice(-MAX_EVIDENCE_LINKS_PER_ITEM);
+    }
+  }
+
+  // ── Tiered storage eviction ─────────────────────────────────────
+  // Move archived/complete items that have been in that state for 24+ hours
+  // into cold storage so they don't consume renderer memory.
+  const evictionCutoff = Date.now() - COLD_EVICTION_HOURS * 60 * 60 * 1000;
+  const hotItems = [];
+  const evictedItems = [];
+
+  for (const item of state.items) {
+    const isColdCandidate = item.lifecycleStatus === 'archived' || item.lifecycleStatus === 'complete';
+    if (isColdCandidate) {
+      const transitionedAt = item.lastChangedAt || item.lastRunAt || item.trackedAt || item.discoveredAt;
+      const transitionTime = transitionedAt ? new Date(transitionedAt).getTime() : 0;
+      if (Number.isFinite(transitionTime) && transitionTime < evictionCutoff) {
+        evictedItems.push(item);
+        continue;
+      }
+    }
+    hotItems.push(item);
+  }
+
+  // If items were evicted, append to cold storage
+  if (evictedItems.length) {
+    try {
+      const existingCold = await window.workiq.getColdItems() || [];
+      const coldById = new Map(existingCold.map((c) => [c.id, c]));
+      for (const item of evictedItems) {
+        coldById.set(item.id, item);
+      }
+      await window.workiq.setColdItems([...coldById.values()]);
+      state.items = hotItems;
+      state.radarItems = state.items;
+      state.trackingItems = state.items;
+      console.log(`[flightdeck] Evicted ${evictedItems.length} item(s) to cold storage`);
+    } catch (err) {
+      console.warn('[flightdeck] cold storage eviction failed, keeping items hot', err.message);
+    }
+  }
+
+  // Enforce global active items cap — evict oldest archived/complete first, then oldest overall
+  if (state.items.length > MAX_ACTIVE_ITEMS) {
+    // Sort: archived/complete items first (by discoveredAt ascending), then the rest
+    const sortedForEviction = [...state.items].sort((a, b) => {
+      const aIsOld = a.lifecycleStatus === 'archived' || a.lifecycleStatus === 'complete' ? 0 : 1;
+      const bIsOld = b.lifecycleStatus === 'archived' || b.lifecycleStatus === 'complete' ? 0 : 1;
+      if (aIsOld !== bIsOld) return aIsOld - bIsOld;
+      const aTime = new Date(a.discoveredAt || 0).getTime() || 0;
+      const bTime = new Date(b.discoveredAt || 0).getTime() || 0;
+      return aTime - bTime;
+    });
+    const overflow = sortedForEviction.slice(0, state.items.length - MAX_ACTIVE_ITEMS);
+    const overflowIds = new Set(overflow.map((i) => i.id));
+    try {
+      const existingCold = await window.workiq.getColdItems() || [];
+      const coldById = new Map(existingCold.map((c) => [c.id, c]));
+      for (const item of overflow) {
+        coldById.set(item.id, item);
+      }
+      await window.workiq.setColdItems([...coldById.values()]);
+      state.items = state.items.filter((i) => !overflowIds.has(i.id));
+      state.radarItems = state.items;
+      state.trackingItems = state.items;
+      console.log(`[flightdeck] Cap overflow: evicted ${overflow.length} item(s) to cold storage`);
+    } catch (err) {
+      console.warn('[flightdeck] cap overflow eviction failed', err.message);
+    }
+  }
+
   const payload = {
     items: state.items,
     // Legacy key written for backward compat (tests + rollback safety)
@@ -223,6 +297,10 @@ async function loadPersistentState() {
       if (Array.isArray(item.updateHistory) && item.updateHistory.length > 20) {
         item.updateHistory = item.updateHistory.slice(0, 20);
       }
+      // Enforce evidence link cap on load
+      if (Array.isArray(item.evidenceLinks) && item.evidenceLinks.length > MAX_EVIDENCE_LINKS_PER_ITEM) {
+        item.evidenceLinks = item.evidenceLinks.slice(-MAX_EVIDENCE_LINKS_PER_ITEM);
+      }
     }
 
     // Keep legacy aliases in sync
@@ -269,6 +347,41 @@ async function loadPersistentState() {
     pruneHistory();
     pruneStaleBriefings();
     autoArchiveCompletedItems();
+
+    // ── Cold storage migration ───────────────────────────────────
+    // On first load after tiered storage is deployed, move existing
+    // archived/complete items that are 24+ hours old into cold storage.
+    try {
+      const coldCutoff = Date.now() - COLD_EVICTION_HOURS * 60 * 60 * 1000;
+      const migrateToCode = [];
+      const keepHot = [];
+      for (const item of state.items) {
+        const isCold = item.lifecycleStatus === 'archived' || item.lifecycleStatus === 'complete';
+        if (isCold) {
+          const ts = item.lastChangedAt || item.lastRunAt || item.trackedAt || item.discoveredAt;
+          const t = ts ? new Date(ts).getTime() : 0;
+          if (Number.isFinite(t) && t < coldCutoff) {
+            migrateToCode.push(item);
+            continue;
+          }
+        }
+        keepHot.push(item);
+      }
+      if (migrateToCode.length) {
+        const existingCold = await window.workiq.getColdItems() || [];
+        const coldById = new Map(existingCold.map((c) => [c.id, c]));
+        for (const item of migrateToCode) {
+          coldById.set(item.id, item);
+        }
+        await window.workiq.setColdItems([...coldById.values()]);
+        state.items = keepHot;
+        state.radarItems = state.items;
+        state.trackingItems = state.items;
+        console.log(`[flightdeck] Migrated ${migrateToCode.length} item(s) to cold storage on load`);
+      }
+    } catch (coldErr) {
+      console.warn('[flightdeck] cold storage migration on load failed', coldErr.message);
+    }
 
     // Mark state as loaded — savePersistentState is now safe to write
     state._loaded = true;

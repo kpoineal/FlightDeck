@@ -5,7 +5,7 @@ const { log, logError, normalizeExternalUrl, escapeHtml, markdownToHtml, attachE
 const { runWorkiqCommand, runWorkiqAcceptEula } = require('./pty-bridge');
 const { registerTrackerPopoutIpc } = require('./ipc/tracker-popout');
 const { IPC_CHANNELS } = require('../shared/ipc-contract');
-const { storeGet, storeSet, storeDelete, storeGetAll, storeGetSize } = require('./store');
+const { storeGet, storeSet, storeDelete, storeGetAll, storeGetSize, coldStoreGet, coldStoreSet } = require('./store');
 
 const APP_ROOT = path.join(__dirname, '..');
 
@@ -309,6 +309,15 @@ function registerIpcHandlers(getMainWindow, popoutWindows) {
       logError('[store] Migration from localStorage failed:', e.message);
       return { success: false, error: e.message };
     }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.STORE_GET_COLD_ITEMS, () => {
+    return coldStoreGet('items') || [];
+  });
+
+  ipcMain.handle(IPC_CHANNELS.STORE_SET_COLD_ITEMS, (_event, items) => {
+    coldStoreSet('items', items);
+    return { success: true };
   });
 }
 

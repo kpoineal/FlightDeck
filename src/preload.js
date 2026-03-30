@@ -18,6 +18,8 @@ const IPC_CHANNELS = {
   STORE_GET_ALL: 'store-get-all',
   STORE_GET_SIZE: 'store-get-size',
   STORE_MIGRATE_FROM_LOCALSTORAGE: 'store-migrate-from-localstorage',
+  STORE_GET_COLD_ITEMS: 'store-get-cold-items',
+  STORE_SET_COLD_ITEMS: 'store-set-cold-items',
 };
 
 contextBridge.exposeInMainWorld('workiq', {
@@ -35,6 +37,8 @@ contextBridge.exposeInMainWorld('workiq', {
   storeGetAll: () => ipcRenderer.invoke(IPC_CHANNELS.STORE_GET_ALL),
   storeGetSize: () => ipcRenderer.invoke(IPC_CHANNELS.STORE_GET_SIZE),
   storeMigrateFromLocalStorage: (data) => ipcRenderer.invoke(IPC_CHANNELS.STORE_MIGRATE_FROM_LOCALSTORAGE, data),
+  getColdItems: () => ipcRenderer.invoke(IPC_CHANNELS.STORE_GET_COLD_ITEMS),
+  setColdItems: (items) => ipcRenderer.invoke(IPC_CHANNELS.STORE_SET_COLD_ITEMS, items),
   broadcastStateChanged: () => ipcRenderer.send(IPC_CHANNELS.TRACKER_STATE_CHANGED),
   onStateChanged: (callback) => {
     if (typeof callback !== 'function') return () => {};

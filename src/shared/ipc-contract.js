@@ -16,6 +16,8 @@ const IPC_CHANNELS = {
   STORE_GET_ALL: 'store-get-all',
   STORE_GET_SIZE: 'store-get-size',
   STORE_MIGRATE_FROM_LOCALSTORAGE: 'store-migrate-from-localstorage',
+  STORE_GET_COLD_ITEMS: 'store-get-cold-items',
+  STORE_SET_COLD_ITEMS: 'store-set-cold-items',
 };
 
 module.exports = {

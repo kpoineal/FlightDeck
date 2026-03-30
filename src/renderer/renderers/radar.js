@@ -245,6 +245,27 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
 // ── Main render ──────────────────────────────────────────────────────
 function renderRadarList() {
   const allItems = Array.isArray(state.items) ? state.items : [];
+  _renderRadarListFromItems(allItems);
+
+  // When viewing archived items, also fetch cold storage items and re-render
+  // with the merged set. The initial render shows hot archived items instantly;
+  // cold items appear once the async IPC call completes.
+  if (state.filter === 'archived' && window.workiq && typeof window.workiq.getColdItems === 'function') {
+    window.workiq.getColdItems().then((coldItems) => {
+      if (!Array.isArray(coldItems) || !coldItems.length) return;
+      // Only re-render if still on the archived filter
+      if (state.filter !== 'archived') return;
+      const hotIds = new Set(allItems.map((i) => i.id));
+      const uniqueCold = coldItems
+        .map((c) => normalizeItem(c))
+        .filter((c) => !hotIds.has(c.id));
+      if (!uniqueCold.length) return;
+      _renderRadarListFromItems([...allItems, ...uniqueCold]);
+    }).catch(() => {});
+  }
+}
+
+function _renderRadarListFromItems(allItems) {
   const filtered = applyFilter(allItems);
 
   if (!filtered.length) {

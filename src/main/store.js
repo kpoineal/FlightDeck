@@ -7,6 +7,11 @@ const store = new ElectronStore({
   defaults: {},
 });
 
+const coldStore = new ElectronStore({
+  name: 'flightdeck-cold',
+  defaults: {},
+});
+
 function storeGet(key) {
   return store.get(key);
 }
@@ -40,6 +45,15 @@ function storeGetSize() {
   }
 }
 
-log('[store] Initialized at', store.path);
+function coldStoreGet(key) {
+  return coldStore.get(key);
+}
 
-module.exports = { storeGet, storeSet, storeDelete, storeGetAll, storeGetSize, store };
+function coldStoreSet(key, value) {
+  coldStore.set(key, value);
+}
+
+log('[store] Initialized at', store.path);
+log('[store] Cold store at', coldStore.path);
+
+module.exports = { storeGet, storeSet, storeDelete, storeGetAll, storeGetSize, store, coldStoreGet, coldStoreSet };

@@ -227,7 +227,7 @@ function normalizeItem(item) {
     summary: cleanDisplayText(item?.summary || ''),
     reason: cleanDisplayText(item?.reason || ''),
     status: cleanDisplayText(item?.status || 'Inbound'),
-    evidenceLinks: _buildEvidenceLinks(item, inlineLinks),
+    evidenceLinks: _buildEvidenceLinks(item, inlineLinks).slice(0, MAX_EVIDENCE_LINKS_PER_ITEM),
     suggestedNextSteps: Array.isArray(item?.suggestedNextSteps)
       ? item.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2)
       : [],
@@ -529,7 +529,7 @@ function applyRadarPayload(payload, scannerId = null) {
               existingUrls.add(link.url);
             }
           }
-          return mergedLinks;
+          return mergedLinks.slice(0, MAX_EVIDENCE_LINKS_PER_ITEM);
         })(),
       });
     } else {

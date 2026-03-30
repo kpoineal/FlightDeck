@@ -1,6 +1,8 @@
 // ── App entry point — composition root (loaded last) ─────────────────
 
 function addHistory(kind, summary, payload = {}) {
+  // Trim oldest entries before insert to prevent unbounded growth between saves
+  pruneHistory();
   state.history.unshift({
     id: `h_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`,
     at: nowIso(),

@@ -134,6 +134,10 @@ async function monitorTaskItem(item, { manual = false } = {}) {
       }
     }
     item.evidenceLinks = mergedLinks;
+    // Enforce evidence link cap — keep newest (end of array)
+    if (item.evidenceLinks.length > MAX_EVIDENCE_LINKS_PER_ITEM) {
+      item.evidenceLinks = item.evidenceLinks.slice(-MAX_EVIDENCE_LINKS_PER_ITEM);
+    }
     // Identify truly new links for change-tracking purposes
     const prevUrls = new Set(prevLinks.map((e) => e.url));
     discoveredLinks = curatedLinks.filter((e) => !prevUrls.has(e.url));
@@ -168,6 +172,11 @@ async function monitorTaskItem(item, { manual = false } = {}) {
 
     if (!Array.isArray(item.updateHistory)) item.updateHistory = [];
 
+    // Trim before insert so we never exceed the cap even momentarily
+    while (item.updateHistory.length >= 20) {
+      item.updateHistory.pop();
+    }
+
     // Record severity change as its own dedicated history entry so it
     // stands out in the timeline and isn't conflated with content updates.
     if (severityChanged) {
@@ -193,11 +202,6 @@ async function monitorTaskItem(item, { manual = false } = {}) {
         suggestedNextSteps: item.suggestedNextSteps.length ? [...item.suggestedNextSteps] : undefined,
         seen: false,
       });
-    }
-
-    // Keep history to a reasonable size
-    if (item.updateHistory.length > 20) {
-      item.updateHistory = item.updateHistory.slice(0, 20);
     }
 
     // Only flag "New Update" for substantive field changes (status, severity,

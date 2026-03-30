@@ -213,3 +213,9 @@ const SIGNAL_TYPE_OPTIONS = [
 
 const HISTORY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const HISTORY_MAX_ENTRIES = 200;
+
+// ── Performance caps (tiered storage) ────────────────────────────────
+const MAX_EVIDENCE_LINKS_PER_ITEM = 20;
+const MAX_ACTIVE_ITEMS = 500;
+const COLD_STORAGE_KEY = 'flightdeck.cold.v1';
+const COLD_EVICTION_HOURS = 24;
