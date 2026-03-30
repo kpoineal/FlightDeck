@@ -2,6 +2,30 @@
 // Each handler accepts a `container` element (the event delegation root)
 // and an optional `renderFn` callback for re-rendering (e.g. renderTrackingMode or renderPopoutMode).
 
+/**
+ * Accordion helper: collapse all scanner sections except the given one.
+ * Updates state.collapsedSections so only sectionId is expanded.
+ */
+function collapseAllSectionsExcept(sectionId) {
+  const allSectionIds = [...elements.radarList.querySelectorAll('[data-section-items]')]
+    .map((el) => el.getAttribute('data-section-items'))
+    .filter(Boolean);
+  state.collapsedSections = allSectionIds.filter((id) => id !== sectionId);
+}
+
+/**
+ * Sync DOM collapsed state for all scanner sections to match state.collapsedSections.
+ */
+function syncCollapsedSectionsDOM() {
+  elements.radarList.querySelectorAll('[data-section-items]').forEach((itemsContainer) => {
+    const sectionId = itemsContainer.getAttribute('data-section-items');
+    const shouldCollapse = state.collapsedSections.includes(sectionId);
+    itemsContainer.classList.toggle('collapsed', shouldCollapse);
+    const chevron = elements.radarList.querySelector(`[data-section-collapse="${CSS.escape(sectionId)}"]`);
+    if (chevron) chevron.classList.toggle('collapsed', shouldCollapse);
+  });
+}
+
 function handleSectionToggleClick(container, toggleEl, attrName) {
   const itemId = toggleEl.getAttribute(`data-${attrName}-toggle-id`);
   const panel = container.querySelector(`[data-${attrName}-panel-id="${CSS.escape(itemId)}"]`);
@@ -285,89 +309,6 @@ function bindEvents() {
 
   elements.refreshBtn.addEventListener('click', refreshCurrentMode);
 
-  // Add Task collapsible toggle
-  const addTaskToggle = document.getElementById('addTaskToggle');
-  const addTaskPanel = document.getElementById('addTaskPanel');
-  if (addTaskToggle && addTaskPanel) {
-    addTaskToggle.addEventListener('click', () => {
-      const isExpanded = addTaskPanel.classList.toggle('show');
-      addTaskToggle.classList.toggle('expanded', isExpanded);
-    });
-  }
-
-  elements.customTaskScheduleType?.addEventListener('change', () => {
-    updateCustomTaskScheduleInput();
-  });
-
-  const customWeeklyPanel = document.getElementById('customTaskWeeklyPanel');
-  if (customWeeklyPanel) {
-    customWeeklyPanel.addEventListener('change', (event) => {
-      const cb = event.target.closest('.weekly-day-cb');
-      if (cb) {
-        const label = cb.closest('.weekly-day-label');
-        if (label) label.classList.toggle('active', cb.checked);
-        const anyChecked = customWeeklyPanel.querySelector('.weekly-day-cb:checked');
-        if (!anyChecked) {
-          cb.checked = true;
-          if (label) label.classList.add('active');
-        }
-        return;
-      }
-    });
-
-    customWeeklyPanel.addEventListener('click', (event) => {
-      const addBtn = event.target.closest('#customTaskAddTime');
-      if (addBtn) {
-        const slotsContainer = document.getElementById('customTaskTimeSlots');
-        if (!slotsContainer) return;
-        const existing = [...slotsContainer.querySelectorAll('.weekly-time-picker')].map((inp) => inp.value).filter(Boolean);
-        existing.push('09:00');
-        slotsContainer.innerHTML = existing.map((t, i) => `
-          <div class="weekly-time-slot">
-            <input type="time" class="tracking-input weekly-time-picker" value="${escapeHtml(t)}" />
-            ${existing.length > 1 ? '<button type="button" class="weekly-time-remove" title="Remove">&times;</button>' : ''}
-          </div>
-        `).join('');
-        return;
-      }
-      const removeBtn = event.target.closest('.weekly-time-remove');
-      if (removeBtn) {
-        const slot = removeBtn.closest('.weekly-time-slot');
-        const slotsContainer = document.getElementById('customTaskTimeSlots');
-        if (!slot || !slotsContainer) return;
-        const allSlots = [...slotsContainer.querySelectorAll('.weekly-time-slot')];
-        if (allSlots.length <= 1) return;
-        slot.remove();
-        const remaining = [...slotsContainer.querySelectorAll('.weekly-time-picker')].map((inp) => inp.value).filter(Boolean);
-        slotsContainer.innerHTML = remaining.map((t, i) => `
-          <div class="weekly-time-slot">
-            <input type="time" class="tracking-input weekly-time-picker" value="${escapeHtml(t)}" />
-            ${remaining.length > 1 ? '<button type="button" class="weekly-time-remove" title="Remove">&times;</button>' : ''}
-          </div>
-        `).join('');
-      }
-    });
-  }
-
-  elements.createTaskBtn?.addEventListener('click', () => {
-    createCustomTrackingItem();
-  });
-
-  const customSignalsContainer = document.getElementById('customTaskSignals');
-  if (customSignalsContainer) {
-    customSignalsContainer.addEventListener('change', (event) => {
-      const cb = event.target.closest('input[type="checkbox"]');
-      if (!cb) return;
-      const label = cb.closest('.signal-checkbox');
-      if (label) label.classList.toggle('active', cb.checked);
-      const anyChecked = customSignalsContainer.querySelector('input[type="checkbox"]:checked');
-      if (!anyChecked) {
-        cb.checked = true;
-        if (label) label.classList.add('active');
-      }
-    });
-  }
-
   // Unified density toggle
   const densityToggleBtn = document.getElementById('densityToggleBtn');
   if (densityToggleBtn) {
@@ -584,6 +525,16 @@ function bindEvents() {
   }
 
   elements.radarList.addEventListener('click', async (event) => {
+    // ── Per-scanner add item button ──
+    const addItemBtn = event.target.closest('[data-scanner-add-item]');
+    if (addItemBtn) {
+      event.stopPropagation();
+      event.preventDefault();
+      const id = addItemBtn.getAttribute('data-scanner-add-item');
+      renderAddTaskModal(id);
+      return;
+    }
+
     // ── Section header actions (check FIRST, before card/row handlers) ──
     const headerSettings = event.target.closest('[data-scanner-header-settings]');
     if (headerSettings) {
@@ -594,20 +545,76 @@ function bindEvents() {
       return;
     }
 
+    // ── Inline pill filter click (BEFORE collapse handlers) ──
+    const pillFilter = event.target.closest('[data-scanner-filter]');
+    if (pillFilter) {
+      event.stopPropagation();
+      event.preventDefault();
+      const filterAttr = pillFilter.getAttribute('data-scanner-filter');
+      const sourceId = pillFilter.getAttribute('data-scanner-source-id');
+      if (!filterAttr || !sourceId) return;
+
+      // Parse filter type and value
+      let type, value;
+      if (filterAttr === 'new') {
+        type = 'new'; value = 'new';
+      } else {
+        const parts = filterAttr.split(':');
+        type = parts[0]; value = parts.slice(1).join(':');
+      }
+
+      // Toggle: clicking active pill clears, clicking different pill switches
+      const current = state.scannerFilters[sourceId];
+      if (current && current.type === type && current.value === value) {
+        delete state.scannerFilters[sourceId];
+      } else {
+        state.scannerFilters[sourceId] = { type, value };
+      }
+
+      // If scanner is collapsed, we need a full render to expand it
+      const colIdx = state.collapsedSections.indexOf(sourceId);
+      if (colIdx >= 0) {
+        state.collapsedSections.splice(colIdx, 1);
+        savePersistentState();
+        renderRadarMode();
+      } else {
+        // Scanner already expanded — just show/hide cards in place, no rebuild
+        applyInlineFilterDOM(sourceId);
+      }
+      return;
+    }
+
+    // ── Clear inline filter button ──
+    const filterClear = event.target.closest('[data-scanner-filter-clear]');
+    if (filterClear) {
+      event.stopPropagation();
+      event.preventDefault();
+      const sourceId = filterClear.getAttribute('data-scanner-filter-clear');
+      if (sourceId) {
+        delete state.scannerFilters[sourceId];
+        applyInlineFilterDOM(sourceId);
+      }
+      return;
+    }
+
     const collapseBtn = event.target.closest('[data-section-collapse]');
     if (collapseBtn) {
       event.stopPropagation();
       event.preventDefault();
       const sectionId = collapseBtn.getAttribute('data-section-collapse');
-      const idx = state.collapsedSections.indexOf(sectionId);
-      if (idx >= 0) {
-        state.collapsedSections.splice(idx, 1);
+      delete state.scannerFilters[sectionId];
+      const isCollapsed = state.collapsedSections.indexOf(sectionId) >= 0;
+      if (isCollapsed) {
+        // Expanding — collapse all others (accordion)
+        collapseAllSectionsExcept(sectionId);
       } else {
         state.collapsedSections.push(sectionId);
       }
       collapseBtn.classList.toggle('collapsed');
       const itemsContainer = elements.radarList.querySelector(`[data-section-items="${CSS.escape(sectionId)}"]`);
       if (itemsContainer) itemsContainer.classList.toggle('collapsed');
+      // Sync all other sections' DOM to match collapsed state
+      syncCollapsedSectionsDOM();
       savePersistentState();
       return;
     }
@@ -622,6 +629,32 @@ function bindEvents() {
       return;
     }
 
+    // ── Clicking anywhere on the section header toggles collapse ──
+    const sectionHeader = event.target.closest('.radar-section-header');
+    if (sectionHeader) {
+      event.stopPropagation();
+      event.preventDefault();
+      const sectionId = sectionHeader.getAttribute('data-source-id');
+      if (sectionId) {
+        const isCollapsed = state.collapsedSections.indexOf(sectionId) >= 0;
+        if (isCollapsed) {
+          // Expanding — collapse all others (accordion)
+          collapseAllSectionsExcept(sectionId);
+        } else {
+          state.collapsedSections.push(sectionId);
+          delete state.scannerFilters[sectionId];
+        }
+        const chevron = sectionHeader.querySelector('[data-section-collapse]');
+        if (chevron) chevron.classList.toggle('collapsed');
+        const itemsContainer = elements.radarList.querySelector(`[data-section-items="${CSS.escape(sectionId)}"]`);
+        if (itemsContainer) itemsContainer.classList.toggle('collapsed');
+        // Sync all other sections' DOM to match collapsed state
+        syncCollapsedSectionsDOM();
+        savePersistentState();
+      }
+      return;
+    }
+
     // Create new scanner
     const createBtn = event.target.closest('[data-create-scanner-btn]');
     if (createBtn) {
@@ -633,6 +666,7 @@ function bindEvents() {
     const filterBtn = event.target.closest('[data-filter]');
     if (filterBtn && filterBtn.closest('.filter-bar')) {
       state.filter = filterBtn.dataset.filter || 'all';
+      state.scannerFilters = {};
       savePersistentState();
       renderRadarMode();
       return;
@@ -664,7 +698,50 @@ function bindEvents() {
 
     const markSeenButton = event.target.closest('[data-mark-seen-id]');
     if (markSeenButton) {
-      handleMarkSeenClick(markSeenButton.getAttribute('data-mark-seen-id'), renderRadarMode);
+      const itemId = markSeenButton.getAttribute('data-mark-seen-id');
+      handleMarkSeenClick(itemId, () => {
+        // Update card/row in-place instead of full DOM rebuild
+        const wrapper = elements.radarList.querySelector(`[data-tracker-id="${CSS.escape(itemId)}"]`);
+        if (wrapper) {
+          // Remove new-item visual states
+          wrapper.classList.remove('has-new-update', 'is-new');
+          wrapper.setAttribute('data-item-new', 'false');
+          // Remove "New" badge
+          const badge = wrapper.querySelector('.tracker-new-badge');
+          if (badge) badge.remove();
+          const badgePill = wrapper.querySelector('.badge-pill');
+          if (badgePill) badgePill.remove();
+          // Remove green glow outline
+          const row = wrapper.querySelector('.tracker-row');
+          if (row) row.classList.remove('has-new-update');
+          // Remove "Updated" banner
+          const updatedBanner = wrapper.querySelector('.tracker-updated-at');
+          if (updatedBanner) updatedBanner.remove();
+          // Remove unseen styling from timeline entries
+          wrapper.querySelectorAll('.at-event--unseen').forEach((el) => el.classList.remove('at-event--unseen'));
+          wrapper.querySelectorAll('.tracker-history-entry.unseen').forEach((el) => el.classList.remove('unseen'));
+          // Hide the "Mark as Seen" button
+          markSeenButton.style.display = 'none';
+        }
+        // Update the scanner header pill counts (new count changed)
+        const section = wrapper?.closest('.radar-section');
+        const sourceId = section?.querySelector('.radar-section-header')?.getAttribute('data-source-id');
+        if (sourceId) {
+          // Recount new items in this section
+          const items = section.querySelectorAll('[data-item-new]');
+          let newCount = 0;
+          items.forEach((el) => { if (el.getAttribute('data-item-new') === 'true') newCount++; });
+          const newIndicator = section.querySelector('.radar-new-indicator');
+          if (newIndicator) {
+            if (newCount > 0) {
+              newIndicator.textContent = newCount + ' new';
+              newIndicator.title = newCount + ' new or updated — click to filter';
+            } else {
+              newIndicator.remove();
+            }
+          }
+        }
+      });
       return;
     }
 
@@ -1113,6 +1190,11 @@ function bindEvents() {
     const hasTask = state.trackingItems.some((entry) => entry.id === taskId);
     if (!hasTask) return;
 
+    // Reset filter to 'all' so the target item is guaranteed to render
+    state.filter = 'all';
+    // Clear any per-scanner inline filters that might hide the item
+    state.scannerFilters = {};
+
     setMode('Radar');
     state.expandedBriefingMeetingIds = state.expandedBriefingMeetingIds || [];
     renderRadarMode();
@@ -1120,6 +1202,20 @@ function bindEvents() {
     requestAnimationFrame(() => {
       const el = elements.radarList.querySelector(`[data-tracker-id="${CSS.escape(taskId)}"]`);
       if (!el) return;
+
+      // Expand parent scanner section if collapsed
+      const sectionItems = el.closest('.radar-section-items');
+      if (sectionItems && sectionItems.classList.contains('collapsed')) {
+        const sectionId = sectionItems.getAttribute('data-section-items');
+        if (sectionId) {
+          sectionItems.classList.remove('collapsed');
+          const idx = state.collapsedSections.indexOf(sectionId);
+          if (idx >= 0) state.collapsedSections.splice(idx, 1);
+          const chevron = elements.radarList.querySelector(`[data-section-collapse="${CSS.escape(sectionId)}"]`);
+          if (chevron) chevron.classList.remove('collapsed');
+          savePersistentState();
+        }
+      }
 
       if (state.trackingDensity === 'minimal') {
         const row = el.querySelector('[data-row-toggle-id]');
@@ -1143,6 +1239,15 @@ function bindEvents() {
       }
 
       el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      // Highlight the card so the user knows which one the notification refers to
+      el.classList.add('just-created');
+      setTimeout(() => {
+        el.classList.add('glow-fade');
+        setTimeout(() => {
+          el.classList.remove('just-created', 'glow-fade');
+        }, 1300);
+      }, 1500);
     });
   });
 }

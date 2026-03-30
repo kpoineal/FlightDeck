@@ -121,97 +121,6 @@
       </section>
 
       <section id="viewRadar" class="mode-view active">
-        <div class="add-task-bar">
-          <button class="add-task-toggle" id="addTaskToggle">
-            <svg class="add-task-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>
-            Add Monitored Task
-          </button>
-          <div class="add-task-panel" id="addTaskPanel">
-            <div class="add-task-form">
-              <div class="add-task-row">
-                <div class="add-task-field add-task-field-grow">
-                  <label class="add-task-label" for="customTaskTitle">Title</label>
-                  <input id="customTaskTitle" class="tracking-input" type="text" placeholder="e.g., Customer agreement for Project X" />
-                </div>
-                <div class="add-task-field">
-                  <label class="add-task-label" for="customTaskSeverity">Severity</label>
-                  <select id="customTaskSeverity" class="tracking-select">
-                    <option value="Observe" selected>Observe</option>
-                    <option value="Elevated">Elevated</option>
-                    <option value="Critical">Critical</option>
-                  </select>
-                </div>
-                <div class="add-task-field">
-                  <label class="add-task-label" for="customTaskScheduleType">Schedule</label>
-                  <select id="customTaskScheduleType" class="tracking-select">
-                    <option value="interval">Interval</option>
-                    <option value="weekly">Scheduled</option>
-                    <option value="one-time">One-time</option>
-                  </select>
-                </div>
-                <div class="add-task-field">
-                  <label class="add-task-label" for="customTaskScheduleValue">Interval</label>
-                  <select id="customTaskScheduleValue" class="tracking-select">
-                    <option value="15m">Every 15m</option>
-                    <option value="30m" selected>Every 30m</option>
-                    <option value="1h">Every 1h</option>
-                    <option value="2h">Every 2h</option>
-                    <option value="4h">Every 4h</option>
-                  </select>
-                  <input id="customTaskOneTimeAt" class="tracking-input d-none" type="datetime-local" />
-                </div>
-                <div class="add-task-field d-none" id="customTaskWeeklyPanel">
-                  <label class="add-task-label">Days &amp; Times</label>
-                  <div class="weekly-days-row">
-                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="mon" checked />Mon</label>
-                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="tue" checked />Tue</label>
-                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="wed" checked />Wed</label>
-                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="thu" checked />Thu</label>
-                    <label class="weekly-day-label active"><input type="checkbox" class="weekly-day-cb" value="fri" checked />Fri</label>
-                    <label class="weekly-day-label"><input type="checkbox" class="weekly-day-cb" value="sat" />Sat</label>
-                    <label class="weekly-day-label"><input type="checkbox" class="weekly-day-cb" value="sun" />Sun</label>
-                  </div>
-                  <div class="weekly-times-row">
-                    <label class="add-task-label">Times</label>
-                    <div class="weekly-time-slots" id="customTaskTimeSlots">
-                      <div class="weekly-time-slot">
-                        <input type="time" class="tracking-input weekly-time-picker" value="08:00" />
-                      </div>
-                      <div class="weekly-time-slot">
-                        <input type="time" class="tracking-input weekly-time-picker" value="12:00" />
-                        <button type="button" class="weekly-time-remove" title="Remove">&times;</button>
-                      </div>
-                    </div>
-                    <button type="button" class="small-btn weekly-time-add" id="customTaskAddTime">+ Add</button>
-                  </div>
-                </div>
-                <div class="add-task-field add-task-field--end">
-                  <label class="add-task-label add-task-label--inline">
-                    <input id="customTaskNotify" type="checkbox" checked /> Notifications
-                  </label>
-                </div>
-              </div>
-              <div class="add-task-row">
-                <div class="signal-filter signal-filter--flush" id="customTaskSignals">
-                  <span class="signal-filter-label">Signals:</span>
-                  <label class="signal-checkbox active"><input type="checkbox" value="email" checked /><span class="signal-icon">✉️</span><span class="signal-label">Email</span></label>
-                  <label class="signal-checkbox active"><input type="checkbox" value="chat" checked /><span class="signal-icon">💬</span><span class="signal-label">Chat</span></label>
-                  <label class="signal-checkbox active"><input type="checkbox" value="meeting" checked /><span class="signal-icon">📅</span><span class="signal-label">Meetings</span></label>
-                  <label class="signal-checkbox active"><input type="checkbox" value="doc" checked /><span class="signal-icon">📄</span><span class="signal-label">Documents</span></label>
-                </div>
-              </div>
-              <div class="add-task-row">
-                <div class="add-task-field add-task-field-grow">
-                  <label class="add-task-label" for="customTaskContext">Monitoring Context</label>
-                  <textarea id="customTaskContext" class="tracking-textarea" placeholder="What should WorkIQ look for when refreshing this task? (new lines supported)"></textarea>
-                </div>
-              </div>
-              <div class="add-task-actions">
-                <button id="createTaskBtn" class="btn primary">Create Task</button>
-              </div>
-            </div>
-          </div>
-        </div>
         <div class="cockpit-grid">
           <article class="panel">
             <div class="tracking-heading-row">
@@ -236,17 +145,7 @@
               </div>
             </div>
             <div class="panel-sub">Prioritized signals from email, Teams, meetings, docs</div>
-            <button class="prompt-editor-toggle" id="promptEditorToggle">
-              <span class="chevron">&#9654;</span> Edit Radar Prompt
-            </button>
-            <div class="prompt-editor-body" id="promptEditorBody">
-              <textarea id="radarPromptEditor" spellcheck="false" placeholder="Loading prompt..."></textarea>
-              <div class="prompt-editor-actions">
-                <button class="small-btn primary" id="promptEditorApply">Apply</button>
-                <button class="small-btn" id="promptEditorReset">Reset to Default</button>
-                <span class="prompt-status" id="promptEditorStatus"></span>
-              </div>
-            </div>
+            <!-- Radar prompt editor removed — prompt is now edited via scanner settings gear -->
             <div class="list" id="radarList"></div>
           </article>
         </div>
@@ -294,6 +193,7 @@
   </div>
 
   <div id="scannerSettingsModal" class="modal" role="dialog" aria-modal="true"></div>
+  <div id="addTaskModal" class="modal" role="dialog" aria-modal="true"></div>
   <div id="radarPromptModal" class="modal" role="dialog" aria-modal="true"></div>
 
   <!-- Demo mode (must load before foundation to intercept early) -->

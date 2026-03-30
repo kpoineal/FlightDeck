@@ -18,6 +18,7 @@
 | Jester | DevOps Engineer | claude-opus-4.6-fast | ⚙️ DevOps |
 | Iceman | Product Owner | claude-opus-4.6-fast | 🎯 Product |
 | Charlie | Prompt Engineer | claude-sonnet-4.5 | ✨ Prompt |
+| Slider | Performance Engineer | claude-sonnet-4.5 | ⚡ Performance |
 | Scribe | Session Logger | claude-haiku-4.5 | 📋 Scribe |
 | Ralph | Work Monitor | — | 🔄 Monitor |
 

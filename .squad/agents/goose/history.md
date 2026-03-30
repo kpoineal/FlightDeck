@@ -324,7 +324,30 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Key files**: `src/renderer/renderers/tracking.js`, `src/renderer/popout.js`, `src/styles/tracking.css`
 - **All 438 tests pass** after changes.
 
-### 2026-03-19 — Activity Timeline V3 + Resizable Popout Panels
+### 2026-03-27 — Add Task UX Redesign Feasibility Analysis
+- **Goal**: Evaluate 5 UX patterns for redesigning the "Add Monitored Task" experience in the scanner-grouped radar view.
+- **Patterns evaluated**: (1) Per-scanner "+" button in header, (2) Inline quick-add row, (3) Context menu/dropdown, (4) Modal form, (5) Scanner dropdown on existing form.
+- **Recommendation**: Pattern 1+4 combo — per-scanner "+" button as trigger, modal form pre-filled with scanner context as the form surface. Reuses existing `#scannerSettingsModal` pattern and `.modal` CSS.
+- **Key refactor identified**: `createCustomTrackingItem()` is DOM-coupled to static form element IDs. Needs extraction into a params-based `createTrackingItemFromParams(params)` function to support both modal and inline-add patterns.
+- **Key code inventory**:
+  - `buildSectionHeader()` in `renderers/radar.js` (line 178) — `.radar-section-header-actions` div is the insertion point for "+" button.
+  - `renderScannerSettingsModal()` in `renderers/radar.js` (line 347) — proven modal pattern to replicate.
+  - `createCustomTrackingItem()` in `renderers/tracking.js` (line 282) — the creation logic to refactor.
+  - `moveItemToScanner()` in `models/item.js` (line 872) — already handles `scannerId` assignment.
+  - `groupItemsBySource()` in `renderers/radar.js` (line 146) — items auto-sort into scanner groups by `scannerId`.
+  - Existing modal CSS in `styles/modal.css` — `.modal`, `.modal-card`, `.modal.show` all reusable.
+- **Decision written to**: `.squad/decisions/inbox/goose-add-task-ux-patterns.md`.
+
+### 2026-03-27 — Interactive Scanner Header Pills (Inline Filtering)
+- **Goal**: Make severity dots, attention badges, and "N new" pills in scanner headers clickable to filter items within that scanner.
+- **State** (`renderer/state.js`): Added `scannerFilters: {}` to state object — ephemeral, session-only, NOT persisted to disk. Keys are `sourceId` strings (e.g. `scanner-abc`), values are `{ type, value }` filter descriptors.
+- **Pills** (`renderer/renderers/radar.js → buildSectionHeader`): Added `data-scanner-filter` and `data-scanner-source-id` attributes to all pill types. Active filter pill gets `.active` class. Clear button (`×`) appended when filter is active.
+- **Render** (`renderer/renderers/radar.js → renderRadarList`): After grouping by source, checks `state.scannerFilters[sourceId]`. Filters display items by severity/status/new while preserving original items for header pill counts. Shows "No items matching filter" empty state when filtered set is empty but original set has items.
+- **Events** (`renderer/events.js`): Pill click handler inserted BEFORE collapse handlers — `event.stopPropagation()` prevents header collapse. Toggle behavior: clicking active pill clears, clicking different pill switches. Auto-expands collapsed scanner on pill click. Clear button handler deletes filter entry. Global filter change clears all `scannerFilters`. Collapse handler clears that scanner's filter.
+- **CSS** (`styles/radar.css`): Hover states (`cursor: pointer`, `brightness(1.2)`, `scale(1.08)`). Active states (solid fill, ring outline via `box-shadow`, `scale(1.05)`). Specific `.attn-blocked.active` and `.attn-waiting.active` filled variants. `.scanner-filter-clear` styled as small round `×` button.
+- **Pattern**: Per-scanner ephemeral inline filter — single-active, toggle-off, global-clears-all. Drop-box architecture: pills carry data attributes for both filter spec and source identity, event handler parses them generically.
+- **Key files**: `src/renderer/state.js`, `src/renderer/renderers/radar.js`, `src/renderer/events.js`, `src/styles/radar.css`.
+- **All 549 tests pass** after changes.
 - **Problem**: Kyle said the horizontal timeline "isn't even really visible and kinda looks dumb." Wanted something "more interactive and modern" that would "make Apple's UI developers jealous." Also wanted resizable panels in the popout view.
 - **Deliverable 1: Resizable Popout Panels**
   - Added drag handle between `.popout-panel-left` and `.popout-panel-right` — injected as DOM element in `applyPopoutPanelRatio()`, called after every `renderPopoutMode()` re-render.
@@ -361,3 +384,21 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **All 446 tests pass** after changes.
 - **Key files**: `src/renderer/renderers/radar.js`, `src/renderer/monitor-engine.js`, `src/styles/tracking.css`.
 - **Pattern**: For background refresh cycles that update existing items, use targeted DOM replacement (`element.replaceWith()`) instead of full container `innerHTML` rebuilds. Reserve full rebuilds for structural changes (new items added, items removed, filter/sort changes). Suppress CSS transitions on freshly-inserted elements with a `.no-transition` class removed after `requestAnimationFrame`.
+
+### 2026-03-27 — Enhanced Collapsed Scanner Headers
+- **Goal**: Surface key information in collapsed scanner headers so users can triage which scanners need attention without expanding.
+- **Changes to `buildSectionHeader()`** in `renderers/radar.js`:
+  - Added `items` parameter to options object (default `[]`).
+  - Computes severity micro-counts (Critical/Elevated/Observe), blocked/waiting status counts, new/updated item count, highest severity for border tinting, and most recent `lastChangedAt` timestamp.
+  - Renders: colored severity count pills (`.radar-sev-dot`), attention badges (`.radar-attn-badge`), pulsing new indicator (`.radar-new-indicator`), relative timestamp (`.radar-last-activity`), severity-tinted left border class (`sev-border-*`).
+- **Call site update**: `renderRadarList()` now passes `items: group.items` to `buildSectionHeader()`.
+- **CSS additions** in `radar.css`:
+  - `.sev-border-critical/elevated/observe` — 3px left border using severity color tokens.
+  - `.radar-sev-dots` + `.radar-sev-dot` — inline pill-shaped micro-counts with severity background colors.
+  - `.radar-attn-badge` — semi-transparent background badges for blocked/waiting counts.
+  - `.radar-new-indicator` — green pulsing badge with `radar-new-pulse` keyframe animation.
+  - `.radar-last-activity` — muted timestamp pushed to the right via `margin-left: auto`.
+  - `.radar-section-header-left` — added `flex-wrap: wrap; min-width: 0` for compact overflow.
+- **All 549 tests pass** — no test changes needed (additive UI-only change).
+- **Key files**: `src/renderer/renderers/radar.js`, `src/styles/radar.css`.
+- **Pattern**: Computing summary stats from the items array inside the header builder (pure string concatenation) keeps it performant and avoids extra DOM operations. Using existing `relativeTime()` utility and `--color-*` CSS tokens ensures consistency with the rest of the UI.

@@ -138,6 +138,24 @@ function severityColor(sev) {
   return 'var(--color-observe)';
 }
 
+function severityColorClass(sev) {
+  const s = (sev || '').toLowerCase();
+  if (s === 'critical') return 'at-event--critical';
+  if (s === 'elevated') return 'at-event--elevated';
+  return 'at-event--observe';
+}
+
+function applyTimelineDelays(container) {
+  if (!container || typeof container.querySelectorAll !== 'function') return;
+  const events = container.querySelectorAll('.at-event[data-at-index]');
+  for (const el of events) {
+    const idx = parseInt(el.getAttribute('data-at-index'), 10);
+    if (Number.isFinite(idx)) {
+      el.style.setProperty('--at-delay', (idx * 30) + 'ms');
+    }
+  }
+}
+
 function severityLabel(sev) {
   const s = (sev || '').toLowerCase();
   if (s === 'critical') return 'Critical';
@@ -172,7 +190,6 @@ function buildActivityTimelineHtml(updateHistory, options = {}) {
   if (!entries.length) return '';
 
   function renderEvent(e, i) {
-    const color = severityColor(e.severity);
     const label = severityLabel(e.severity);
     const timeLabel = timelineRelativeLabel(e.timestamp);
     const changeSummary = Array.isArray(e.changes) ? e.changes.join(' · ') : '';
@@ -193,7 +210,8 @@ function buildActivityTimelineHtml(updateHistory, options = {}) {
     const showSummary = summaryText && summaryText !== changeSummary;
     const summaryHtml = showSummary ? `<p class="at-summary">${escapeHtml(summaryText)}</p>` : '';
 
-    return `<div class="at-event${isNewest ? ' at-event--newest' : ''}${isUnseen ? ' at-event--unseen' : ''}" style="--at-color: ${color}; --at-delay: ${i * 30}ms" data-at-index="${i}">
+    const colorClass = severityColorClass(e.severity);
+    return `<div class="at-event ${colorClass}${isNewest ? ' at-event--newest' : ''}${isUnseen ? ' at-event--unseen' : ''}" data-at-index="${i}">
       <div class="at-track">
         <div class="at-node">
           ${isNewest ? '<div class="at-node-ring"></div>' : ''}
@@ -279,56 +297,41 @@ function updateCustomTaskScheduleInput() {
   }
 }
 
-function createCustomTrackingItem() {
-  const title = cleanDisplayText(elements.customTaskTitle?.value || '');
+/**
+ * Create a tracking item from explicit parameters (no DOM coupling).
+ * Returns the created item, or null if validation failed.
+ */
+function createTrackingItemFromParams(params = {}) {
+  const title = cleanDisplayText(params.title || '');
   if (!title) {
     showToast('Enter a task title before adding.', { icon: '\u26A0' });
-    elements.customTaskTitle?.focus();
-    return;
+    return null;
   }
 
-  const contextValue = normalizeMultilineText(elements.customTaskContext?.value || '');
-
-  const scheduleTypeRaw = elements.customTaskScheduleType?.value;
-  const scheduleType = scheduleTypeRaw === 'one-time' ? 'one-time' : scheduleTypeRaw === 'weekly' ? 'weekly' : 'interval';
-  const oneTimeAtRaw = elements.customTaskOneTimeAt?.value || '';
-  const oneTimeAt = toIsoOrNull(oneTimeAtRaw);
+  const contextValue = normalizeMultilineText(params.context || '');
+  const scheduleType = params.scheduleType === 'one-time' ? 'one-time' : params.scheduleType === 'weekly' ? 'weekly' : 'interval';
+  const oneTimeAt = toIsoOrNull(params.oneTimeAt || '');
   if (scheduleType === 'one-time' && !oneTimeAt) {
     showToast('Select a one-time run date and time.', { icon: '\u26A0' });
-    elements.customTaskOneTimeAt?.focus();
-    return;
+    return null;
   }
 
-  let weeklyDays = [...DEFAULT_WEEKLY_DAYS];
-  let weeklyTimes = [...DEFAULT_WEEKLY_TIMES];
+  let weeklyDays = params.weeklyDays || [...DEFAULT_WEEKLY_DAYS];
+  let weeklyTimes = params.weeklyTimes || [...DEFAULT_WEEKLY_TIMES];
   if (scheduleType === 'weekly') {
-    const weeklyPanel = document.getElementById('customTaskWeeklyPanel');
-    if (weeklyPanel) {
-      weeklyDays = [...weeklyPanel.querySelectorAll('.weekly-day-cb:checked')].map((cb) => cb.value).filter(Boolean);
-      weeklyTimes = [...weeklyPanel.querySelectorAll('.weekly-time-picker')].map((inp) => inp.value).filter(Boolean);
-    }
     if (!weeklyDays.length) {
       showToast('Select at least one day of the week.', { icon: '\u26A0' });
-      return;
+      return null;
     }
     if (!weeklyTimes.length) {
       showToast('Add at least one time slot.', { icon: '\u26A0' });
-      return;
+      return null;
     }
   }
 
-  const selectedSeverity = elements.customTaskSeverity?.value || 'Observe';
-  const notifyEnabled = elements.customTaskNotify?.checked !== false;
-
-  const signalContainer = document.getElementById('customTaskSignals');
-  const selectedSignals = signalContainer
-    ? [...signalContainer.querySelectorAll('input[type="checkbox"]:checked')].map((cb) => cb.value).filter(Boolean)
-    : [...ALL_SIGNAL_TYPES];
-
-  if (!selectedSignals.length) {
-    showToast('Select at least one signal type to monitor.', { icon: '\u26A0' });
-    return;
-  }
+  const selectedSeverity = params.severity || 'Observe';
+  const notifyEnabled = params.notifyEnabled !== false;
+  const selectedSignals = Array.isArray(params.signals) && params.signals.length ? params.signals : [...ALL_SIGNAL_TYPES];
 
   const trackingItem = normalizeTrackingItem({
     id: `custom_${hashString(`${Date.now()}_${Math.random()}`)}`,
@@ -347,11 +350,12 @@ function createCustomTrackingItem() {
     monitorPrompt: contextValue || title,
     monitorSignals: selectedSignals,
     scheduleType,
-    scheduleValue: elements.customTaskScheduleValue?.value || '30m',
+    scheduleValue: params.scheduleValue || '30m',
     oneTimeAt,
     weeklyDays,
     weeklyTimes,
     monitorEnabled: true,
+    scannerId: params.scannerId || null,
   });
 
   trackingItem.nextRunAt = computeNextRunAt(trackingItem);
@@ -370,20 +374,17 @@ function createCustomTrackingItem() {
   savePersistentState();
   addHistory('selection', `Added custom monitored task: ${trackingItem.title}`, { itemId: trackingItem.id });
 
-  if (elements.customTaskTitle) elements.customTaskTitle.value = '';
-  if (elements.customTaskContext) elements.customTaskContext.value = '';
-  if (elements.customTaskSeverity) elements.customTaskSeverity.value = 'Observe';
-  if (elements.customTaskOneTimeAt) elements.customTaskOneTimeAt.value = '';
-  if (elements.customTaskNotify) elements.customTaskNotify.checked = true;
+  return trackingItem;
+}
 
-  renderTrackingMode();
-
-  // Highlight the newly created card/row so it stands out
-  const newEl = elements.trackingList.querySelector(`[data-tracker-id="${CSS.escape(trackingItem.id)}"]`);
+/**
+ * Post-creation UI feedback: highlight item, scroll into view, show toast.
+ */
+function highlightNewItem(itemId) {
+  const newEl = elements.radarList.querySelector(`[data-tracker-id="${CSS.escape(itemId)}"]`);
   if (newEl) {
     newEl.classList.add('just-created');
     newEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    // Hold the glow for 1.5s then fade out over 1.2s, then clean up
     setTimeout(() => {
       newEl.classList.add('glow-fade');
       setTimeout(() => {
@@ -391,8 +392,47 @@ function createCustomTrackingItem() {
       }, 1300);
     }, 1500);
   }
+}
 
-  // Show in-app confirmation toast
+function createCustomTrackingItem() {
+  const signalContainer = document.getElementById('customTaskSignals');
+  const selectedSignals = signalContainer
+    ? [...signalContainer.querySelectorAll('input[type="checkbox"]:checked')].map((cb) => cb.value).filter(Boolean)
+    : [...ALL_SIGNAL_TYPES];
+
+  let weeklyDays, weeklyTimes;
+  const scheduleTypeRaw = elements.customTaskScheduleType?.value;
+  if (scheduleTypeRaw === 'weekly') {
+    const weeklyPanel = document.getElementById('customTaskWeeklyPanel');
+    if (weeklyPanel) {
+      weeklyDays = [...weeklyPanel.querySelectorAll('.weekly-day-cb:checked')].map((cb) => cb.value).filter(Boolean);
+      weeklyTimes = [...weeklyPanel.querySelectorAll('.weekly-time-picker')].map((inp) => inp.value).filter(Boolean);
+    }
+  }
+
+  const trackingItem = createTrackingItemFromParams({
+    title: elements.customTaskTitle?.value || '',
+    context: elements.customTaskContext?.value || '',
+    scheduleType: scheduleTypeRaw,
+    oneTimeAt: elements.customTaskOneTimeAt?.value || '',
+    weeklyDays,
+    weeklyTimes,
+    severity: elements.customTaskSeverity?.value || 'Observe',
+    notifyEnabled: elements.customTaskNotify?.checked !== false,
+    signals: selectedSignals,
+    scheduleValue: elements.customTaskScheduleValue?.value || '30m',
+  });
+
+  if (!trackingItem) return;
+
+  if (elements.customTaskTitle) elements.customTaskTitle.value = '';
+  if (elements.customTaskContext) elements.customTaskContext.value = '';
+  if (elements.customTaskSeverity) elements.customTaskSeverity.value = 'Observe';
+  if (elements.customTaskOneTimeAt) elements.customTaskOneTimeAt.value = '';
+  if (elements.customTaskNotify) elements.customTaskNotify.checked = true;
+
+  renderTrackingMode();
+  highlightNewItem(trackingItem.id);
   showToast(`Task created: ${trackingItem.title}`, { icon: '\u2713' });
 }
 
@@ -597,7 +637,7 @@ function buildTrackingCard(item) {
   const unseenCount = unseenHistoryCount(item);
 
   return `
-    <article class="tracker-card ${hasNew ? 'has-new-update is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}">
+    <article class="tracker-card ${hasNew ? 'has-new-update is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}" data-item-severity="${escapeHtml(item.severity || 'Observe')}" data-item-status="${escapeHtml(item.lifecycleStatus || 'in-progress')}" data-item-new="${hasNew ? 'true' : 'false'}">
       <div class="tracker-head">
         <div class="tracker-head-left">
           <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
@@ -657,7 +697,7 @@ function buildTrackingRow(item, expandedRowId) {
   })();
 
   return `
-  <div class="tracker-row-wrapper ${hasNew ? 'is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}">
+  <div class="tracker-row-wrapper ${hasNew ? 'is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}" data-item-severity="${escapeHtml(item.severity || 'Observe')}" data-item-status="${escapeHtml(item.lifecycleStatus || 'in-progress')}" data-item-new="${hasNew ? 'true' : 'false'}">
     <div class="tracker-row ${hasNew ? 'has-new-update' : ''} ${isExpanded ? 'expanded' : ''}" data-row-toggle-id="${escapeHtml(item.id)}">
       <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
         <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>

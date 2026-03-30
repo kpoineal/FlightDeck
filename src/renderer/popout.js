@@ -120,6 +120,7 @@ function renderPopoutMode() {
   `;
 
   autoSizeSeveritySelects(popoutContainer);
+  applyTimelineDelays(popoutContainer);
   // Enforce schedule-control visibility via DOM API — inline style attributes
   // from the HTML template are not reliably applied after innerHTML replacement.
   inlineUpdateScheduleControls(popoutContainer, item.id, item.scheduleType);

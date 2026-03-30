@@ -41,6 +41,29 @@
   margin-top: 8px;
 }
 
+/* ── Add Task modal form ── */
+.add-task-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.add-task-modal-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.add-task-modal-form .tracking-textarea {
+  min-height: 72px;
+}
+
+/* ── Per-scanner add-item button ── */
+[data-scanner-add-item] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ── Theme toggle ── */
 .theme-toggle {
   background: var(--bg-inset);

@@ -152,4 +152,90 @@
 - **Priority divergence:** Maverick recommends Todo → Sparkline → Scanners (by complexity). Iceman recommends Sparkline → Scanners → Todos (by strategic value). Both agree sparkline should ship first.
 - Decisions captured: DEC-051 (Iceman product analysis), DEC-052 (Maverick feasibility).
 
+### 2026-03-27 — Scanner Collapsed View UX Redesign Analysis
+
+**User request:** Kyle shared screenshots of the radar view and asked how to make it more functional, informative, and modern. Core complaint: collapsed scanner sections "don't tell me a whole lot."
+
+**Key UX problems identified:**
+1. Collapsed headers are information-dead zones — only show icon + name + count
+2. KPI section creates ~250px of dead scroll above actionable scanner content
+3. No per-scanner severity breakdown — all scanners look the same when collapsed
+4. No scanner health/status signals (last run, new items, blocked counts)
+5. Uniform visual weight across scanners regardless of urgency
+6. Admin buttons (pause, settings) take header real estate from operational data
+
+**6 proposals delivered (prioritized):**
+- P0: Rich collapsed headers with inline severity mini-bar + micro-counts + blocked/new badges + last-scan time
+- P0: Severity-tinted scanner headers (left-border color by highest severity)
+- P1: Compact collapsible KPI strip (250px → 44px, saves scroll)
+- P1: Smart scanner sorting by urgency score (critical×3 + blocked×2 + new×1)
+- P1: Peek expansion (progressive disclosure — top 3 items without full expand)
+- P2: Overflow menu for infrequent admin actions (⏸ ⚙️ → ⋯ menu)
+
+**6 user stories with acceptance criteria delivered.** Execution phases: (1) Rich headers + tinting, (2) Compact KPIs + smart sort, (3) Overflow menu + peek.
+
+**Key files for implementation:**
+- Header rendering: `src/renderer/renderers/radar.js` — `buildSectionHeader()` (line 117)
+- Header CSS: `src/styles/radar.css` — `.radar-section-header*` classes
+- KPI section: `src/index.html` (lines 75-120), `src/renderer/renderers/kpi.js`
+- Scanner grouping/sorting: `src/renderer/renderers/radar.js` — `groupItemsBySource()`, `renderRadarList()`
+- Severity helpers: `src/renderer/renderers/kpi.js` — `countSeverityFromItems()`, `severityClass()`
+
+**Competitive benchmarks referenced:** PagerDuty service tiles, Linear project rows, GitHub Projects columns, AWS CloudWatch alarm states, Grafana dashboard panels.
+
+**Decisions captured:** `.squad/decisions/inbox/iceman-scanner-ux.md`
+
+### 2026-03-27 — Interactive Scanner Pills Product Analysis
+
+**User request:** Kyle proposed making the scanner header pills (severity dots, attention badges, "new" indicator) clickable to filter within that scanner. Asked for full product thinking.
+
+**Key product decisions made:**
+- **Per-scanner inline filter model** — each scanner gets its own ephemeral filter state, independent of the global filter bar. Not an intersection model; single-active-filter per scanner.
+- **Click behavior:** Click pill → expand scanner + show only matching items. Click again → toggle off. Click different pill → switch filter. No multi-select (that's command bar territory).
+- **Global filter interaction:** Changing the global filter clears all inline scanner filters. Global always wins on change — clean slate principle.
+- **State:** `state.scannerFilters[sourceId] = { type, value }` — not persisted. Ephemeral per-session. Cleared on new scan data arrival.
+- **Event architecture:** Pill click handlers intercept before the existing header-collapse handler in `events.js`. Clicks on pills filter; clicks elsewhere on header still collapse/expand. Current delegation pattern already supports this insertion.
+
+**Additional features recommended:**
+- "Mark all as seen" per scanner (clears `isNew`/`hasNewUpdate` for scanner items)
+- Pill hover states with cursor:pointer + scale transition
+- Active pill visual: solid fill, scale(1.05), outline ring, small × clear button
+- Filter indicator on scanner header when inline filter is active
+
+**Deferred:**
+- Cross-scanner filtering (global filter bar's job)
+- Multi-select / intersection pills (command bar)
+- Keyboard nav for pills (accessibility pass later)
+- Smart context-sensitive sort on filter activation
+
+**5 user stories delivered** with acceptance criteria: US-1 (severity pills), US-2 (status badges), US-3 (new indicator), US-4 (mark all seen), US-5 (global-clears-inline).
+
+**Key implementation notes for agents:**
+- `applyFilter()` in `renderers/radar.js` runs once globally. Inline filters need per-section application inside the `renderRadarList()` loop after global filter.
+- Pill CSS selectors: `.radar-sev-dot`, `.radar-attn-badge`, `.radar-new-indicator` — add `--active` modifier classes.
+- Data attributes for severity: `.sev-critical`, `.sev-elevated`, `.sev-observe`. For status: `.attn-blocked`, `.attn-waiting`.
+
+**Decisions captured:** `.squad/decisions/inbox/iceman-interactive-pills.md`
+
+### 2026-03-27 — Add Task UX Brainstorm for Scanner-Grouped Radar
+
+**User request:** Kyle asked how users should create their own items now that everything lives in the unified scanner-grouped radar view. The old "+ Add Monitored Task" button creates items with `scannerId: null` (orphans in the default group).
+
+**5 UX options analyzed:**
+1. **Per-Scanner "+" Button** — inline "+" in each scanner header, form opens inside that section. Low-medium complexity.
+2. **Scanner Picker in Existing Form** — add a scanner dropdown to the current top form. Lowest complexity (~15 lines).
+3. **Drag-and-Drop to Scanner Section** — create in default, drag to target scanner. Medium-high complexity (HTML5 Drag API).
+4. **Quick-Add Inline Input (Todoist-style)** — persistent text input at bottom of each scanner section. Medium complexity.
+5. **Right-Click Context Menu** — context menu on scanner headers with "Add item" action. Medium complexity.
+
+**Recommendation:** Ship Option 2 first (scanner picker — smallest change), then Option 1 (per-scanner "+") as the proper long-term UX. Options are not mutually exclusive; they layer naturally.
+
+**Key architecture notes for implementation:**
+- `createCustomTrackingItem()` in `renderers/tracking.js` (line 282) is the creation function — needs `scannerId` parameter
+- Scanner dropdown should populate from `state.scanners` array
+- `buildSectionHeader()` in `renderers/radar.js` (line ~190) is where per-scanner "+" button would go
+- Existing add-task form in `index.html` lines 126-180, events in `events.js` lines 289-355
+
+**Decisions captured:** `.squad/decisions/inbox/iceman-add-task-ux.md`
+
 <!-- Append learnings here as they are discovered -->

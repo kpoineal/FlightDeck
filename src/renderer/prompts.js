@@ -83,31 +83,37 @@ async function loadPromptFiles() {
 }
 
 function initPromptEditor() {
-  // Radar prompt editor
-  elements.promptEditorToggle.addEventListener('click', () => {
-    const isExpanded = elements.promptEditorBody.classList.toggle('show');
-    elements.promptEditorToggle.classList.toggle('expanded', isExpanded);
-  });
+  // Radar prompt editor (removed from UI — prompt edited via scanner settings gear)
+  if (elements.promptEditorToggle) {
+    elements.promptEditorToggle.addEventListener('click', () => {
+      const isExpanded = elements.promptEditorBody.classList.toggle('show');
+      elements.promptEditorToggle.classList.toggle('expanded', isExpanded);
+    });
+  }
 
-  elements.promptEditorApply.addEventListener('click', () => {
-    const edited = (elements.radarPromptEditor.value || '').trim();
-    if (!edited) return;
-    promptCache.radarScan = edited;
-    saveCustomPrompt('radarScan', edited);
-    showPromptEditorStatus(elements.promptEditorStatus, 'Prompt applied — next scan will use this version');
-  });
+  if (elements.promptEditorApply) {
+    elements.promptEditorApply.addEventListener('click', () => {
+      const edited = (elements.radarPromptEditor.value || '').trim();
+      if (!edited) return;
+      promptCache.radarScan = edited;
+      saveCustomPrompt('radarScan', edited);
+      showPromptEditorStatus(elements.promptEditorStatus, 'Prompt applied — next scan will use this version');
+    });
+  }
 
-  elements.promptEditorReset.addEventListener('click', async () => {
-    clearCustomPrompt('radarScan');
-    const result = await window.workiq.readPromptFile('radar-scan.md');
-    if (result.success) {
-      promptCache.radarScan = result.content.trim();
-      elements.radarPromptEditor.value = promptCache.radarScan;
-      showPromptEditorStatus(elements.promptEditorStatus, 'Reset to default');
-    } else {
-      showPromptEditorStatus(elements.promptEditorStatus, 'Failed to reload file');
-    }
-  });
+  if (elements.promptEditorReset) {
+    elements.promptEditorReset.addEventListener('click', async () => {
+      clearCustomPrompt('radarScan');
+      const result = await window.workiq.readPromptFile('radar-scan.md');
+      if (result.success) {
+        promptCache.radarScan = result.content.trim();
+        elements.radarPromptEditor.value = promptCache.radarScan;
+        showPromptEditorStatus(elements.promptEditorStatus, 'Reset to default');
+      } else {
+        showPromptEditorStatus(elements.promptEditorStatus, 'Failed to reload file');
+      }
+    });
+  }
 
   // Briefing prompt editor
   elements.briefingPromptEditorToggle.addEventListener('click', () => {

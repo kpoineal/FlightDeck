@@ -351,22 +351,23 @@
 /* ── Pill ── */
 .pill {
   border-radius: var(--radius-pill);
-  padding: 4px 10px;
-  font-size: 0.75rem;
+  padding: 2px 7px;
+  font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   border: 1px solid transparent;
   white-space: nowrap;
   flex: 0 0 auto;
   align-self: center;
+  line-height: 1.3;
 }
 .pill.critical { color: var(--pill-critical-text); border-color: color-mix(in srgb, var(--color-critical) 50%, transparent); background: var(--pill-critical-bg); }
 .pill.elevated { color: var(--pill-elevated-text); border-color: color-mix(in srgb, var(--color-elevated) 50%, transparent); background: var(--pill-elevated-bg); }
 .pill.observe { color: var(--pill-observe-text); border-color: color-mix(in srgb, var(--pill-observe-text) 50%, transparent); background: var(--pill-observe-bg); }
 .pill.briefed { color: var(--pill-briefed-text); border-color: color-mix(in srgb, var(--color-success) 50%, transparent); background: var(--pill-briefed-bg); }
 .pill.unbriefed { color: var(--pill-unbriefed-text); border-color: color-mix(in srgb, var(--color-elevated) 50%, transparent); background: var(--pill-unbriefed-bg); }
-.pill.automation-pill { color: var(--accent); border-color: var(--accent); background: rgba(10, 132, 255, 0.1); font-size: 0.7rem; margin-left: 6px; }
-.pill.last-updated-pill { color: var(--text-muted); border-color: var(--border); background: transparent; font-size: 0.7rem; font-weight: 500; margin-left: auto; }
+.pill.automation-pill { color: var(--accent); border-color: var(--accent); background: rgba(10, 132, 255, 0.1); font-size: 0.6rem; margin-left: 4px; }
+.pill.last-updated-pill { color: var(--text-muted); border-color: var(--border); background: transparent; font-size: 0.6rem; font-weight: 500; margin-left: auto; }
 .pill.last-updated-pill.popped { color: var(--accent); border-color: var(--accent); background: rgba(10, 132, 255, 0.1); font-weight: 600; }
 
 /* ── Severity select ── */
@@ -374,8 +375,8 @@
   appearance: none;
   -webkit-appearance: none;
   border-radius: var(--radius-pill);
-  padding: 4px 12px;
-  font-size: 0.75rem;
+  padding: 2px 8px;
+  font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   border: 1px solid transparent;
@@ -387,6 +388,7 @@
   width: var(--sel-width, auto);
   outline: none;
   transition: box-shadow 0.2s ease;
+  line-height: 1.3;
 }
 .severity-select:focus {
   box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
@@ -606,7 +608,7 @@
   background: var(--accent);
   color: var(--accent-fg);
   font-weight: 700;
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   animation: badgePulse 2s ease-in-out infinite;

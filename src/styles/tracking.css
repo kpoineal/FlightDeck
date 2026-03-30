@@ -133,8 +133,8 @@
   appearance: none;
   -webkit-appearance: none;
   border-radius: var(--radius-pill);
-  padding: 4px 12px;
-  font-size: 0.75rem;
+  padding: 2px 8px;
+  font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   border: 1px solid transparent;
@@ -146,6 +146,7 @@
   width: var(--sel-width, auto);
   outline: none;
   transition: box-shadow 0.2s ease;
+  line-height: 1.3;
 }
 .status-select option {
   background: var(--bg-surface);
@@ -348,8 +349,7 @@
   transform: translateY(-1px);
 }
 .tracker-row.has-new-update {
-  border-color: var(--color-success);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--color-success) 20%, transparent);
+  /* Glow handled by .is-new on the wrapper — only marks the row for badge display */
 }
 .tracker-row.expanded {
   border-bottom-left-radius: 0;
@@ -627,54 +627,42 @@
 }
 
 .tracker-card.has-new-update {
-  border-color: var(--color-success);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--color-success) 20%, transparent);
+  /* Glow handled by .is-new — only show the badge here */
 }
 .tracker-new-badge {
   display: none;
   margin-left: auto;
   background: linear-gradient(135deg, var(--color-success) 0%, color-mix(in srgb, var(--color-success) 70%, var(--accent)) 100%);
   color: #ffffff;
-  font-size: 0.68rem;
+  font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  padding: 4px 10px;
+  padding: 2px 7px;
   border-radius: var(--radius-pill);
   text-transform: uppercase;
   white-space: nowrap;
   flex-shrink: 0;
   animation: badgePulse 2s ease-in-out infinite;
+  line-height: 1.3;
 }
 .tracker-card.has-new-update .tracker-new-badge {
   display: inline-flex;
   align-items: center;
 }
 
-/* ── Persistent "new" glow — stays until hover ── */
+/* ── Persistent "new" glow — stays until Mark as Seen is clicked ── */
 .tracker-card.is-new,
 .tracker-row-wrapper.is-new .tracker-row {
-  outline: 2px solid var(--color-success, #30d158);
-  outline-offset: 2px;
-  box-shadow: 0 0 16px color-mix(in srgb, var(--color-success, #30d158) 35%, transparent),
-              0 0 32px color-mix(in srgb, var(--color-success, #30d158) 12%, transparent);
-  border-color: var(--color-success, #30d158) !important;
-  transition: outline-color 0.8s ease, outline-offset 0.8s ease,
-              box-shadow 0.8s ease, border-color 0.8s ease;
-}
-.tracker-card.is-new:hover,
-.tracker-row-wrapper.is-new:hover .tracker-row {
-  outline-color: transparent;
-  outline-offset: 6px;
-  box-shadow: 0 0 0 transparent, 0 0 0 transparent;
-  border-color: var(--border-card) !important;
+  border-color: color-mix(in srgb, var(--color-success, #30d158) 60%, transparent) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-success, #30d158) 18%, transparent);
 }
 .tracker-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
-  min-height: 36px;
+  gap: 5px;
+  padding: 6px 10px;
+  min-height: 28px;
   flex-wrap: nowrap;
 }
 .tracker-title {
@@ -685,13 +673,13 @@
   line-height: 1.3;
 }
 .tracker-card .card-body {
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   font-size: 0.8rem;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.4;
   height: 100%;
 }
 .tracker-summary {
@@ -1074,20 +1062,20 @@ html[data-theme="light"] .weekly-time-picker::-webkit-calendar-picker-indicator 
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .tracker-head-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
 }
 .tracker-head-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
   flex-wrap: nowrap;
 }
@@ -1288,6 +1276,9 @@ html[data-theme="light"] .weekly-time-picker::-webkit-calendar-picker-indicator 
   animation-delay: var(--at-delay, 0ms);
   cursor: pointer;
 }
+.at-event--critical { --at-color: var(--color-critical); }
+.at-event--elevated { --at-color: var(--color-elevated); }
+.at-event--observe  { --at-color: var(--color-observe); }
 @keyframes at-card-enter {
   to { opacity: 1; transform: translateY(0); }
 }

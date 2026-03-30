@@ -51,14 +51,6 @@ const elements = {
 
   briefingPane: document.getElementById('briefingPane'),
   trackingList: document.getElementById('radarList'), // Legacy alias — unified into radarList
-  customTaskTitle: document.getElementById('customTaskTitle'),
-  customTaskContext: document.getElementById('customTaskContext'),
-  customTaskSeverity: document.getElementById('customTaskSeverity'),
-  customTaskScheduleType: document.getElementById('customTaskScheduleType'),
-  customTaskScheduleValue: document.getElementById('customTaskScheduleValue'),
-  customTaskOneTimeAt: document.getElementById('customTaskOneTimeAt'),
-  customTaskNotify: document.getElementById('customTaskNotify'),
-  createTaskBtn: document.getElementById('createTaskBtn'),
 
   ledgerIOwe: document.getElementById('ledgerIOwe'),
   ledgerOthersOwe: document.getElementById('ledgerOthersOwe'),
@@ -106,6 +98,7 @@ const state = {
   density: 'full',
   filter: 'all',
   collapsedSections: [],
+  scannerFilters: {},  // Ephemeral per-scanner inline filters, NOT persisted
   // Legacy aliases for density
   trackingDensity: 'full',
   radarDensity: 'full',
