@@ -5,5 +5,12 @@
     "assigned_at": "2026-02-25T00:00:00.000Z",
     "agents": ["Maverick", "Goose", "Viper", "Merlin", "Jester"],
     "reason": "Aviation universe resonance with FlightDeck project theme"
+  },
+  {
+    "assignment_id": "flightdeck-topgun-slider-001",
+    "universe": "top-gun",
+    "assigned_at": "2026-03-30T00:00:00.000Z",
+    "agents": ["Slider"],
+    "reason": "Iceman's RIO — intercepts memory problems before they crash the plane. Added for OOM crisis after 48h unattended session."
   }
 ]

@@ -60,6 +60,17 @@
 - Cross-agent prompt quality review
 - **Keywords:** prompt, template, schema, instruction, AI, LLM, grounding, citation, dedup, output format, tone, constraint, scanner prompt, briefing prompt, monitor prompt
 
+## Slider — Performance Engineer
+- Memory leak diagnosis, V8 heap profiling, GC optimization
+- Hard caps and eviction policies for state data
+- Evidence link, history, and item count limits
+- State architecture optimization (lazy loading, offloading archived data)
+- Electron process memory management (main vs renderer)
+- Long-running session stability
+- Render cycle optimization, transient allocation reduction
+- CSP compliance for inline styles
+- **Keywords:** memory, leak, OOM, heap, GC, performance, cap, limit, eviction, retention, archive, lazy load, profiling, V8, state growth, buffer
+
 ## Scribe — Session Logger
 - Session logs, orchestration logs
 - Decision merging from inbox

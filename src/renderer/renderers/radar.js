@@ -322,6 +322,7 @@ function renderRadarList() {
 
   elements.radarList.innerHTML = html;
   autoSizeSeveritySelects(elements.radarList);
+  applyTimelineDelays(elements.radarList);
   restoreRadarUiState(savedUiState);
 
   // Apply any active inline filters via DOM show/hide (no second rebuild)
@@ -832,6 +833,7 @@ function patchSingleItem(itemId) {
   newEl.classList.add('no-transition');
   existing.replaceWith(newEl);
   autoSizeSeveritySelects(newEl);
+  applyTimelineDelays(newEl);
 
   // Restore tab states
   for (const [tid, activeTab] of Object.entries(tabStates)) {

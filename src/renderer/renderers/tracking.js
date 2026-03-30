@@ -138,6 +138,24 @@ function severityColor(sev) {
   return 'var(--color-observe)';
 }
 
+function severityColorClass(sev) {
+  const s = (sev || '').toLowerCase();
+  if (s === 'critical') return 'at-event--critical';
+  if (s === 'elevated') return 'at-event--elevated';
+  return 'at-event--observe';
+}
+
+function applyTimelineDelays(container) {
+  if (!container || typeof container.querySelectorAll !== 'function') return;
+  const events = container.querySelectorAll('.at-event[data-at-index]');
+  for (const el of events) {
+    const idx = parseInt(el.getAttribute('data-at-index'), 10);
+    if (Number.isFinite(idx)) {
+      el.style.setProperty('--at-delay', (idx * 30) + 'ms');
+    }
+  }
+}
+
 function severityLabel(sev) {
   const s = (sev || '').toLowerCase();
   if (s === 'critical') return 'Critical';
@@ -172,7 +190,6 @@ function buildActivityTimelineHtml(updateHistory, options = {}) {
   if (!entries.length) return '';
 
   function renderEvent(e, i) {
-    const color = severityColor(e.severity);
     const label = severityLabel(e.severity);
     const timeLabel = timelineRelativeLabel(e.timestamp);
     const changeSummary = Array.isArray(e.changes) ? e.changes.join(' · ') : '';
@@ -193,7 +210,8 @@ function buildActivityTimelineHtml(updateHistory, options = {}) {
     const showSummary = summaryText && summaryText !== changeSummary;
     const summaryHtml = showSummary ? `<p class="at-summary">${escapeHtml(summaryText)}</p>` : '';
 
-    return `<div class="at-event${isNewest ? ' at-event--newest' : ''}${isUnseen ? ' at-event--unseen' : ''}" style="--at-color: ${color}; --at-delay: ${i * 30}ms" data-at-index="${i}">
+    const colorClass = severityColorClass(e.severity);
+    return `<div class="at-event ${colorClass}${isNewest ? ' at-event--newest' : ''}${isUnseen ? ' at-event--unseen' : ''}" data-at-index="${i}">
       <div class="at-track">
         <div class="at-node">
           ${isNewest ? '<div class="at-node-ring"></div>' : ''}

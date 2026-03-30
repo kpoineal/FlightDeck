@@ -1276,6 +1276,9 @@ html[data-theme="light"] .weekly-time-picker::-webkit-calendar-picker-indicator 
   animation-delay: var(--at-delay, 0ms);
   cursor: pointer;
 }
+.at-event--critical { --at-color: var(--color-critical); }
+.at-event--elevated { --at-color: var(--color-elevated); }
+.at-event--observe  { --at-color: var(--color-observe); }
 @keyframes at-card-enter {
   to { opacity: 1; transform: translateY(0); }
 }
