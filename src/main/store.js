@@ -1,4 +1,4 @@
-const ElectronStore = require('electron-store');
+const ElectronStore = require('electron-store').default || require('electron-store');
 const fs = require('fs');
 const { log, logError } = require('./utils');
 

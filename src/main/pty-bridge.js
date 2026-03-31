@@ -45,7 +45,7 @@ if (isWindows) {
 } else {
   // ── macOS / Linux resolution ────────────────────────────────────
   // Expect workiq to be installed globally (e.g. npm i -g @microsoft/workiq)
-  const commonPaths = ['/usr/local/bin/workiq', '/usr/bin/workiq'];
+  const commonPaths = ['/usr/local/bin/workiq', '/usr/bin/workiq', '/opt/homebrew/bin/workiq'];
   let resolved = null;
 
   // Try `which workiq` first
@@ -59,8 +59,16 @@ if (isWindows) {
   }
 
   if (resolved) {
-    workiqMode = 'system';
-    workiqLauncher = resolved;
+    // If resolved path is a shebang script (e.g. symlink to .js), run it via Node
+    // so it works inside packaged apps where /usr/bin/env node may not resolve.
+    const realPath = fs.realpathSync(resolved);
+    if (realPath.endsWith('.js')) {
+      workiqMode = 'js';
+      workiqLauncher = realPath;
+    } else {
+      workiqMode = 'system';
+      workiqLauncher = resolved;
+    }
   } else {
     workiqMode = 'system';
     workiqLauncher = null; // not found — error will be surfaced at call time
@@ -88,7 +96,7 @@ function getNodeExecutable() {
       process.env.NODE,
       '/usr/local/bin/node',
       '/usr/bin/node',
-      process.execPath,
+      '/opt/homebrew/bin/node',
     ].filter(Boolean);
 
     for (const candidate of candidates) {
