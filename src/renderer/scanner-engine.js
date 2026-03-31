@@ -118,7 +118,7 @@ async function runScanner(scanner) {
 
   // Default radar scanner uses dedicated prompt + merge logic
   if (scanner.isDefault) {
-    const prompt = buildRadarScanPrompt(scanner.lastRunAt);
+    const prompt = buildRadarScanPrompt(scanner.lastRunAt, scanner.id);
 
     const payload = await runWorkiqJson(
       prompt,

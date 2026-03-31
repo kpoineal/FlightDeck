@@ -173,19 +173,7 @@ function timelineRelativeLabel(isoStr) {
 
 function buildActivityTimelineHtml(updateHistory, options = {}) {
   const { maxVisible, itemId, item } = options;
-  let entries = Array.isArray(updateHistory) ? updateHistory.slice() : [];
-
-  // Synthesize an initial timeline entry from the item when history is empty
-  if (!entries.length && item) {
-    entries = [{
-      timestamp: item.trackedAt || item.lastRunAt || item.discoveredAt || new Date().toISOString(),
-      changes: ['Initial scan'],
-      summary: item.summary || '',
-      severity: item.severity,
-      status: item.status,
-      newLinks: Array.isArray(item.evidenceLinks) ? item.evidenceLinks.slice(0, 3) : [],
-    }];
-  }
+  const entries = Array.isArray(updateHistory) ? updateHistory.slice() : [];
 
   if (!entries.length) return '';
 
@@ -195,7 +183,8 @@ function buildActivityTimelineHtml(updateHistory, options = {}) {
     const changeSummary = Array.isArray(e.changes) ? e.changes.join(' · ') : '';
     const isNewest = i === 0;
     const isLast = i === entries.length - 1;
-    const isUnseen = e.seen === false;
+    const isTerminal = item && (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
+    const isUnseen = !isTerminal && e.seen === false;
 
     const prevSeverity = i > 0 ? (entries[i - 1].severity || '').toLowerCase() : null;
     const curSeverity = (e.severity || '').toLowerCase();
@@ -360,15 +349,14 @@ function createTrackingItemFromParams(params = {}) {
 
   trackingItem.nextRunAt = computeNextRunAt(trackingItem);
 
-  if (!trackingItem.updateHistory.length) {
-    trackingItem.updateHistory.push({
-      timestamp: trackingItem.trackedAt || nowIso(),
-      changes: ['Initial tracking'],
-      summary: trackingItem.summary || trackingItem.title || 'Monitoring started.',
-      status: trackingItem.status,
-      severity: trackingItem.severity,
-    });
-  }
+  trackingItem.updateHistory.unshift({
+    timestamp: trackingItem.trackedAt || nowIso(),
+    changes: ['Created'],
+    summary: trackingItem.summary || trackingItem.title || 'Monitoring started.',
+    status: trackingItem.status,
+    severity: trackingItem.severity,
+    seen: true,
+  });
 
   state.trackingItems.unshift(trackingItem);
   savePersistentState();
@@ -549,8 +537,9 @@ function restoreTrackingUiState(saved) {
 
 function buildCardTabsHtml(item) {
   const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
-  const unseenCount = unseenHistoryCount(item);
-  const hasNew = item.hasNewUpdate === true || item.isNew === true;
+  const isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
+  const unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
+  const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
   const people = Array.isArray(item.counterparties) && item.counterparties.length
     ? item.counterparties.join(', ')
     : 'No counterparties listed';
@@ -633,8 +622,9 @@ function buildCardTabsHtml(item) {
 }
 
 function buildTrackingCard(item) {
-  const hasNew = item.hasNewUpdate === true || item.isNew === true;
-  const unseenCount = unseenHistoryCount(item);
+  const isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
+  const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
+  const unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
 
   return `
     <article class="tracker-card ${hasNew ? 'has-new-update is-new' : ''}" data-tracker-id="${escapeHtml(item.id)}" data-item-severity="${escapeHtml(item.severity || 'Observe')}" data-item-status="${escapeHtml(item.lifecycleStatus || 'in-progress')}" data-item-new="${hasNew ? 'true' : 'false'}">
@@ -672,8 +662,9 @@ function buildTrackingCard(item) {
 }
 
 function buildTrackingRow(item, expandedRowId) {
-  const hasNew = item.hasNewUpdate === true || item.isNew === true;
-  const unseenCount = unseenHistoryCount(item);
+  const isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
+  const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
+  const unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
   const isExpanded = item.id === expandedRowId;
   const people = Array.isArray(item.counterparties) && item.counterparties.length
     ? item.counterparties.join(', ')
@@ -796,8 +787,9 @@ void function _deadCode() {
 
   if (isMinimal) {
     elements.trackingList.innerHTML = sortedItems.map((item) => {
-      const hasNew = item.hasNewUpdate === true || item.isNew === true;
-      const unseenCount = unseenHistoryCount(item);
+      const isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
+      const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
+      const unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
       const isExpanded = item.id === savedUiState.expandedRowId;
       const people = Array.isArray(item.counterparties) && item.counterparties.length
         ? item.counterparties.join(', ')
@@ -908,12 +900,13 @@ void function _deadCode() {
 
   elements.trackingList.innerHTML = sortedItems.map((item) => {
     const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
-    const hasNew = item.hasNewUpdate === true || item.isNew === true;
+    const isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
+    const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
     const people = Array.isArray(item.counterparties) && item.counterparties.length
       ? item.counterparties.join(', ')
       : 'No counterparties listed';
 
-    const unseenCount = unseenHistoryCount(item);
+    const unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
     const historyMarkup = buildTrackerHistoryMarkup(item);
 
     return `

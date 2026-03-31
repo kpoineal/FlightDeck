@@ -283,6 +283,18 @@ function normalizeItem(item) {
     isLedger: item?.isLedger === true,
   };
 
+  // Seed initial history for brand-new items (existing items from storage already have entries)
+  if (!normalized.updateHistory.length) {
+    normalized.updateHistory.push({
+      timestamp: normalized.discoveredAt || normalized.trackedAt || nowIso(),
+      changes: ['Discovered'],
+      summary: normalized.summary || normalized.title || '',
+      status: normalized.status,
+      severity: normalized.severity,
+      seen: true,
+    });
+  }
+
   if (!normalized.nextRunAt && normalized.monitorEnabled) {
     normalized.nextRunAt = computeNextRunAt(normalized);
   }
@@ -610,16 +622,15 @@ function enableItemMonitoring(itemId) {
   item.monitorPrompt = item.monitorPrompt || buildDefaultMonitorPrompt(item);
   item.hasNewUpdate = true;
 
-  if (!item.updateHistory.length) {
-    item.updateHistory.push({
-      timestamp: item.trackedAt,
-      changes: ['Initial tracking'],
-      summary: item.summary || item.title || 'Tracking started.',
-      status: item.status,
-      severity: item.severity,
-      suggestedNextSteps: item.suggestedNextSteps.length ? [...item.suggestedNextSteps] : undefined,
-    });
-  }
+  item.updateHistory.unshift({
+    timestamp: item.trackedAt,
+    changes: ['Monitoring enabled'],
+    summary: item.summary || item.title || 'Monitoring started.',
+    status: item.status,
+    severity: item.severity,
+    suggestedNextSteps: item.suggestedNextSteps.length ? [...item.suggestedNextSteps] : undefined,
+    seen: true,
+  });
 
   item.nextRunAt = computeNextRunAt(item);
   savePersistentState();
@@ -655,16 +666,15 @@ function upsertTrackingItemFromRadar(radarItem) {
       workHoursOnly: true,
     });
 
-    if (!normalized.updateHistory.length) {
-      normalized.updateHistory.push({
-        timestamp: normalized.trackedAt || nowIso(),
-        changes: ['Initial tracking'],
-        summary: normalized.summary || normalized.title || 'Tracking started.',
-        status: normalized.status,
-        severity: normalized.severity,
-        suggestedNextSteps: normalized.suggestedNextSteps.length ? [...normalized.suggestedNextSteps] : undefined,
-      });
-    }
+    normalized.updateHistory.unshift({
+      timestamp: normalized.trackedAt || nowIso(),
+      changes: ['Monitoring enabled'],
+      summary: normalized.summary || normalized.title || 'Monitoring started.',
+      status: normalized.status,
+      severity: normalized.severity,
+      suggestedNextSteps: normalized.suggestedNextSteps.length ? [...normalized.suggestedNextSteps] : undefined,
+      seen: true,
+    });
     state.items.unshift(normalized);
     // Keep legacy alias in sync
     state.trackingItems = state.items;
@@ -846,6 +856,12 @@ function setItemLifecycleStatus(id, newStatus) {
   if (newStatus === 'complete' || newStatus === 'archived') {
     item.monitorEnabled = false;
     item.nextRunAt = null;
+    // Clear "new" indicators — completing/archiving implies the user has reviewed
+    item.hasNewUpdate = false;
+    item.isNew = false;
+    if (Array.isArray(item.updateHistory)) {
+      item.updateHistory.forEach((e) => { e.seen = true; });
+    }
   }
   if (!Array.isArray(item.updateHistory)) item.updateHistory = [];
   item.updateHistory.unshift({

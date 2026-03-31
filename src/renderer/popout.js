@@ -33,12 +33,13 @@ function renderPopoutMode() {
   document.title = item.title || 'Tracked Item';
 
   const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
-  const hasNew = item.hasNewUpdate === true || item.isNew === true;
+  const isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
+  const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
   const people = Array.isArray(item.counterparties) && item.counterparties.length
     ? item.counterparties.join(', ')
     : 'No counterparties listed';
 
-  const unseenCount = unseenHistoryCount(item);
+  const unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
 
   const popoutContainer = document.getElementById('popoutContainer');
   popoutContainer.innerHTML = `

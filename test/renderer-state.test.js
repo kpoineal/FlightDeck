@@ -733,3 +733,49 @@ describe('loadPersistentState runs cleanup on load', () => {
     assert.ok(ctx.state.briefingsByMeetingId.mtg_ok);
   });
 });
+
+/* ================================================================== */
+/*  loadPersistentState clears new flags on completed/archived items   */
+/* ================================================================== */
+describe('loadPersistentState clears stale new flags', () => {
+  beforeEach(resetState);
+
+  it('clears hasNewUpdate and isNew on completed items', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      items: [
+        { id: 'done-item', title: 'Done', lifecycleStatus: 'complete', hasNewUpdate: true, isNew: true, updateHistory: [{ timestamp: '2026-03-01T00:00:00Z', changes: ['x'], seen: false }] },
+      ],
+    };
+    await ctx.loadPersistentState();
+    const item = ctx.state.items.find((i) => i.id === 'done-item');
+    assert.equal(item.hasNewUpdate, false);
+    assert.equal(item.isNew, false);
+    assert.equal(item.updateHistory[0].seen, true);
+  });
+
+  it('clears hasNewUpdate and isNew on archived items', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      items: [
+        { id: 'arch-item', title: 'Archived', lifecycleStatus: 'archived', archived: true, hasNewUpdate: true, isNew: true, updateHistory: [{ timestamp: '2026-03-01T00:00:00Z', changes: ['y'], seen: false }] },
+      ],
+    };
+    await ctx.loadPersistentState();
+    const item = ctx.state.items.find((i) => i.id === 'arch-item');
+    assert.equal(item.hasNewUpdate, false);
+    assert.equal(item.isNew, false);
+    assert.equal(item.updateHistory[0].seen, true);
+  });
+
+  it('preserves new flags on in-progress items', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      items: [
+        { id: 'active-item', title: 'Active', lifecycleStatus: 'in-progress', hasNewUpdate: true, isNew: true, updateHistory: [{ timestamp: '2026-03-01T00:00:00Z', changes: ['z'], seen: false }] },
+      ],
+    };
+    await ctx.loadPersistentState();
+    const item = ctx.state.items.find((i) => i.id === 'active-item');
+    assert.equal(item.hasNewUpdate, true);
+    assert.equal(item.isNew, true);
+    assert.equal(item.updateHistory[0].seen, false);
+  });
+});

@@ -301,6 +301,15 @@ async function loadPersistentState() {
       if (Array.isArray(item.evidenceLinks) && item.evidenceLinks.length > MAX_EVIDENCE_LINKS_PER_ITEM) {
         item.evidenceLinks = item.evidenceLinks.slice(-MAX_EVIDENCE_LINKS_PER_ITEM);
       }
+      // Clear stale "new" flags on completed/archived items
+      // (setItemLifecycleStatus now clears these, but items completed before that fix retain them)
+      if (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived') {
+        item.hasNewUpdate = false;
+        item.isNew = false;
+        if (Array.isArray(item.updateHistory)) {
+          item.updateHistory.forEach((e) => { e.seen = true; });
+        }
+      }
     }
 
     // Keep legacy aliases in sync
@@ -337,7 +346,8 @@ async function loadPersistentState() {
     // Keep legacy density aliases in sync
     state.trackingDensity = state.density;
     state.radarDensity = state.density;
-    state.filter = parsed.filter || parsed.trackingFilter || 'all';
+    const rawFilter = parsed.filter || parsed.trackingFilter || 'all';
+    state.filter = (rawFilter === 'all' || rawFilter === 'archived') ? rawFilter : 'all';
     state.collapsedSections = Array.isArray(parsed.collapsedSections) ? parsed.collapsedSections : [];
     if (parsed.connected === true) {
       state.connected = true;

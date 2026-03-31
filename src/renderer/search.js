@@ -148,30 +148,46 @@ function navigateSearchResult(item) {
   } else if (type === 'tracker') {
     setMode('Radar');
     requestAnimationFrame(() => {
-      // Full card view
-      const card = document.querySelector(`.tracker-card[data-tracker-id="${CSS.escape(id)}"]`);
-      if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); flashHighlight(card); return; }
-      // Minimal row view — expand the row
-      const wrapper = document.querySelector(`.tracker-row-wrapper[data-tracker-id="${CSS.escape(id)}"]`);
-      if (wrapper) {
-        const row = wrapper.querySelector('.tracker-row');
-        const detail = wrapper.querySelector('.tracker-row-detail');
-        const chevron = row?.querySelector('.row-expand-chevron');
-        // Collapse any other open row first
-        const currentlyOpen = elements.radarList.querySelector('.tracker-row-detail.show');
-        if (currentlyOpen && currentlyOpen !== detail) {
-          currentlyOpen.classList.remove('show');
-          const otherRow = currentlyOpen.parentElement?.querySelector('.tracker-row');
-          if (otherRow) { otherRow.classList.remove('expanded'); const oc = otherRow.querySelector('.row-expand-chevron'); if (oc) oc.classList.remove('open'); }
+      // Expand the parent scanner section using the accordion pattern
+      const el = document.querySelector(`[data-tracker-id="${CSS.escape(id)}"]`);
+      if (el) {
+        const sectionItems = el.closest('.radar-section-items');
+        if (sectionItems) {
+          const sectionId = sectionItems.getAttribute('data-section-items');
+          if (sectionId) {
+            collapseAllSectionsExcept(sectionId);
+            syncCollapsedSectionsDOM();
+            savePersistentState();
+          }
         }
-        if (detail && !detail.classList.contains('show')) {
-          detail.classList.add('show');
-          if (row) row.classList.add('expanded');
-          if (chevron) chevron.classList.add('open');
-        }
-        wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        flashHighlight(wrapper);
       }
+
+      requestAnimationFrame(() => {
+        // Full card view
+        const card = document.querySelector(`.tracker-card[data-tracker-id="${CSS.escape(id)}"]`);
+        if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); flashHighlight(card); return; }
+        // Minimal row view — expand the row
+        const wrapper = document.querySelector(`.tracker-row-wrapper[data-tracker-id="${CSS.escape(id)}"]`);
+        if (wrapper) {
+          const row = wrapper.querySelector('.tracker-row');
+          const detail = wrapper.querySelector('.tracker-row-detail');
+          const chevron = row?.querySelector('.row-expand-chevron');
+          // Collapse any other open row first
+          const currentlyOpen = elements.radarList.querySelector('.tracker-row-detail.show');
+          if (currentlyOpen && currentlyOpen !== detail) {
+            currentlyOpen.classList.remove('show');
+            const otherRow = currentlyOpen.parentElement?.querySelector('.tracker-row');
+            if (otherRow) { otherRow.classList.remove('expanded'); const oc = otherRow.querySelector('.row-expand-chevron'); if (oc) oc.classList.remove('open'); }
+          }
+          if (detail && !detail.classList.contains('show')) {
+            detail.classList.add('show');
+            if (row) row.classList.add('expanded');
+            if (chevron) chevron.classList.add('open');
+          }
+          wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          flashHighlight(wrapper);
+        }
+      });
     });
   } else if (type === 'briefing') {
     setMode('Briefings');

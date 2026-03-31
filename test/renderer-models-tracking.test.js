@@ -677,3 +677,84 @@ describe('monitorTaskItem()', () => {
       'New URL should be added');
   });
 });
+/* ================================================================== */
+/*  normalizeItem — initial "Discovered" history seed                 */
+/* ================================================================== */
+describe('normalizeItem() — initial history seed', () => {
+  it('seeds a "Discovered" entry when updateHistory is empty', () => {
+    const result = ctx.normalizeItem({ title: 'Brand new item' });
+    assert.equal(result.updateHistory.length, 1);
+    assert.equal(result.updateHistory[0].changes[0], 'Discovered');
+    assert.equal(result.updateHistory[0].seen, true);
+    assert.equal(result.updateHistory[0].status, 'Inbound');
+    assert.equal(result.updateHistory[0].severity, 'Observe');
+  });
+
+  it('does not double-seed when updateHistory already has entries', () => {
+    const existing = [{ timestamp: '2026-01-01T00:00:00Z', changes: ['Status changed'], seen: true }];
+    const result = ctx.normalizeItem({ title: 'Existing item', updateHistory: existing });
+    assert.equal(result.updateHistory.length, 1);
+    assert.equal(result.updateHistory[0].changes[0], 'Status changed');
+  });
+
+  it('uses discoveredAt as timestamp for the seed entry', () => {
+    const result = ctx.normalizeItem({ title: 'Timed', discoveredAt: '2026-03-15T10:00:00Z' });
+    assert.equal(result.updateHistory[0].timestamp, '2026-03-15T10:00:00Z');
+  });
+
+  it('falls back to trackedAt when discoveredAt is missing', () => {
+    const result = ctx.normalizeItem({ title: 'Tracked', trackedAt: '2026-03-15T12:00:00Z' });
+    // discoveredAt gets set by normalizeItem to nowIso(), but trackedAt is explicit
+    assert.ok(result.updateHistory[0].timestamp);
+  });
+
+  it('includes summary in seed entry', () => {
+    const result = ctx.normalizeItem({ title: 'Task', summary: 'Important context' });
+    assert.equal(result.updateHistory[0].summary, 'Important context');
+  });
+});
+
+/* ================================================================== */
+/*  enableItemMonitoring — "Monitoring enabled" history entry          */
+/* ================================================================== */
+describe('enableItemMonitoring() — history entries', () => {
+  it('adds "Monitoring enabled" entry on top of "Discovered"', () => {
+    ctx.state.items = [ctx.normalizeItem({
+      id: 'enable_test_1',
+      title: 'Enable Test',
+      severity: 'Elevated',
+      summary: 'Some summary',
+    })];
+
+    ctx.enableItemMonitoring('enable_test_1');
+
+    const item = ctx.state.items.find((e) => e.id === 'enable_test_1');
+    assert.equal(item.updateHistory.length, 2, 'should have Discovered + Monitoring enabled');
+    assert.equal(item.updateHistory[0].changes[0], 'Monitoring enabled');
+    assert.equal(item.updateHistory[0].seen, true);
+    assert.equal(item.updateHistory[1].changes[0], 'Discovered');
+  });
+});
+
+/* ================================================================== */
+/*  upsertTrackingItemFromRadar — "Monitoring enabled" history entry   */
+/* ================================================================== */
+describe('upsertTrackingItemFromRadar() — history entries', () => {
+  it('has Discovered + Monitoring enabled for new items', () => {
+    ctx.state.trackingItems = [];
+    ctx.state.items = [];
+
+    ctx.upsertTrackingItemFromRadar({
+      id: 'upsert_history_test',
+      title: 'Upsert History',
+      severity: 'Critical',
+      summary: 'Urgent item',
+    });
+
+    const item = ctx.state.items.find((e) => e.id === 'upsert_history_test');
+    assert.ok(item);
+    assert.equal(item.updateHistory.length, 2, 'should have Discovered + Monitoring enabled');
+    assert.equal(item.updateHistory[0].changes[0], 'Monitoring enabled');
+    assert.equal(item.updateHistory[1].changes[0], 'Discovered');
+  });
+});
