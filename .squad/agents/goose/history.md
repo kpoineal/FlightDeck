@@ -369,6 +369,30 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
   - Light theme: solid shadows instead of glows (both explicit and `prefers-color-scheme` variants).
   - All colors via CSS custom property `--at-color` set per-node via inline style.
 - **Key files**: `src/renderer/renderers/tracking.js`, `src/renderer/popout.js`, `src/styles/tracking.css`
+
+### 2026-03-31 — Initial History Entry Seeding for Scanner Items
+- **Problem**: Scanner-discovered items had empty `updateHistory: []`. The renderer used a synthetic "Initial scan" fallback, and the monitor created a first history entry showing a transition FROM a state never recorded.
+- **Fix (Option A)**: Seed a "Discovered" history entry universally in `normalizeItem()` when `updateHistory` is empty. Existing items from storage already have entries, so the `if (!length)` guard prevents double-seeding.
+- **Changes**:
+  1. **`normalizeItem()` in `models/item.js`**: After building the normalized object, if `updateHistory` is empty, push `{ changes: ['Discovered'], seen: true, ... }` using `discoveredAt` as timestamp.
+  2. **`enableItemMonitoring()` in `models/item.js`**: Changed guard from conditional push of "Initial tracking" to unconditional unshift of "Monitoring enabled" (with `seen: true`). This is now a distinct event from discovery.
+  3. **`upsertTrackingItemFromRadar()` in `models/item.js`**: Same treatment — "Monitoring enabled" unshifted after `normalizeItem()` seeds "Discovered".
+  4. **`createTrackingItemFromParams()` in `renderers/tracking.js`**: Changed to unconditional unshift of "Created" (with `seen: true`), since `normalizeTrackingItem()` already seeds "Discovered".
+  5. **`buildActivityTimelineHtml()` in `renderers/tracking.js`**: Removed the synthetic "Initial scan" fallback — all items now have real history entries.
+- **Tests**: Added 9 new tests covering: normalizeItem seeding, double-seed prevention, enableItemMonitoring history, upsertTrackingItemFromRadar history, and buildActivityTimelineHtml no-synthetic-fallback.
+- **All 566 tests pass** after the change.
+
+### 2026-03-31 — Notification Click → Card Navigation Fix
+- **Problem**: Clicking a desktop toast notification brought the app to focus but didn't navigate to the specific card. The notification click handler expanded the target scanner section manually (removing it from `collapsedSections`) without using the accordion pattern that collapses all other sections. It also called `scrollIntoView` in the same animation frame as the DOM expansion, before layout had settled.
+- **Root cause**: The handler was written before the accordion behavior was added. It didn't call `collapseAllSectionsExcept()` or `syncCollapsedSectionsDOM()`, so the target section expanded but other sections remained in their prior state. The scroll target computation ran before the browser re-laid out the newly-expanded section.
+- **Fix** (`src/renderer/events.js`):
+  1. Replaced manual section expansion (splice from `collapsedSections` + remove CSS class) with `collapseAllSectionsExcept(sectionId)` + `syncCollapsedSectionsDOM()` — same accordion pattern used by section header clicks.
+  2. Moved `scrollIntoView` + highlight into a nested `requestAnimationFrame` so layout settles after section expansion before scroll position is computed.
+  3. Changed `scrollIntoView({ block: 'nearest' })` → `block: 'center'` so the card is centered in the viewport, not just barely visible.
+- **Bonus fix** (`src/renderer/search.js`): The `navigateSearchResult()` function for tracker items had the same bug — it didn't expand collapsed sections at all. Added the same accordion expansion + nested rAF + `block: 'center'` pattern.
+- **Key files**: `src/renderer/events.js`, `src/renderer/search.js`.
+- **All 566 tests pass** after the change.
+- **Key files**: `src/renderer/models/item.js`, `src/renderer/renderers/tracking.js`, `test/renderer-models-tracking.test.js`, `test/renderer-tracking-renderers.test.js`.
 - **All 438 tests pass** after changes.
 
 ### 2026-03-26 — Fix Screen Flicker on Monitor Refresh Cycle
