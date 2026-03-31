@@ -327,8 +327,8 @@ describe('normalizeScannerDefinition() — medium-priority fields', () => {
     assert.equal(JSON.stringify(s.excludeKeywords), JSON.stringify(['newsletter']));
   });
 
-  it('defaults defaultMonitorSchedule to "30m"', () => {
-    assert.equal(ctx.normalizeScannerDefinition({ id: 's1' }).defaultMonitorSchedule, '30m');
+  it('defaults defaultMonitorSchedule to "4h"', () => {
+    assert.equal(ctx.normalizeScannerDefinition({ id: 's1' }).defaultMonitorSchedule, '4h');
   });
 
   it('accepts valid defaultMonitorSchedule values', () => {

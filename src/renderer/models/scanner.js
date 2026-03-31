@@ -10,7 +10,7 @@ function normalizeScannerDefinition(raw) {
     enabled: raw?.enabled !== false,
     isDefault: raw?.isDefault === true,
     scheduleType: raw?.scheduleType === 'one-time' ? 'one-time' : raw?.scheduleType === 'weekly' ? 'weekly' : 'interval',
-    scheduleValue: SCHEDULE_INTERVAL_OPTIONS.some((entry) => entry.value === raw?.scheduleValue) ? raw.scheduleValue : '30m',
+    scheduleValue: SCHEDULE_INTERVAL_OPTIONS.some((entry) => entry.value === raw?.scheduleValue) ? raw.scheduleValue : '4h',
     oneTimeAt: raw?.oneTimeAt || null,
     weeklyDays: Array.isArray(raw?.weeklyDays) && raw.weeklyDays.length
       ? raw.weeklyDays.filter((d) => WEEKLY_DAY_OPTIONS.some((o) => o.value === d))
@@ -31,7 +31,7 @@ function normalizeScannerDefinition(raw) {
     missedRunPolicy: MISSED_RUN_POLICY_OPTIONS.some((o) => o.value === raw?.missedRunPolicy) ? raw.missedRunPolicy : 'run-once',
     dedupStrategy: DEDUP_STRATEGY_OPTIONS.some((o) => o.value === raw?.dedupStrategy) ? raw.dedupStrategy : 'evidence-url',
     excludeKeywords: Array.isArray(raw?.excludeKeywords) ? raw.excludeKeywords.filter((v) => typeof v === 'string' && v.trim()) : [],
-    defaultMonitorSchedule: SCHEDULE_INTERVAL_OPTIONS.some((o) => o.value === raw?.defaultMonitorSchedule) ? raw.defaultMonitorSchedule : '30m',
+    defaultMonitorSchedule: SCHEDULE_INTERVAL_OPTIONS.some((o) => o.value === raw?.defaultMonitorSchedule) ? raw.defaultMonitorSchedule : '4h',
     defaultMonitorScheduleType: raw?.defaultMonitorScheduleType === 'one-time' ? 'one-time' : raw?.defaultMonitorScheduleType === 'weekly' ? 'weekly' : 'interval',
     defaultMonitorWorkHoursOnly: raw?.defaultMonitorWorkHoursOnly === true,
     defaultMonitorSignals: Array.isArray(raw?.defaultMonitorSignals) && raw.defaultMonitorSignals.length

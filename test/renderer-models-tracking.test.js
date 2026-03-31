@@ -255,8 +255,8 @@ describe('normalizeTrackingItem()', () => {
     assert.equal(ctx.normalizeTrackingItem({ scheduleType: 'weekly' }).scheduleType, 'weekly');
   });
 
-  it('defaults scheduleValue to 30m', () => {
-    assert.equal(ctx.normalizeTrackingItem({}).scheduleValue, '30m');
+  it('defaults scheduleValue to 4h', () => {
+    assert.equal(ctx.normalizeTrackingItem({}).scheduleValue, '4h');
   });
 
   it('preserves valid scheduleValue', () => {
@@ -264,7 +264,7 @@ describe('normalizeTrackingItem()', () => {
   });
 
   it('rejects invalid scheduleValue', () => {
-    assert.equal(ctx.normalizeTrackingItem({ scheduleValue: 'invalid' }).scheduleValue, '30m');
+    assert.equal(ctx.normalizeTrackingItem({ scheduleValue: 'invalid' }).scheduleValue, '4h');
   });
 
   it('filters monitorSignals to valid types', () => {
