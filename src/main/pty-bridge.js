@@ -1,57 +1,100 @@
 const path = require('path');
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 const pty = require('node-pty');
 const { log, logError } = require('./utils');
 
+const isWindows = process.platform === 'win32';
+
 // ── Resolve the WorkIQ executable / launcher ─────────────────────────
-// Prefer the native workiq.exe (no Node.js dependency), then fall back
-// to workiq.js (requires a Node.js executable to run it).
+// Windows: prefer native workiq.exe (bundled → global), then workiq.js.
+// macOS / Linux: expect `workiq` pre-installed in the user's PATH.
 
-const bundledBase = path.join(__dirname, '..', '..', 'node_modules', '@microsoft', 'workiq', 'bin');
-const unpackedBase = bundledBase.replace('app.asar', 'app.asar.unpacked');
-const workiqBinDir = fs.existsSync(unpackedBase) ? unpackedBase : bundledBase;
-
-// Native exe: win-x64/workiq.exe or win-arm64/workiq.exe
-const archDir = process.arch === 'arm64' ? 'win-arm64' : 'win-x64';
-const bundledExe = path.join(workiqBinDir, archDir, 'workiq.exe');
-const globalExe = path.join(
-  process.env.APPDATA || '', 'npm', 'node_modules', '@microsoft', 'workiq', 'bin', archDir, 'workiq.exe'
-);
-
-// JS launcher (fallback — needs node.exe)
-const bundledJs = path.join(workiqBinDir, 'workiq.js');
-const globalJs = path.join(
-  process.env.APPDATA || '', 'npm', 'node_modules', '@microsoft', 'workiq', 'bin', 'workiq.js'
-);
-
-// Pick the first one that exists
 let workiqMode, workiqLauncher;
-if (fs.existsSync(bundledExe)) {
-  workiqMode = 'exe';
-  workiqLauncher = bundledExe;
-} else if (fs.existsSync(globalExe)) {
-  workiqMode = 'exe';
-  workiqLauncher = globalExe;
-} else if (fs.existsSync(bundledJs)) {
-  workiqMode = 'js';
-  workiqLauncher = bundledJs;
+
+if (isWindows) {
+  // ── Windows resolution (unchanged) ──────────────────────────────
+  const bundledBase = path.join(__dirname, '..', '..', 'node_modules', '@microsoft', 'workiq', 'bin');
+  const unpackedBase = bundledBase.replace('app.asar', 'app.asar.unpacked');
+  const workiqBinDir = fs.existsSync(unpackedBase) ? unpackedBase : bundledBase;
+
+  const archDir = process.arch === 'arm64' ? 'win-arm64' : 'win-x64';
+  const bundledExe = path.join(workiqBinDir, archDir, 'workiq.exe');
+  const globalExe = path.join(
+    process.env.APPDATA || '', 'npm', 'node_modules', '@microsoft', 'workiq', 'bin', archDir, 'workiq.exe'
+  );
+
+  const bundledJs = path.join(workiqBinDir, 'workiq.js');
+  const globalJs = path.join(
+    process.env.APPDATA || '', 'npm', 'node_modules', '@microsoft', 'workiq', 'bin', 'workiq.js'
+  );
+
+  if (fs.existsSync(bundledExe)) {
+    workiqMode = 'exe';
+    workiqLauncher = bundledExe;
+  } else if (fs.existsSync(globalExe)) {
+    workiqMode = 'exe';
+    workiqLauncher = globalExe;
+  } else if (fs.existsSync(bundledJs)) {
+    workiqMode = 'js';
+    workiqLauncher = bundledJs;
+  } else {
+    workiqMode = 'js';
+    workiqLauncher = globalJs;
+  }
 } else {
-  workiqMode = 'js';
-  workiqLauncher = globalJs;
+  // ── macOS / Linux resolution ────────────────────────────────────
+  // Expect workiq to be installed globally (e.g. npm i -g @microsoft/workiq)
+  const commonPaths = ['/usr/local/bin/workiq', '/usr/bin/workiq'];
+  let resolved = null;
+
+  // Try `which workiq` first
+  try {
+    resolved = execFileSync('which', ['workiq'], { encoding: 'utf8' }).trim();
+  } catch (_) {
+    // which failed — try common locations
+    for (const p of commonPaths) {
+      if (fs.existsSync(p)) { resolved = p; break; }
+    }
+  }
+
+  if (resolved) {
+    workiqMode = 'system';
+    workiqLauncher = resolved;
+  } else {
+    workiqMode = 'system';
+    workiqLauncher = null; // not found — error will be surfaced at call time
+  }
 }
 log('[main] WorkIQ mode:', workiqMode, 'launcher:', workiqLauncher);
 
 function getNodeExecutable() {
-  const candidates = [
-    process.env.npm_node_execpath,
-    process.env.NODE,
-    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'nodejs', 'node.exe'),
-    process.execPath, // Electron's bundled Node — makes packaged MSI self-contained
-  ].filter(Boolean);
+  if (isWindows) {
+    const candidates = [
+      process.env.npm_node_execpath,
+      process.env.NODE,
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'nodejs', 'node.exe'),
+      process.execPath, // Electron's bundled Node — makes packaged MSI self-contained
+    ].filter(Boolean);
 
-  for (const candidate of candidates) {
-    if (candidate.toLowerCase().endsWith('.exe') && fs.existsSync(candidate)) {
-      return candidate;
+    for (const candidate of candidates) {
+      if (candidate.toLowerCase().endsWith('.exe') && fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  } else {
+    const candidates = [
+      process.env.npm_node_execpath,
+      process.env.NODE,
+      '/usr/local/bin/node',
+      '/usr/bin/node',
+      process.execPath,
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
     }
   }
 
@@ -68,16 +111,16 @@ function stripAnsi(text) {
 function runWorkiqCommand(question) {
   log('[main] Received question:', question);
 
-  if (!fs.existsSync(workiqLauncher)) {
+  if (!workiqLauncher || !fs.existsSync(workiqLauncher)) {
     logError('[main] WorkIQ launcher not found!');
-    return Promise.resolve({
-      success: false,
-      error: `WorkIQ launcher not found at: ${workiqLauncher}`,
-    });
+    const error = !isWindows && !workiqLauncher
+      ? 'WorkIQ CLI not found. Install it with: npm install -g @microsoft/workiq'
+      : `WorkIQ launcher not found at: ${workiqLauncher}`;
+    return Promise.resolve({ success: false, error });
   }
 
   let executable, args;
-  if (workiqMode === 'exe') {
+  if (workiqMode === 'exe' || workiqMode === 'system') {
     executable = workiqLauncher;
     args = ['ask', '-q', question];
   } else {
@@ -172,7 +215,7 @@ function runWorkiqAcceptEula() {
   const diagnostics = {
     workiqMode,
     workiqLauncher,
-    launcherExists: fs.existsSync(workiqLauncher),
+    launcherExists: workiqLauncher ? fs.existsSync(workiqLauncher) : false,
     arch: process.arch,
     platform: process.platform,
     execPath: process.execPath,
@@ -182,15 +225,14 @@ function runWorkiqAcceptEula() {
 
   if (!diagnostics.launcherExists) {
     logError('[main] WorkIQ launcher not found for accept-eula');
-    return Promise.resolve({
-      success: false,
-      error: `WorkIQ launcher not found at: ${workiqLauncher}`,
-      diagnostics,
-    });
+    const error = !isWindows && !workiqLauncher
+      ? 'WorkIQ CLI not found. Install it with: npm install -g @microsoft/workiq'
+      : `WorkIQ launcher not found at: ${workiqLauncher}`;
+    return Promise.resolve({ success: false, error, diagnostics });
   }
 
   let executable, args;
-  if (workiqMode === 'exe') {
+  if (workiqMode === 'exe' || workiqMode === 'system') {
     executable = workiqLauncher;
     args = ['accept-eula'];
   } else {
