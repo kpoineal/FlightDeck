@@ -127,14 +127,6 @@ function restoreRadarUiState(saved) {
 // ── Filtering ────────────────────────────────────────────────────────
 function applyFilter(items) {
   switch (state.filter) {
-    case 'in-progress':
-      return items.filter((item) => item.lifecycleStatus === 'in-progress');
-    case 'blocked':
-      return items.filter((item) => item.lifecycleStatus === 'blocked');
-    case 'waiting':
-      return items.filter((item) => item.lifecycleStatus === 'waiting');
-    case 'monitored':
-      return items.filter((item) => item.monitorEnabled && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived');
     case 'archived':
       return items.filter((item) => item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
     default: // 'all'
@@ -188,7 +180,7 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
     else observe++;
     if (item.lifecycleStatus === 'blocked') blocked++;
     if (item.lifecycleStatus === 'waiting') waiting++;
-    if (item.isNew || item.hasNewUpdate) newCount++;
+    if ((item.isNew || item.hasNewUpdate) && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived') newCount++;
     const ts = new Date(item.lastChangedAt || item.lastRunAt || 0).getTime();
     if (ts > latestActivity) latestActivity = ts;
   }

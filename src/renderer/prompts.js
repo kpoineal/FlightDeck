@@ -178,38 +178,14 @@ function normalizePromptLabel(value) {
     .trim();
 }
 
-function getTrackedExclusionLabels() {
-  const labels = [];
-  const seen = new Set();
-
-  for (const item of state.trackingItems || []) {
-    if (labels.length >= MAX_TRACKED_EXCLUSIONS) {
-      break;
-    }
-
-    const title = normalizePromptLabel(item?.title);
-    if (!title) continue;
-
-    const summary = normalizePromptLabel(item?.summary || item?.reason || '');
-    const label = summary ? `${title} — ${summary.slice(0, 120)}` : title;
-    const dedupeKey = label.toLowerCase();
-
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
-    labels.push(label);
-  }
-
-  return labels;
-}
-
-function buildRadarScanPrompt(lastRunAt) {
+function buildRadarScanPrompt(lastRunAt, scannerId) {
   let basePrompt = promptCache.radarScan;
   if (lastRunAt) {
     basePrompt = basePrompt.replace(/\{lastRunAt\}/g, lastRunAt);
   }
   basePrompt += RADAR_SCAN_JSON_SCHEMA;
 
-  const exclusions = getTrackedExclusionLabels();
+  const exclusions = getScannerExclusionLabels(scannerId || RADAR_SCANNER_ID);
   if (!exclusions.length) {
     return basePrompt;
   }
