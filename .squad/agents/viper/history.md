@@ -213,4 +213,23 @@
 - Preload bridge: `src/preload.js`
 - Context file target: `%OneDriveCommercial%\FlightInfo\context.md`
 
+### 2026-03-31 — Cross-Platform WorkIQ Launcher Resolution
+
+**Scope completed:** Made `src/main/pty-bridge.js` work on macOS/Linux in addition to Windows.
+
+**Changes made:**
+- Top-level resolution now branches on `process.platform === 'win32'`. Windows path is unchanged. macOS/Linux uses `which workiq` (via `execFileSync`) and common paths (`/usr/local/bin/workiq`, `/usr/bin/workiq`) to find a pre-installed `workiq` binary; sets `workiqMode = 'system'`.
+- `getNodeExecutable()` now branches per-platform: Windows keeps `.exe` extension check; macOS/Linux checks env vars + `/usr/local/bin/node`, `/usr/bin/node` without extension filtering.
+- `runWorkiqCommand()` and `runWorkiqAcceptEula()` treat `workiqMode === 'system'` same as `'exe'` — direct invocation with args, no Node.js wrapper.
+- Error messages on non-Windows when workiq is not found: "WorkIQ CLI not found. Install it with: npm install -g @microsoft/workiq".
+- Null-safe guard on `workiqLauncher` in both functions and in diagnostics `fs.existsSync()` call.
+
+**Key decisions:**
+- Non-Windows expects user to install workiq globally — no bundled exe resolution.
+- `execFileSync('which', ['workiq'])` is the primary discovery mechanism; common path fallback is secondary.
+- `workiqLauncher` is `null` (not a dummy path) when not found on non-Windows — forces explicit error handling.
+- Module exports unchanged: `getNodeExecutable`, `stripAnsi`, `runWorkiqCommand`, `runWorkiqAcceptEula`, `workiqLauncher`.
+
+**Validation:** 566/566 tests pass.
+
 **Validation:** 430/430 tests pass.

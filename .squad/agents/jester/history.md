@@ -49,6 +49,14 @@
 - **Decision captured:** `.squad/decisions/inbox/jester-versioning-strategy.md` — full two-channel strategy.
 - **Key detail:** Pre-releases auto-delete after 14 days to avoid clutter. Re-runs safe — existing tag/release deleted before re-creation.
 
+### 2026-03-31 — Cross-Platform Build Targets
+- Added `dist:mac`, `dist:linux`, `dist:all` npm scripts to `package.json`.
+- Added `mac` build config: DMG + zip targets, category `public.app-category.productivity`.
+- Added `linux` build config: AppImage + deb targets, category `Office`.
+- Both use `src/icon.png` consistent with Windows config.
+- Existing `dist` (Windows MSI) and `dist:dir` scripts unchanged.
+- `asarUnpack` for `@microsoft/workiq` left Windows-only (global in config, but WorkIQ is not bundled on mac/linux — users install separately). electron-builder handles platform-specific packaging.
+
 ### 2026-03-18 — Azure Trusted Signing (Code Signing)
 - **PR #12** (`squad/code-signing`): Added Azure Trusted Signing to `release.yml` to sign the MSI before GitHub Release upload.
 - **Approach:** OIDC-based Azure login via `azure/login@v2` + `azure/trusted-signing-action@v0.5.0`. Uses Workload Identity Federation — no client secrets stored in repo.

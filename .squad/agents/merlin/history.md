@@ -236,6 +236,25 @@ All 481 tests pass after changes. No test logic was altered — only string lite
 
 **Test file:** `test/renderer-prompts.test.js`
 
+### 2026-03-31 — Cross-Platform pty-bridge Tests (8 new tests, 4 skipped)
+
+**Requested by:** Kyle Poineal
+
+**Scope:** Added cross-platform test coverage for `getNodeExecutable()` in `test/main-pty-bridge.test.js`, preparing for Viper's cross-platform pty-bridge changes.
+
+**Changes to test file:**
+- Restructured `getNodeExecutable()` tests into `win32 — .exe resolution` and `darwin / linux — cross-platform resolution` sub-describes.
+- Added `saveAndClearEnv()` helper for cleaner env var save/restore across tests.
+- Existing 4 Windows tests preserved and wrapped in `win32` describe block.
+- **2 new win32 tests:** priority ordering (npm_node_execpath > NODE), process.execPath as last-resort .exe candidate.
+- **4 skipped darwin/linux tests:** accept non-.exe npm_node_execpath, NODE env var, and process.execPath on darwin/linux. Skipped with `{ skip: 'Requires cross-platform getNodeExecutable (Viper PR)' }` — will auto-enable when Viper's code drops the .exe requirement on non-Windows.
+- **2 passing darwin/linux fallback tests:** `'node'` fallback on darwin and linux when nothing exists — passes with current code because the fallback path is platform-agnostic.
+- Added notes block about module-level workiq resolution (runs at require time, needs integration test approach).
+
+**Platform mocking technique:** `Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })` with `t.after()` restore using saved property descriptor. Works because `process.platform` is a configurable property in Node.js.
+
+**Result:** 22 tests, 4 suites — 18 pass, 4 skipped, 0 failures.
+
 **Loading technique:** Uses the same bundled loading approach as `renderer-state.test.js` — concatenates `constants.js` + `prompts.js` with `const`/`let` → `var` replacement. Provides mock DOM elements with `addEventListener` + async `_trigger('click')` to exercise `initPromptEditor()` handlers. `window.workiq.readPromptFile` is mocked with call tracking and configurable per-file results.
 
 **Mock element pattern:** Created `createMockElement()` factory producing objects with `value`, `textContent`, `classList.toggle`, and `addEventListener`/`_trigger` for programmatic event dispatch. The `_trigger` method awaits async handlers (needed for Reset which calls IPC). All elements are created once in `before()` and property-reset in `beforeEach()` — no re-registration of `initPromptEditor` listeners needed.
