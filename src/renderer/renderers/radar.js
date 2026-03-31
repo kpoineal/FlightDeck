@@ -648,7 +648,7 @@ function renderAddTaskModal(scannerId) {
         context: modal.querySelector('#modalTaskContext')?.value || '',
         severity: modal.querySelector('#modalTaskSeverity')?.value || 'Observe',
         scheduleType,
-        scheduleValue: modal.querySelector('#modalTaskScheduleValue')?.value || '30m',
+        scheduleValue: modal.querySelector('#modalTaskScheduleValue')?.value || '4h',
         oneTimeAt: modal.querySelector('#modalTaskOneTimeAt')?.value || '',
         weeklyDays,
         weeklyTimes,

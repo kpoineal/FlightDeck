@@ -191,7 +191,7 @@ async function runScanner(scanner) {
         item.trackedAt = item.trackedAt || nowIso();
         // Apply all monitoring defaults from scanner
         item.scheduleType = scanner.defaultMonitorScheduleType || 'interval';
-        item.scheduleValue = scanner.defaultMonitorSchedule || '30m';
+        item.scheduleValue = scanner.defaultMonitorSchedule || '4h';
         item.workHoursOnly = scanner.defaultMonitorWorkHoursOnly === true;
         item.notifyEnabled = scanner.defaultMonitorNotifyEnabled !== false;
         if (Array.isArray(scanner.defaultMonitorSignals) && scanner.defaultMonitorSignals.length) {

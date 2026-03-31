@@ -93,7 +93,7 @@ function renderPopoutMode() {
           })()}
 
           <button class="tracker-section-toggle" data-monitoring-toggle-id="${escapeHtml(item.id)}">
-            <span class="chevron">&#9654;</span> Monitoring${item.monitorEnabled !== false ? ` · <span class="popout-monitor-summary">${escapeHtml(item.scheduleType === 'weekly' ? 'Scheduled' : item.scheduleType === 'one-time' ? 'One-time' : 'Every ' + (item.scheduleValue || '30m'))} · ${(Array.isArray(item.monitorSignals) ? item.monitorSignals : ['Email','Chat','Meetings','Documents']).length} signals</span>` : ' · Disabled'}
+            <span class="chevron">&#9654;</span> Monitoring${item.monitorEnabled !== false ? ` · <span class="popout-monitor-summary">${escapeHtml(item.scheduleType === 'weekly' ? 'Scheduled' : item.scheduleType === 'one-time' ? 'One-time' : 'Every ' + (item.scheduleValue || '4h'))} · ${(Array.isArray(item.monitorSignals) ? item.monitorSignals : ['Email','Chat','Meetings','Documents']).length} signals</span>` : ' · Disabled'}
           </button>
           <div class="tracker-section-panel" data-monitoring-panel-id="${escapeHtml(item.id)}">
             <div class="tracker-schedule-bar">

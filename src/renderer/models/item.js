@@ -242,7 +242,7 @@ function normalizeItem(item) {
     workHoursOnly: item?.workHoursOnly === true,
     monitorSignals,
     scheduleType: item?.scheduleType === 'one-time' ? 'one-time' : item?.scheduleType === 'weekly' ? 'weekly' : 'interval',
-    scheduleValue: SCHEDULE_INTERVAL_OPTIONS.some((entry) => entry.value === item?.scheduleValue) ? item.scheduleValue : '30m',
+    scheduleValue: SCHEDULE_INTERVAL_OPTIONS.some((entry) => entry.value === item?.scheduleValue) ? item.scheduleValue : '4h',
     oneTimeAt: item?.oneTimeAt || null,
     weeklyDays: Array.isArray(item?.weeklyDays) && item.weeklyDays.length
       ? item.weeklyDays.filter((d) => WEEKLY_DAY_OPTIONS.some((o) => o.value === d))
