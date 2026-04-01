@@ -593,8 +593,10 @@ function buildCardTabsHtml(item) {
         <div class="monitor-source-section">
           <label class="monitor-source-label">Source</label>
           <select class="monitor-source-select" data-move-to-scanner-id="${escapeHtml(item.id)}">
-            <option value=""${!item.scannerId ? ' selected' : ''}>📡 Radar</option>
-            ${(state.scanners || []).map(s => `<option value="${escapeHtml(s.id)}"${item.scannerId === s.id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+            ${(state.scanners || []).map(s => {
+              const effectiveId = item.scannerId || RADAR_SCANNER_ID;
+              return `<option value="${escapeHtml(s.id)}"${effectiveId === s.id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`;
+            }).join('')}
           </select>
         </div>
         <div class="tracker-schedule-bar">
