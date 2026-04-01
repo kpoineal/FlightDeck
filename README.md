@@ -20,14 +20,20 @@
 
 ## Install
 
+**Windows:**
 ```powershell
 winget install FlightDeck.FlightDeck
 ```
+
+**macOS:**
+Download the latest `.dmg` from [GitHub Releases](../../releases/latest), open it, and drag FlightDeck to Applications.
 
 ### Prerequisites
 
 - **Microsoft 365 Copilot license** — FlightDeck uses Copilot to analyze your M365 signals. A Copilot license must be assigned to your account.
 - **WorkIQ CLI enabled** — Your tenant administrator must enable the WorkIQ CLI. FlightDeck communicates with Copilot through WorkIQ to ground responses in your real M365 data. See [tenant setup instructions](https://github.com/microsoft/work-iq/blob/main/ADMIN-INSTRUCTIONS.md).
+- **Node.js** v18+ — Required on macOS to run the WorkIQ CLI. Install via [nodejs.org](https://nodejs.org/) or `brew install node`.
+- **WorkIQ CLI** — Install globally: `npm i -g @microsoft/workiq`. On macOS, WorkIQ must be in your PATH (e.g. `/opt/homebrew/bin/workiq` or `/usr/local/bin/workiq`).
 
 ---
 
@@ -74,7 +80,7 @@ FlightDeck scans your Microsoft 365 signals — email, Teams, meetings, document
 > [!TIP]
 > See [docs/user-guide.md](docs/user-guide.md) for the full user guide with screenshots and walkthrough of every feature.
 
-[![Download Latest](https://img.shields.io/badge/Download%20Latest-MSI%20Installer-blue?style=for-the-badge)](../../releases/latest)
+[![Download Latest](https://img.shields.io/badge/Download%20Latest-blue?style=for-the-badge)](../../releases/latest)
 
 ---
 
@@ -114,22 +120,34 @@ Generate AI-powered briefings for your upcoming meetings. Each briefing surfaces
 
 ## Quick Start
 
+[![Download Latest](https://img.shields.io/badge/Download%20Latest-blue?style=for-the-badge)](../../releases/latest)
+
+### Windows
+
 1. **Download** the latest `.msi` from [GitHub Releases](../../releases/latest)
-
-   [![Download Latest](https://img.shields.io/badge/Download%20Latest-MSI%20Installer-blue?style=for-the-badge)](../../releases/latest)
-
 2. **Run the `.msi`** to install FlightDeck
-
 3. **Install prerequisites** (if not already installed):
    - Install [Node.js](https://nodejs.org/) v18+
    - Install the WorkIQ CLI: `npm i -g @microsoft/workiq`
    - Ensure you have a Microsoft Copilot license and your tenant admin has [granted WorkIQ consent](https://www.npmjs.com/package/@microsoft/workiq#admin-setup)
-
 4. **Launch FlightDeck** from the Start menu
-
 5. **Click "Enable WorkIQ"** in the connect banner — FlightDeck auto-accepts the EULA and connects
-
 6. **You're live!** — The Radar populates with your M365 signals. Switch to Briefings for meeting prep.
+
+### macOS
+
+1. **Download** the latest `.dmg` from [GitHub Releases](../../releases/latest)
+2. **Open the `.dmg`** and drag FlightDeck to your Applications folder
+3. **Install prerequisites** (if not already installed):
+   - Install [Node.js](https://nodejs.org/) v18+ (or `brew install node`)
+   - Install the WorkIQ CLI: `npm i -g @microsoft/workiq`
+   - Ensure you have a Microsoft Copilot license and your tenant admin has [granted WorkIQ consent](https://www.npmjs.com/package/@microsoft/workiq#admin-setup)
+4. **Launch FlightDeck** from Applications
+5. **Click "Enable WorkIQ"** in the connect banner to connect
+6. **You're live!** — The Radar populates with your M365 signals. Switch to Briefings for meeting prep.
+
+> [!NOTE]
+> On macOS, FlightDeck looks for `workiq` and `node` in `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin`. If you installed Node or WorkIQ to a non-standard location, ensure they are in your PATH.
 
 > [!NOTE]
 > Prefer to build from source? See [Build from Source](#build-from-source) below.
@@ -160,6 +178,21 @@ npm install
 # Start the application
 npm start
 ```
+
+### Build Installers
+
+```bash
+# Windows MSI
+npm run dist
+
+# macOS DMG
+npm run dist:mac
+
+# Linux AppImage + deb
+npm run dist:linux
+```
+
+Build output goes to the `dist/` directory.
 
 On first launch, click **Enable WorkIQ** in the connect banner (see [First Launch](#first-launch) below).
 
@@ -300,8 +333,9 @@ FlightDeck is a desktop Electron app — there is no server to deploy.
 
 | Method | Steps |
 |---|---|
-| **MSI installer** | Download from [Releases](../../releases/latest) and distribute to users. Per-machine install, no admin required. |
-| **Build your own MSI** | Clone the repo, run `npm install`, then `npm run dist`. The MSI is output to `dist/`. |
+| **Windows MSI** | Download from [Releases](../../releases/latest) and distribute to users. Per-machine install, no admin required. |
+| **macOS DMG** | Download the `.dmg` from [Releases](../../releases/latest). Open and drag to Applications. |
+| **Build your own installer** | Clone the repo, run `npm install`, then `npm run dist` (Windows) or `npm run dist:mac` (macOS). Output goes to `dist/`. |
 | **Run from source** | Clone, `npm install`, `npm start`. No build step needed for development. |
 
 > [!IMPORTANT]

@@ -131,3 +131,72 @@ jobs:
             }
           }
             --token $env:WINGET_PAT
+
+  incremental-mac:
+    runs-on: macos-latest
+    needs: incremental
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Check for new commits
+        id: changes
+        run: |
+          lastTag=$(git tag --list "v*.*.*" --sort=-version:refname | grep -v '\.0$' | head -1)
+          if [ -n "$lastTag" ]; then
+            newCommits=$(git rev-list "$lastTag..HEAD" --count)
+            echo "Commits since $lastTag: $newCommits"
+            if [ "$newCommits" -eq 0 ] && [ "${{ github.event_name }}" = "schedule" ]; then
+              echo "No new commits since last incremental. Skipping."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "No previous incremental tag found. Building."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v6
+        if: steps.changes.outputs.skip != 'true'
+        with:
+          node-version: 22
+
+      - name: Compute version
+        if: steps.changes.outputs.skip != 'true'
+        id: version
+        run: |
+          version=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')").\"${{ github.run_number }}"
+          npm version "$version" --no-git-tag-version
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Incremental version: $version"
+
+      - name: Install dependencies
+        if: steps.changes.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Run tests
+        if: steps.changes.outputs.skip != 'true'
+        run: node --test test/*.test.js
+
+      - name: Build macOS DMG
+        if: steps.changes.outputs.skip != 'true'
+        run: npx electron-builder --mac dmg
+
+      - name: Upload macOS artifact to pre-release
+        if: steps.changes.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          tag="v$version"
+          dmg=$(find dist -name "*.dmg" | head -1)
+          if [ -z "$dmg" ]; then
+            echo "No DMG found in dist/"
+            exit 1
+          fi
+          echo "Uploading artifact: $dmg"
+          gh release upload "$tag" "$dmg" --clobber
