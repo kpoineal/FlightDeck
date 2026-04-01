@@ -897,7 +897,7 @@ function bindEvents() {
     const moveToScannerSelect = event.target.closest('[data-move-to-scanner-id]');
     if (moveToScannerSelect) {
       const itemId = moveToScannerSelect.getAttribute('data-move-to-scanner-id');
-      const targetScannerId = moveToScannerSelect.value || null;
+      const targetScannerId = moveToScannerSelect.value || RADAR_SCANNER_ID;
       moveItemToScanner(itemId, targetScannerId);
       renderRadarMode();
       return;
