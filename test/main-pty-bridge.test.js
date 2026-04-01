@@ -120,7 +120,7 @@ describe('getNodeExecutable()', () => {
       assert.equal(getNodeExecutable(), 'node');
     });
 
-    it('skips candidates that do not end in .exe', (t) => {
+    it('skips candidates that do not end in .exe', { skip: process.platform !== 'win32' ? 'Windows-only test' : undefined }, (t) => {
       const savedExec = process.env.npm_node_execpath;
       const savedNode = process.env.NODE;
       process.env.npm_node_execpath = '/usr/bin/node';
