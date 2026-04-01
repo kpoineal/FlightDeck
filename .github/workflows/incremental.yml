@@ -168,7 +168,7 @@ jobs:
         if: steps.changes.outputs.skip != 'true'
         id: version
         run: |
-          version=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')").\"${{ github.run_number }}"
+          version=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.') + '.${{ github.run_number }}'")
           npm version "$version" --no-git-tag-version
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Incremental version: $version"
