@@ -182,9 +182,9 @@ jobs:
         if: steps.changes.outputs.skip != 'true'
         run: node --test test/*.test.js
 
-      - name: Build macOS zip
+      - name: Build macOS DMG
         if: steps.changes.outputs.skip != 'true'
-        run: npx electron-builder --mac zip
+        run: npx electron-builder --mac dmg
 
       - name: Upload macOS artifact to pre-release
         if: steps.changes.outputs.skip != 'true'
@@ -193,10 +193,10 @@ jobs:
         run: |
           version="${{ steps.version.outputs.version }}"
           tag="v$version"
-          zip=$(find dist -name "*.zip" -not -name "*.blockmap" | head -1)
-          if [ -z "$zip" ]; then
-            echo "No zip found in dist/"
+          dmg=$(find dist -name "*.dmg" | head -1)
+          if [ -z "$dmg" ]; then
+            echo "No DMG found in dist/"
             exit 1
           fi
-          echo "Uploading artifact: $zip"
-          gh release upload "$tag" "$zip" --clobber
+          echo "Uploading artifact: $dmg"
+          gh release upload "$tag" "$dmg" --clobber
