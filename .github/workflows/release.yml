@@ -150,7 +150,7 @@ jobs:
         run: node --test test/*.test.js
 
       - name: Build macOS DMG
-        run: npx electron-builder --mac dmg
+        run: npx electron-builder --mac dmg --publish never
 
       - name: Upload macOS artifact to GitHub Release
         env:
