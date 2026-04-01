@@ -130,7 +130,6 @@ jobs:
               git push origin :refs/tags/$($r.tagName) 2>$null
             }
           }
-            --token $env:WINGET_PAT
 
   incremental-mac:
     runs-on: macos-latest
