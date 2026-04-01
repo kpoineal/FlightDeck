@@ -106,3 +106,61 @@ jobs:
         run: |
           gh release view "${{ steps.tag.outputs.tag }}"
           Write-Host "Release ${{ steps.tag.outputs.tag }} created and verified."
+
+  release-mac:
+    runs-on: macos-latest
+    needs: release
+
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+          version="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building macOS release for tag: $tag (version: $version)"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Verify package.json version matches tag
+        run: |
+          pkgVersion=$(node -p "require('./package.json').version")
+          tagVersion="${{ steps.tag.outputs.version }}"
+          if [ "$pkgVersion" != "$tagVersion" ]; then
+            echo "Version mismatch: package.json=$pkgVersion, tag=$tagVersion"
+            exit 1
+          fi
+          echo "Version verified: $pkgVersion"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: node --test test/*.test.js
+
+      - name: Build macOS zip
+        run: npx electron-builder --mac zip
+
+      - name: Upload macOS artifact to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          zip=$(find dist -name "*.zip" -not -name "*.blockmap" | head -1)
+          if [ -z "$zip" ]; then
+            echo "No zip found in dist/"
+            exit 1
+          fi
+          echo "Uploading artifact: $zip"
+          gh release upload "$tag" "$zip" --clobber
