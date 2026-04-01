@@ -291,6 +291,8 @@ function normalizeItem(item) {
       summary: normalized.summary || normalized.title || '',
       status: normalized.status,
       severity: normalized.severity,
+      newLinks: normalized.evidenceLinks.length ? [...normalized.evidenceLinks] : undefined,
+      suggestedNextSteps: normalized.suggestedNextSteps.length ? [...normalized.suggestedNextSteps] : undefined,
       seen: true,
     });
   }
