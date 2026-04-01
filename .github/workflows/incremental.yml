@@ -183,7 +183,7 @@ jobs:
 
       - name: Build macOS DMG
         if: steps.changes.outputs.skip != 'true'
-        run: npx electron-builder --mac dmg
+        run: npx electron-builder --mac dmg --publish never
 
       - name: Upload macOS artifact to pre-release
         if: steps.changes.outputs.skip != 'true'
