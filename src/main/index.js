@@ -39,7 +39,7 @@ function createWindow() {
     opts.height = savedState.bounds.height;
   }
 
-  opts.icon = path.join(APP_ROOT, 'icon.png');
+  opts.icon = path.join(APP_ROOT, process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 
   const win = new BrowserWindow(opts);
 
@@ -116,8 +116,6 @@ function createTray() {
     }
   });
 }
-
-app.setAppUserModelId('FlightDeck');
 
 // Enforce single instance — if a second launch is attempted, focus the existing window
 const gotTheLock = app.requestSingleInstanceLock();
