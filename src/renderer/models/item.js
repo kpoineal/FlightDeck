@@ -277,6 +277,7 @@ function normalizeItem(item) {
       : [],
     hasNewUpdate: item?.hasNewUpdate === true,
     archived: item?.archived === true,
+    snoozeUntil: item?.snoozeUntil || null,
 
     // Ledger source markers (preserved for ledger-sourced items)
     ledgerEvidenceLinks: Array.isArray(item?.ledgerEvidenceLinks) ? item.ledgerEvidenceLinks : [],

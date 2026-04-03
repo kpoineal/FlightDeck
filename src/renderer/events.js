@@ -75,7 +75,6 @@ async function handleRunNowClick(itemId, button, renderFn, showStatus) {
     await monitorTaskItem(item, { manual: true });
     if (showStatus) {
       setStatus('Monitor check complete');
-      setUpdatedNow();
     }
     if (renderFn) renderFn();
   } catch (error) {
@@ -307,8 +306,6 @@ function bindEvents() {
     }
   });
 
-  elements.refreshBtn.addEventListener('click', refreshCurrentMode);
-
   // Unified density toggle
   const densityToggleBtn = document.getElementById('densityToggleBtn');
   if (densityToggleBtn) {
@@ -499,6 +496,15 @@ function bindEvents() {
     });
   }
 
+  // Morning banner expand/collapse
+  document.addEventListener('click', (event) => {
+    const toggleBtn = event.target.closest('[data-morning-toggle]');
+    if (toggleBtn) {
+      const detail = toggleBtn.parentElement.querySelector('[data-morning-detail]');
+      if (detail) detail.classList.toggle('d-none');
+    }
+  });
+
   elements.radarList.addEventListener('click', async (event) => {
     // ── Per-scanner add item button ──
     const addItemBtn = event.target.closest('[data-scanner-add-item]');
@@ -590,6 +596,31 @@ function bindEvents() {
       // Sync all other sections' DOM to match collapsed state
       syncCollapsedSectionsDOM();
       savePersistentState();
+      return;
+    }
+
+    const headerRun = event.target.closest('[data-scanner-header-run]');
+    if (headerRun) {
+      event.stopPropagation();
+      event.preventDefault();
+      const id = headerRun.getAttribute('data-scanner-header-run');
+      const scanner = getScannerById(id);
+      if (!scanner) return;
+      const sectionHeader = headerRun.closest('.radar-section-header');
+      if (sectionHeader) sectionHeader.classList.add('scanning');
+      headerRun.classList.add('running');
+      (async () => {
+        try {
+          await runScanner(scanner);
+          renderAll();
+          showToast(`${scanner.name} scan complete`);
+        } catch (err) {
+          showToast(`Scan failed: ${err.message}`, { icon: '\u2717' });
+        } finally {
+          if (sectionHeader) sectionHeader.classList.remove('scanning');
+          headerRun.classList.remove('running');
+        }
+      })();
       return;
     }
 
@@ -886,7 +917,32 @@ function bindEvents() {
     const statusSelect = event.target.closest('[data-status-select-id]');
     if (statusSelect) {
       const itemId = statusSelect.getAttribute('data-status-select-id');
-      setItemLifecycleStatus(itemId, statusSelect.value);
+      const newStatus = statusSelect.value;
+      if (newStatus === 'snoozed') {
+        // Show a snooze duration picker
+        const choice = prompt('Snooze until?\n\n1h \u2014 1 hour\n2h \u2014 2 hours\n4h \u2014 4 hours\ntomorrow \u2014 Tomorrow 9 AM\nnext-week \u2014 Next Monday 9 AM\n\nType one of: 1h, 2h, 4h, tomorrow, next-week', '4h');
+        if (!choice) { statusSelect.value = state.items.find(i => i.id === itemId)?.lifecycleStatus || 'in-progress'; return; }
+        const now = new Date();
+        let snoozeUntil;
+        switch (choice.trim().toLowerCase()) {
+          case '1h': snoozeUntil = new Date(now.getTime() + 60 * 60 * 1000); break;
+          case '2h': snoozeUntil = new Date(now.getTime() + 2 * 60 * 60 * 1000); break;
+          case '4h': snoozeUntil = new Date(now.getTime() + 4 * 60 * 60 * 1000); break;
+          case 'tomorrow': snoozeUntil = new Date(now); snoozeUntil.setDate(snoozeUntil.getDate() + 1); snoozeUntil.setHours(9, 0, 0, 0); break;
+          case 'next-week': { snoozeUntil = new Date(now); const daysUntilMon = ((8 - snoozeUntil.getDay()) % 7) || 7; snoozeUntil.setDate(snoozeUntil.getDate() + daysUntilMon); snoozeUntil.setHours(9, 0, 0, 0); break; }
+          default: snoozeUntil = new Date(now.getTime() + 4 * 60 * 60 * 1000); break;
+        }
+        const item = state.items.find(i => i.id === itemId);
+        if (item) {
+          item.snoozeUntil = snoozeUntil.toISOString();
+        }
+        setItemLifecycleStatus(itemId, newStatus);
+      } else {
+        // Clear snooze when changing away from snoozed
+        const item = state.items.find(i => i.id === itemId);
+        if (item) { delete item.snoozeUntil; }
+        setItemLifecycleStatus(itemId, newStatus);
+      }
       return;
     }
   });

@@ -16,7 +16,7 @@ body {
 
 .topbar {
   border: 1px solid var(--border);
-  background: var(--bg-surface);
+  background: linear-gradient(135deg, var(--bg-surface) 0%, color-mix(in srgb, var(--accent) 5%, var(--bg-surface)) 100%);
   backdrop-filter: blur(var(--blur-radius));
   -webkit-backdrop-filter: blur(var(--blur-radius));
   border-radius: var(--radius-xl);
@@ -133,29 +133,6 @@ body {
   min-width: 0;
 }
 
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  background: var(--bg-surface);
-  backdrop-filter: blur(var(--blur-radius));
-  -webkit-backdrop-filter: blur(var(--blur-radius));
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  padding: 12px 20px;
-  box-shadow: var(--shadow-card);
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
 .mode-view { display: none; }
 .mode-view.active { display: block; animation: fadeIn 0.3s ease; }
 
@@ -204,4 +181,63 @@ body {
   .topbar { flex-wrap: wrap; }
   .topbar-tabs { margin-left: 0; width: 100%; justify-content: center; }
   .kpis { grid-template-columns: 1fr; }
+}
+
+/* ── Morning briefing banner ── */
+.morning-banner {
+  background: linear-gradient(135deg, var(--bg-surface) 0%, color-mix(in srgb, var(--accent) 8%, var(--bg-surface)) 100%);
+  backdrop-filter: blur(var(--blur-radius));
+  -webkit-backdrop-filter: blur(var(--blur-radius));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 20px;
+  box-shadow: var(--shadow-card);
+  animation: fadeIn 0.3s ease;
+}
+.morning-banner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  min-height: 28px;
+}
+.morning-banner-headline {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.4;
+}
+.morning-banner-headline .greeting-icon { font-size: 1rem; flex-shrink: 0; }
+.morning-banner-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.morning-banner-detail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.morning-banner-detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.morning-banner-detail-card strong {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.75rem;
 }

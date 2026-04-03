@@ -37,10 +37,6 @@ function showToast(message, { icon = '\u2713', durationMs = 3500 } = {}) {
   toast.addEventListener('click', dismiss);
 }
 
-function setUpdatedNow() {
-  elements.dashboardUpdatedAt.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-}
-
 function getSelectedTone() {
   return elements.toneSelect?.value || 'neutral';
 }
@@ -80,7 +76,6 @@ async function refreshAllData() {
   }
 
   state.loading = true;
-  elements.refreshBtn.disabled = true;
   setStatus('Refreshing meetings...');
 
   try {
@@ -102,13 +97,11 @@ async function refreshAllData() {
 
     await meetingsTask;
     setStatus('Updated');
-    setUpdatedNow();
   } catch (error) {
     setStatus('Refresh failed');
     addHistory('failure', `Refresh failed: ${error.message}`);
   } finally {
     state.loading = false;
-    elements.refreshBtn.disabled = false;
   }
 }
 
@@ -125,13 +118,11 @@ async function refreshRadarData() {
   }
 
   state.loading = true;
-  elements.refreshBtn.disabled = true;
   setStatus('Running radar scan...');
 
   try {
     await runScanner(scanner);
     setStatus('Updated');
-    setUpdatedNow();
     renderAll();
   } catch (error) {
     addHistory('failure', `Radar scan issue: ${error.message}`);
@@ -139,7 +130,6 @@ async function refreshRadarData() {
     elements.radarList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   } finally {
     state.loading = false;
-    elements.refreshBtn.disabled = false;
   }
 }
 
@@ -150,7 +140,6 @@ async function refreshBriefingData() {
   }
 
   state.loading = true;
-  elements.refreshBtn.disabled = true;
   setStatus('Refreshing meetings...');
 
   try {
@@ -163,17 +152,14 @@ async function refreshBriefingData() {
     applyMeetingsPayload(meetingsPayload);
     addHistory('scan', 'Meetings list refreshed');
     setStatus('Updated');
-    setUpdatedNow();
     renderAll();
   } catch (error) {
     addHistory('failure', `Meetings refresh failed: ${error.message}`);
     applyMeetingsPayload(buildFallbackMeetingPayload());
     setStatus('Partial update');
-    setUpdatedNow();
     renderAll();
   } finally {
     state.loading = true;
-    elements.refreshBtn.disabled = false;
   }
 }
 
@@ -182,7 +168,6 @@ async function refreshCurrentMode() {
   if (IS_DEMO) {
     applyDemoEphemeralState();
     setStatus('Demo Mode');
-    setUpdatedNow();
     renderAll();
     return;
   }
@@ -201,7 +186,6 @@ async function refreshCurrentMode() {
 
   if (state.mode === 'History') {
     setStatus('History up to date');
-    setUpdatedNow();
     return;
   }
 
@@ -279,7 +263,6 @@ async function init() {
 
   if (!IS_DEMO) await loadPromptFiles();
   await loadPersistentState();
-  updateStorageSize();
   bindEvents();
   if (!IS_DEMO) initPromptEditor();
   updateCustomTaskScheduleInput();
@@ -291,7 +274,6 @@ async function init() {
     renderAll();
     addHistory('startup', 'FlightDeck demo mode initialized');
     setStatus('Demo Mode');
-    setUpdatedNow();
   } else {
     startMonitoringLoop();
     startScannerEngine();

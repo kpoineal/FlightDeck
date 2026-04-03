@@ -209,6 +209,18 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
   // Last activity
   const activityHtml = latestActivity > 0 ? `<span class="radar-last-activity">${escapeHtml(relativeTime(latestActivity) || '')}</span>` : '';
 
+  // Next run countdown
+  const scanner = scannerId ? getScannerById(scannerId) : null;
+  const nextRunHtml = (() => {
+    if (!scanner || !scanner.nextRunAt || !enabled) return '';
+    const ms = new Date(scanner.nextRunAt).getTime() - Date.now();
+    if (ms <= 0) return '\u23f1 due';
+    const mins = Math.ceil(ms / 60000);
+    if (mins < 60) return `\u23f1 ${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    return `\u23f1 ${hrs}h ${mins % 60}m`;
+  })();
+
   return `
     <div class="radar-section-header ${enabled ? '' : 'disabled'} ${sevBorderClass}" data-source-id="${escapeHtml(sourceId)}">
       <div class="radar-section-header-left">
@@ -220,9 +232,11 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
         ${newHtml}
         ${clearHtml}
         ${activityHtml}
+        ${nextRunHtml ? `<span class="radar-next-run" data-scanner-next-run="${escapeHtml(String(scannerId))}">${nextRunHtml}</span>` : `<span class="radar-next-run" data-scanner-next-run="${escapeHtml(String(scannerId))}"></span>`}
       </div>
       <div class="radar-section-header-actions">
         <button class="icon-btn" data-scanner-add-item="${escapeHtml(String(scannerId))}" title="Add item to this scanner"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg></button>
+        <button class="icon-btn scanner-run-now-btn" data-scanner-header-run="${escapeHtml(String(scannerId))}" title="Run scan now">\u26a1</button>
         <button class="icon-btn" data-scanner-header-toggle="${escapeHtml(String(scannerId))}" title="${enabled ? 'Pause scanner' : 'Resume scanner'}">${enabled ? '\u23f8' : '\u25b6'}</button>
         <button class="icon-btn" data-scanner-header-settings="${escapeHtml(String(scannerId))}" title="Scanner settings">\u2699\ufe0f</button>
         <button class="icon-btn radar-section-collapse ${collapsed ? 'collapsed' : ''}" data-section-collapse="${escapeHtml(sourceId)}" title="${collapsed ? 'Expand' : 'Collapse'}">\u25be</button>
@@ -873,7 +887,79 @@ function patchSingleItem(itemId) {
   return true;
 }
 
+function renderMorningBanner() {
+  const banner = document.getElementById('morningBanner');
+  if (!banner) return;
+
+
+
+  const items = Array.isArray(state.items) ? state.items : [];
+  const activeItems = items.filter(i => i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived');
+  const criticalCount = activeItems.filter(i => normalizeSeverity(i.severity) === 'Critical').length;
+  const elevatedCount = activeItems.filter(i => normalizeSeverity(i.severity) === 'Elevated').length;
+  const newCount = activeItems.filter(i => i.isNew || i.hasNewUpdate).length;
+  const blockedCount = activeItems.filter(i => i.lifecycleStatus === 'blocked').length;
+  const snoozedCount = activeItems.filter(i => i.lifecycleStatus === 'snoozed').length;
+  const meetingCount = (state.meetings || []).length;
+  const unbriefedCount = (state.meetings || []).filter(m => {
+    const b = state.briefingsByMeetingId?.[m.id];
+    return !b;
+  }).length;
+  const scannerCount = (state.scanners || []).filter(s => s.enabled).length;
+
+  // Build headline
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const icon = hour < 12 ? '\u2600\uFE0F' : hour < 17 ? '\uD83C\uDF24\uFE0F' : '\uD83C\uDF19';
+
+  const highlights = [];
+  if (criticalCount > 0) highlights.push(`<strong style="color:var(--color-critical)">${criticalCount} critical</strong>`);
+  if (newCount > 0) highlights.push(`${newCount} new update${newCount > 1 ? 's' : ''}`);
+  if (blockedCount > 0) highlights.push(`${blockedCount} blocked`);
+  if (meetingCount > 0) highlights.push(`${meetingCount} meeting${meetingCount > 1 ? 's' : ''} today`);
+
+  const headlineSuffix = highlights.length ? `. ${highlights.join(' \u00B7 ')}` : '. All clear \u2014 no urgent items.';
+
+  banner.classList.remove('d-none');
+  banner.innerHTML = `
+    <div class="morning-banner-header" data-morning-toggle>
+      <div class="morning-banner-headline">
+        <span class="greeting-icon">${icon}</span>
+        ${escapeHtml(greeting)}${headlineSuffix}
+      </div>
+      <div class="morning-banner-meta">
+        <span>${scannerCount} scanner${scannerCount !== 1 ? 's' : ''} active</span>
+        <span>${activeItems.length} items tracked</span>
+      </div>
+    </div>
+    <div class="morning-banner-detail d-none" data-morning-detail>
+      ${criticalCount + elevatedCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83D\uDD34 Attention</strong>${criticalCount} critical, ${elevatedCount} elevated items need review</div>` : ''}
+      ${meetingCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83D\uDCC5 Meetings</strong>${meetingCount} today${unbriefedCount > 0 ? `, ${unbriefedCount} unbriefed` : ', all briefed'}</div>` : '<div class="morning-banner-detail-card"><strong>\uD83D\uDCC5 Meetings</strong>No meetings today</div>'}
+      ${snoozedCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83D\uDCA4 Snoozed</strong>${snoozedCount} item${snoozedCount > 1 ? 's' : ''} snoozed</div>` : ''}
+      ${newCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83C\uDD95 Updates</strong>${newCount} item${newCount > 1 ? 's have' : ' has'} new activity</div>` : '<div class="morning-banner-detail-card"><strong>\u2705 Current</strong>No new updates since last check</div>'}
+    </div>
+  `;
+}
+
 function renderRadarMode() {
+  renderMorningBanner();
   renderRadarList();
   renderKpis();
+}
+
+function updateScannerCountdowns() {
+  document.querySelectorAll('[data-scanner-next-run]').forEach((el) => {
+    const id = el.getAttribute('data-scanner-next-run');
+    const scanner = getScannerById(id);
+    if (!scanner || !scanner.nextRunAt || scanner.enabled === false) {
+      el.textContent = '';
+      return;
+    }
+    const ms = new Date(scanner.nextRunAt).getTime() - Date.now();
+    if (ms <= 0) { el.textContent = '\u23f1 due'; return; }
+    const mins = Math.ceil(ms / 60000);
+    if (mins < 60) { el.textContent = `\u23f1 ${mins}m`; return; }
+    const hrs = Math.floor(mins / 60);
+    el.textContent = `\u23f1 ${hrs}h ${mins % 60}m`;
+  });
 }

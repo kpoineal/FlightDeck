@@ -9,23 +9,17 @@ const elements = {
   modeButtons: [...document.querySelectorAll('.mode-btn')],
   connectBanner: document.getElementById('connectBanner'),
   enableBtn: document.getElementById('enableBtn'),
-  refreshBtn: document.getElementById('refreshBtn'),
   dashboardStatus: document.getElementById('dashboardStatus'),
-  dashboardUpdatedAt: document.getElementById('dashboardUpdatedAt'),
 
-  kpiCritical: document.getElementById('kpiCritical'),
-  kpiElevated: document.getElementById('kpiElevated'),
-  kpiMonitor: document.getElementById('kpiMonitor'),
-  kpiScopeLabel: document.getElementById('kpiScopeLabel'),
-  severityBarCritical: document.getElementById('severityBarCritical'),
-  severityBarElevated: document.getElementById('severityBarElevated'),
-  severityBarMonitor: document.getElementById('severityBarMonitor'),
-  chartCriticalCount: document.getElementById('chartCriticalCount'),
-  chartElevatedCount: document.getElementById('chartElevatedCount'),
-  chartMonitorCount: document.getElementById('chartMonitorCount'),
-  chartTotalItems: document.getElementById('chartTotalItems'),
-  severityDonut: document.getElementById('severityDonut'),
-  severityInsight: document.getElementById('severityInsight'),
+  summCriticalCount: document.getElementById('summCriticalCount'),
+  summElevatedCount: document.getElementById('summElevatedCount'),
+  summObserveCount: document.getElementById('summObserveCount'),
+  summBarCritical: document.getElementById('summBarCritical'),
+  summBarElevated: document.getElementById('summBarElevated'),
+  summBarMonitor: document.getElementById('summBarMonitor'),
+  summTotal: document.getElementById('summTotal'),
+  summBlocked: document.getElementById('summBlocked'),
+  summNew: document.getElementById('summNew'),
 
   viewRadar: document.getElementById('viewRadar'),
   viewTracking: null, // Removed — unified into viewRadar
@@ -67,7 +61,7 @@ const elements = {
   globalSearch: document.getElementById('globalSearch'),
   searchResults: document.getElementById('searchResults'),
   searchOverlay: document.getElementById('searchOverlay'),
-  storageSize: document.getElementById('storageSize'),
+  morningBanner: document.getElementById('morningBanner'),
 };
 
 const state = {
@@ -209,7 +203,6 @@ async function savePersistentState() {
 
   try {
     await window.workiq.storeSet(key, payload);
-    updateStorageSize();
   } catch (error) {
     console.warn('[flightdeck] persistence write failed', error.message);
   } finally {
@@ -481,15 +474,4 @@ function pruneStaleBriefings() {
   }
 }
 
-// ── Storage size indicator ──────────────────────────────────────────
-async function updateStorageSize() {
-  if (!elements.storageSize) return;
-  try {
-    const { bytes, formatted } = await window.workiq.storeGetSize();
-    elements.storageSize.textContent = formatted;
-    elements.storageSize.title = `Store: ${formatted}`;
-    elements.storageSize.classList.remove('warn');
-  } catch (e) {
-    elements.storageSize.textContent = '';
-  }
-}
+// Storage size indicator removed — storageSize element no longer in the UI
