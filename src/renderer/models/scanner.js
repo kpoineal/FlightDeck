@@ -8,7 +8,6 @@ function normalizeScannerDefinition(raw) {
     name: cleanDisplayText(raw?.name || 'Untitled Scanner'),
     prompt: typeof raw?.prompt === 'string' ? raw.prompt : DEFAULT_SCANNER_PROMPT,
     enabled: raw?.enabled !== false,
-    isDefault: raw?.isDefault === true,
     scheduleType: raw?.scheduleType === 'one-time' ? 'one-time' : raw?.scheduleType === 'weekly' ? 'weekly' : 'interval',
     scheduleValue: SCHEDULE_INTERVAL_OPTIONS.some((entry) => entry.value === raw?.scheduleValue) ? raw.scheduleValue : '4h',
     oneTimeAt: raw?.oneTimeAt || null,
@@ -61,7 +60,6 @@ function createScanner(name, prompt) {
     name,
     prompt: prompt || DEFAULT_SCANNER_PROMPT,
     enabled: true,
-    isDefault: false,
   });
   scanner.nextRunAt = computeScannerNextRunAt(scanner);
   state.scanners.push(scanner);
@@ -77,7 +75,7 @@ function updateScanner(id, updates) {
   let scheduleChanged = false;
 
   for (const [key, value] of Object.entries(updates)) {
-    if (key === 'id' || key === 'isDefault') continue; // immutable fields
+    if (key === 'id') continue; // immutable field
     if (scheduleFields.includes(key)) scheduleChanged = true;
     scanner[key] = value;
   }
@@ -96,7 +94,7 @@ function updateScanner(id, updates) {
 
 function deleteScanner(id) {
   const scanner = state.scanners.find((s) => String(s.id) === String(id));
-  if (!scanner || scanner.isDefault) return false;
+  if (!scanner) return false;
 
   state.scanners = state.scanners.filter((s) => String(s.id) !== String(id));
 
@@ -143,28 +141,6 @@ function getScannerById(id) {
 
 function getActiveScanners() {
   return state.scanners.filter((s) => s.enabled);
-}
-
-function ensureDefaultRadarScanner() {
-  const existing = state.scanners.find((s) => s.isDefault === true || String(s.id) === RADAR_SCANNER_ID);
-  if (existing) return existing;
-
-  const scanner = normalizeScannerDefinition({
-    id: RADAR_SCANNER_ID,
-    name: 'Radar',
-    prompt: promptCache.radarScan || '',
-    enabled: true,
-    isDefault: true,
-    scheduleType: 'interval',
-    scheduleValue: '4h',
-  });
-  scanner.nextRunAt = computeScannerNextRunAt(scanner);
-  state.scanners.push(scanner);
-  return scanner;
-}
-
-function getDefaultRadarScanner() {
-  return state.scanners.find((s) => s.isDefault === true) || null;
 }
 
 function computeScannerNextRunAt(scanner, fromDate = new Date()) {

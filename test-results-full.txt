@@ -1,0 +1,1038 @@
+
+> flightdeck@1.0.4 test
+> node --test test/main-utils.test.js test/main-window-state.test.js test/main-pty-bridge.test.js test/main-ipc-handlers.test.js test/main-ipc-tracker-popout.test.js test/renderer-utils.test.js test/renderer-json-parser.test.js test/renderer-models-tracking.test.js test/renderer-models-radar.test.js test/renderer-models-briefing.test.js test/renderer-day-briefing.test.js test/renderer-tracking-renderers.test.js test/renderer-popout.test.js test/renderer-state.test.js test/renderer-prompts.test.js test/renderer-move-item.test.js test/renderer-delete-scanner.test.js test/renderer-scanner-engine.test.js
+
+[2026-04-03T16:00:00.955Z] [main] WorkIQ mode: exe launcher: C:\dev\repos\FlightDeck\node_modules\@microsoft\workiq\bin\win-x64\workiq.exe
+[2026-04-03T16:00:00.959Z] [store] Initialized at C:\Users\KYLEPO~1\AppData\Local\Temp\flightdeck-test-store.json
+[2026-04-03T16:00:00.959Z] [store] Cold store at C:\Users\KYLEPO~1\AppData\Local\Temp\flightdeck-test-store.json
+[2026-04-03T16:00:00.961Z] [main] Ignoring rawHtml in markdown preview payload; rendering markdown only.
+Γû╢ preload IPC contract
+  Γ£ö uses canonical channel constants for invoke/send/listen paths (1.968ms)
+  Γ£ö returns no-op unsubscribers without registering listeners for invalid callbacks (1.5809ms)
+Γ£ö preload IPC contract (4.1403ms)
+Γû╢ registerIpcHandlers()
+  Γ£ö registers IPC handlers using canonical channel constants (8.2538ms)
+  Γ£ö ignores rawHtml and renders markdown preview from markdown fields (1.5984ms)
+  Γ£ö shows desktop notification and relays click payload to main window (1.1696ms)
+Γ£ö registerIpcHandlers() (11.2497ms)
+Γû╢ registerTrackerPopoutIpc()
+  Γ£ö registers tracker popout IPC channels (3.0359ms)
+  Γ£ö creates a popout window and removes it from set on close (2.7747ms)
+  Γ£ö broadcasts tracker sync to non-sender main and popout windows only (0.8664ms)
+  Γ£ö does not fanout when main window is destroyed and no popouts are active (0.6902ms)
+Γ£ö registerTrackerPopoutIpc() (8.2736ms)
+[2026-04-03T16:00:00.967Z] [main] WorkIQ mode: exe launcher: C:\dev\repos\FlightDeck\node_modules\@microsoft\workiq\bin\win-x64\workiq.exe
+Γû╢ stripAnsi()
+  Γ£ö removes SGR color codes (0.6692ms)
+  Γ£ö removes bold/underline codes (0.0804ms)
+  Γ£ö removes cursor movement sequences (0.059ms)
+  Γ£ö removes OSC title sequences (BEL terminator) (0.0607ms)
+  Γ£ö removes OSC title sequences (ST terminator) (0.054ms)
+  Γ£ö removes C0 control characters (0.0745ms)
+  Γ£ö preserves tabs, newlines, and carriage returns (0.0538ms)
+  Γ£ö passes through clean text unchanged (0.0781ms)
+  Γ£ö handles empty string (0.0836ms)
+  Γ£ö removes multiple nested sequences (0.1174ms)
+Γ£ö stripAnsi() (2.1392ms)
+Γû╢ getNodeExecutable()
+  Γû╢ win32 ΓÇö .exe resolution
+    Γ£ö returns npm_node_execpath when it ends in .exe and exists (0.9382ms)
+    Γ£ö uses NODE env var when npm_node_execpath is absent (1.4527ms)
+    Γ£ö falls back to "node" when no candidate .exe exists on disk (0.64ms)
+    Γ£ö skips candidates that do not end in .exe (0.474ms)
+    Γ£ö prefers npm_node_execpath over NODE env var (priority order) (0.3133ms)
+    Γ£ö uses process.execPath when env vars are absent and it is .exe (0.2899ms)
+  Γ£ö win32 ΓÇö .exe resolution (4.3894ms)
+  Γû╢ darwin / linux ΓÇö cross-platform resolution
+    ∩╣ú accepts npm_node_execpath without .exe suffix on darwin (0.0895ms) # Requires cross-platform getNodeExecutable (Viper PR)
+    ∩╣ú accepts npm_node_execpath without .exe suffix on linux (0.0398ms) # Requires cross-platform getNodeExecutable (Viper PR)
+    ∩╣ú accepts NODE env path without .exe suffix on darwin (0.0306ms) # Requires cross-platform getNodeExecutable (Viper PR)
+    ∩╣ú accepts process.execPath without .exe suffix on darwin (0.0317ms) # Requires cross-platform getNodeExecutable (Viper PR)
+    Γ£ö falls back to "node" on darwin when no candidates exist (0.452ms)
+    Γ£ö falls back to "node" on linux when no candidates exist (0.4051ms)
+  Γ£ö darwin / linux ΓÇö cross-platform resolution (1.2211ms)
+Γ£ö getNodeExecutable() (5.7144ms)
+Γû╢ ts()
+  Γ£ö returns an ISO 8601 timestamp (1.8887ms)
+Γ£ö ts() (2.8367ms)
+Γû╢ normalizeExternalUrl()
+  Γ£ö returns null for falsy input (0.3657ms)
+  Γ£ö normalizes a valid https URL (0.3105ms)
+  Γ£ö normalizes a valid http URL (0.1808ms)
+  Γ£ö decodes &amp; entities (0.1277ms)
+  Γ£ö strips whitespace and newlines (0.079ms)
+  Γ£ö prepends https:// to domain-like strings (0.3282ms)
+  Γ£ö returns null for non-URL strings (0.1492ms)
+  Γ£ö returns null for non-http protocols (0.1107ms)
+  Γ£ö handles URLs with paths and query strings (0.1793ms)
+Γ£ö normalizeExternalUrl() (2.2695ms)
+Γû╢ isSafeExternalUrl()
+  Γ£ö returns true for valid http/https URLs (0.2491ms)
+  Γ£ö returns false for invalid or unsafe input (0.1055ms)
+Γ£ö isSafeExternalUrl() (0.4519ms)
+Γû╢ escapeHtml()
+  Γ£ö escapes ampersands (0.1757ms)
+  Γ£ö escapes angle brackets (0.0721ms)
+  Γ£ö escapes double quotes (0.0638ms)
+  Γ£ö escapes single quotes (0.1849ms)
+  Γ£ö escapes all special characters together (0.0451ms)
+  Γ£ö converts non-string values to strings (0.0309ms)
+Γ£ö escapeHtml() (1.491ms)
+Γû╢ markdownToHtml()
+  Γ£ö converts headings (0.3089ms)
+  Γ£ö converts dash bullet lists (0.219ms)
+  Γ£ö converts asterisk bullet lists (0.114ms)
+  Γ£ö converts plain text to paragraphs (0.076ms)
+  Γ£ö escapes HTML inside markdown (0.0738ms)
+  Γ£ö handles empty/null input (0.0582ms)
+  Γ£ö handles mixed content with blank-line separators (0.1965ms)
+  Γ£ö closes list before heading (0.1343ms)
+Γ£ö markdownToHtml() (1.3734ms)
+Γû╢ isStateOnScreen()
+  Γ£ö returns true when window is fully on-screen (0.9151ms)
+  Γ£ö returns true when window partially overlaps the display (0.2265ms)
+  Γ£ö returns false when window is completely off-screen to the right (0.2326ms)
+  Γ£ö returns false when window is completely above the display (0.1635ms)
+  Γ£ö returns false when window is completely to the left (0.2096ms)
+  Γ£ö returns false when window is completely below the display (0.1232ms)
+  Γ£ö detects overlap on a second monitor (0.1479ms)
+  Γ£ö returns false when no displays exist (0.1075ms)
+  Γ£ö returns true for a 1├ù1 window at screen origin (0.1384ms)
+Γ£ö isStateOnScreen() (4.1862ms)
+Γû╢ Day Briefing Constants
+  Γ£ö DAY_BRIEFING_KEY equals "__day_briefing__" (0.3799ms)
+  Γ£ö DAY_BRIEFING_JSON_SCHEMA is a non-empty string (0.1097ms)
+Γ£ö Day Briefing Constants (0.9247ms)
+Γû╢ buildDayBriefingPrompt()
+  Γ£ö returns a prompt string containing the day briefing template content (14.7979ms)
+  Γ£ö includes meeting info when state.meetings has entries (0.8917ms)
+  Γ£ö includes tracking item info when state.trackingItems has entries (0.4703ms)
+  Γ£ö includes KPI data when state.kpis has values (0.4159ms)
+  Γ£ö handles empty meetings gracefully (0.3381ms)
+  Γ£ö handles empty tracking items gracefully (0.2737ms)
+  Γ£ö handles null/missing KPIs gracefully (0.2723ms)
+Γ£ö buildDayBriefingPrompt() (17.9815ms)
+Γû╢ applyDayBriefingPayload()
+  Γ£ö stores normalized briefing under DAY_BRIEFING_KEY in state.briefingsByMeetingId (1.1766ms)
+  Γ£ö normalizes headline via sanitizeBriefingText (0.3312ms)
+  Γ£ö handles missing topPriorities array (0.6527ms)
+  Γ£ö handles missing meetingsRequiringPrep array (0.1184ms)
+  Γ£ö handles missing atRiskItems array (0.1108ms)
+  Γ£ö handles missing suggestedTimeBlocks array (0.1017ms)
+  Γ£ö handles missing todayFollowUps array (0.0821ms)
+  Γ£ö normalizes meetingsRequiringPrep entries (0.1646ms)
+  Γ£ö normalizes atRiskItems entries (0.1268ms)
+  Γ£ö calls savePersistentState() (0.0935ms)
+  Γ£ö uses default headline when missing (0.1296ms)
+  Γ£ö sets generatedAt from payload or defaults to now (0.0894ms)
+  Γ£ö filters sources keeping only those with valid URLs (0.44ms)
+Γ£ö applyDayBriefingPayload() (3.9464ms)
+Γû╢ getDayBriefing()
+  Γ£ö returns the day briefing when it exists (0.1164ms)
+  Γ£ö returns null when no day briefing exists (0.0952ms)
+Γ£ö getDayBriefing() (0.3021ms)
+Γû╢ reconcileMeetingScopedState() with day briefing
+  Γ£ö preserves __day_briefing__ entry when reconciling meetings (0.2836ms)
+  Γ£ö does not orphan the day briefing when meetings list changes (0.3872ms)
+Γ£ö reconcileMeetingScopedState() with day briefing (0.7755ms)
+Γû╢ pruneStaleBriefings() with day briefing
+  Γ£ö keeps day briefing when generatedAt is today (0.2201ms)
+  Γ£ö prunes day briefing when generatedAt is from yesterday (0.1124ms)
+  Γ£ö prunes day briefing when generatedAt is from two days ago (0.0735ms)
+  Γ£ö does not prune day briefing alongside meeting briefings when day briefing is fresh (0.0938ms)
+Γ£ö pruneStaleBriefings() with day briefing (0.6123ms)
+Γû╢ deleteScanner()
+  Γ£ö removes the scanner from the list (0.822ms)
+  Γ£ö removes active items (in-progress, blocked, waiting) (0.1617ms)
+  Γ£ö retains completed items and nulls their scannerId (0.1307ms)
+  Γ£ö retains archived items and nulls their scannerId (0.1946ms)
+  Γ£ö does not touch items from other scanners (0.166ms)
+  Γ£ö removes items with no lifecycleStatus (inbox/untracked) (1.3137ms)
+  Γ£ö removes waiting items (0.4624ms)
+  Γ£û returns false and does nothing for the default scanner (0.9949ms)
+  Γ£ö returns false for a non-existent scanner (0.1187ms)
+  Γ£ö calls savePersistentState on successful delete (0.137ms)
+  Γ£û does not call savePersistentState when delete is rejected (0.1683ms)
+  Γ£ö syncs radarItems and trackingItems with items (0.3102ms)
+Γ£û deleteScanner() (5.8032ms)
+[flightdeck] test raw response (attempt 1): === In order to use this tool you must accept the End User License Agreement (EULA) found at: https://github.com/microsoft/work-iq-mcp   workiq accept-eula ===
+[flightdeck] test raw response (attempt 1): accept the End User License Agreement
+[flightdeck] test raw response (attempt 1): {"radarItems":[]}
+[flightdeck] first-attempt raw response (attempt 1): {"status":"ok"}
+[flightdeck] retry-success raw response (attempt 1): not json at all
+Γû╢ parseCandidates()
+  Γ£ö returns empty array for falsy input (0.7033ms)
+  Γ£ö picks up text starting with { (0.6079ms)
+  Γ£ö picks up text starting with [ (0.2444ms)
+  Γ£ö extracts fenced JSON blocks (0.8959ms)
+  Γ£ö extracts substring between first { and last } (0.252ms)
+  Γ£ö deduplicates candidates (0.1015ms)
+Γ£ö parseCandidates() (3.623ms)
+Γû╢ normalizeJsonCandidate()
+  Γ£ö replaces smart quotes with standard quotes (0.2753ms)
+  Γ£ö strips trailing commas before } or ] (0.137ms)
+  Γ£ö removes control characters (0.1121ms)
+  Γ£ö strips ANSI OSC sequences (0.1072ms)
+Γ£ö normalizeJsonCandidate() (0.8024ms)
+Γû╢ parseJsonWithRepair()
+  Γ£ö parses valid JSON (0.6488ms)
+  Γ£ö parses JSON with trailing comma (0.0609ms)
+  Γ£ö parses JSON with smart quotes (0.0516ms)
+  Γ£ö repairs JSON spread across multiple lines (0.0365ms)
+  Γ£ö throws for completely invalid input (0.3112ms)
+Γ£ö parseJsonWithRepair() (1.2157ms)
+Γû╢ sanitizeLikelyBrokenJson()
+  Γ£ö replaces embedded double-quotes with single quotes (0.1326ms)
+  Γ£ö replaces newlines inside strings with spaces (0.0364ms)
+  Γ£ö strips ∩┐╜ replacement characters (0.0519ms)
+  Γ£ö collapses multiple spaces (0.0492ms)
+Γ£ö sanitizeLikelyBrokenJson() (0.3442ms)
+Γû╢ parseWorkiqJson()
+  Γ£ö parses first valid candidate matching validator (0.3093ms)
+  Γ£ö skips candidates that fail validation (0.195ms)
+  Γ£ö throws when no candidate passes validation (0.2629ms)
+  Γ£ö throws for empty input (0.0786ms)
+  Γ£ö parses fenced JSON with surrounding prose (0.0996ms)
+Γ£ö parseWorkiqJson() (1.0527ms)
+Γû╢ extractFootnoteCitations()
+  Γ£ö extracts a single footnote citation (0.2212ms)
+  Γ£ö extracts multiple footnotes into an array (0.1291ms)
+  Γ£ö returns empty array for text with no footnotes (0.0857ms)
+  Γ£ö returns empty array for null/empty input (0.0665ms)
+  Γ£ö deduplicates URLs (same URL with different footnote numbers) (0.0665ms)
+  Γ£ö handles URLs with percent-encoded characters and query params (0.0795ms)
+Γ£ö extractFootnoteCitations() (0.7864ms)
+Γû╢ injectFootnoteCitations()
+  Γ£ö injects citations 1:1 when item count matches footnote count (0.1261ms)
+  Γ£ö assigns first N footnotes when more footnotes than items (0.069ms)
+  Γ£ö assigns only to first items when more items than footnotes (0.0455ms)
+  Γ£ö keeps empty evidenceLinks when no footnotes exist (0.0325ms)
+  Γ£ö returns parsed unchanged when there are no radarItems (0.0635ms)
+  Γ£ö injected link has label, type, and url fields (0.1072ms)
+  Γ£ö maps sourceType to lowercase type (e.g. "Email" ΓåÆ "email") (0.0431ms)
+Γ£ö injectFootnoteCitations() (0.6086ms)
+Γû╢ parseWorkiqJson() with citation injection
+  Γ£ö injects footnote citations into parsed radarItems with empty evidenceLinks (0.199ms)
+  Γ£ö realistic test: JSON with evidenceLinks:[] followed by Outlook footnote (0.1388ms)
+Γ£ö parseWorkiqJson() with citation injection (0.3971ms)
+Γû╢ looksLikeEulaPrompt()
+  Γ£ö returns true for EULA acceptance text from WorkIQ CLI (0.1028ms)
+  Γ£ö returns true when text contains "workiq accept-eula" (0.0478ms)
+  Γ£ö returns true when text contains "eula" and "accept" (0.0418ms)
+  Γ£ö returns false for normal JSON response (0.0382ms)
+  Γ£ö returns false for null or empty input (0.0364ms)
+Γ£ö looksLikeEulaPrompt() (0.3476ms)
+Γû╢ runWorkiqJson() EULA detection
+  Γ£ö resets connected state and throws when response is EULA text (1.2146ms)
+  Γ£ö resets connected state when EULA appears in error field (0.2489ms)
+  Γ£ö does NOT reset connection for normal JSON responses (0.3093ms)
+Γ£ö runWorkiqJson() EULA detection (3.4836ms)
+Γû╢ runWorkiqJson() retry logic
+  Γ£ö succeeds on first attempt without retrying (0.3867ms)
+[flightdeck] test: WorkIQ returned EULA prompt ΓÇö resetting connection
+[flightdeck] test: WorkIQ returned EULA prompt ΓÇö resetting connection
+[flightdeck] retry-success: parse failure #1 (attempt 1/2) Response JSON could not be parsed.
+[flightdeck] retry-success: retry 1/1 after parse failure
+[flightdeck] retry-success raw response (attempt 2): {"status":"recovered"}
+[flightdeck] all-fail raw response (attempt 1): garbage
+  Γ£ö retries on parse failure and succeeds on second attempt (31.7363ms)
+[flightdeck] all-fail: parse failure #1 (attempt 1/3) Response JSON could not be parsed.
+[flightdeck] all-fail: retry 1/2 after parse failure
+[flightdeck] all-fail: parse failure #2 (attempt 2/3) Response JSON could not be parsed.
+[flightdeck] all-fail: retry 2/2 after parse failure
+[flightdeck] all-fail: parse failure #3 (attempt 3/3) Response JSON could not be parsed.
+[flightdeck] eula-no-retry: WorkIQ returned EULA prompt ΓÇö resetting connection
+[flightdeck] onretry-test: parse failure #1 (attempt 1/3) Response JSON could not be parsed.
+[flightdeck] onretry-test: retry 1/2 after parse failure
+[flightdeck] onretry-test: parse failure #2 (attempt 2/3) Response JSON could not be parsed.
+[flightdeck] onretry-test: retry 2/2 after parse failure
+[flightdeck] zero-retries: parse failure #1 (attempt 1/1) Response JSON could not be parsed.
+[flightdeck] all-fail raw response (attempt 2): garbage
+[flightdeck] all-fail raw response (attempt 3): garbage
+[flightdeck] eula-no-retry raw response (attempt 1): accept the End User License Agreement workiq accept-eula
+[flightdeck] fail-no-retry raw response (attempt 1): server error
+[flightdeck] onretry-test raw response (attempt 1): bad
+  Γ£ö throws user-friendly error after all retries exhausted (1.6048ms)
+  Γ£ö EULA error throws immediately ΓÇö no retry (0.2362ms)
+  Γ£ö result.success === false throws immediately ΓÇö no retry (0.135ms)
+[flightdeck] onretry-test raw response (attempt 2): bad
+[flightdeck] onretry-test raw response (attempt 3): {"done":true}
+[flightdeck] zero-retries raw response (attempt 1): not json
+[flightdeck] counter-test-1775232001084 raw response (attempt 1): bad json
+  Γ£ö invokes onRetry callback with correct (attempt, maxRetries) args (7.391ms)
+  Γ£ö maxRetries: 0 means single attempt only ΓÇö no retry (0.5249ms)
+[flightdeck] counter-test-1775232001084 raw response (attempt 2): bad json
+[flightdeck] counter-test-1775232001084 raw response (attempt 3): {"ok":true}
+  Γ£ö logs parse failure count per label via console.warn (14.3431ms)
+Γ£ö runWorkiqJson() retry logic (58.0687ms)
+Γû╢ briefingAlignmentScore()
+  Γ£ö returns negative infinity for null inputs (0.6742ms)
+  Γ£ö scores +6 when meetingId matches (1.0646ms)
+  Γ£ö scores +3 for matching titles (0.1611ms)
+  Γ£ö penalizes mismatched titles (0.1646ms)
+  Γ£ö scores +4 for close start times (0.9607ms)
+  Γ£ö penalizes distant start times (0.1777ms)
+  Γ£ö scores +2 for matching organizers (0.9624ms)
+  Γ£ö scores +1 for matching joinUrl (0.8059ms)
+  Γ£ö counts compared signals accurately (0.3448ms)
+Γ£ö briefingAlignmentScore() (6.1867ms)
+Γû╢ isBriefingAlignedWithMeeting()
+  Γ£ö returns true when score > 0 and signals compared (0.2132ms)
+  Γ£ö returns false when titles mismatch and nothing else matches (0.0826ms)
+  Γ£ö returns false when no signals to compare (0.0616ms)
+Γ£ö isBriefingAlignedWithMeeting() (0.5392ms)
+Γû╢ classifyBriefingSeverity()
+  Γ£ö returns "briefed" when briefing exists (0.0761ms)
+  Γ£ö returns "unbriefed" when briefing is null (0.1058ms)
+  Γ£ö returns "unbriefed" when briefing is undefined (0.1659ms)
+Γ£ö classifyBriefingSeverity() (0.5397ms)
+Γû╢ meetingIdentitySeed()
+  Γ£ö returns pipe-delimited lowercase string (0.3186ms)
+  Γ£ö is deterministic (0.1159ms)
+  Γ£ö handles empty input (0.086ms)
+Γ£ö meetingIdentitySeed() (0.6988ms)
+Γû╢ resolveMeetingId()
+  Γ£ö returns raw id when present (0.1606ms)
+  Γ£ö generates meeting_ prefixed id from identity seed (0.2213ms)
+  Γ£ö is deterministic (0.1384ms)
+Γ£ö resolveMeetingId() (0.6418ms)
+Γû╢ buildFallbackBriefingSources()
+  Γ£ö extracts URLs from payload fields (0.6891ms)
+  Γ£ö returns empty for payload with no URLs (0.1071ms)
+  Γ£ö limits to 8 sources (0.2797ms)
+Γ£ö buildFallbackBriefingSources() (1.1737ms)
+Γû╢ isBriefingUnseen()
+  Γ£ö returns true when no seenAt recorded (0.1185ms)
+  Γ£ö returns false when seenAt >= generatedAt (0.0766ms)
+  Γ£ö returns true when seenAt < generatedAt (0.1001ms)
+  Γ£ö returns false for null briefing (0.0525ms)
+Γ£ö isBriefingUnseen() (0.4599ms)
+Γû╢ radarItemIdentitySeed()
+  Γ£ö returns pipe-delimited lowercase string (1.3544ms)
+  Γ£ö is deterministic (0.4338ms)
+  Γ£ö handles null/undefined fields (0.1828ms)
+  Γ£ö includes counterparties comma-separated (1.0594ms)
+Γ£ö radarItemIdentitySeed() (3.7467ms)
+Γû╢ resolveRadarItemId()
+  Γ£ö ignores AI-provided id and uses content hash (0.4618ms)
+  Γ£ö generates radar_ prefixed id from identity seed (0.2256ms)
+  Γ£ö is deterministic for same input (0.2319ms)
+  Γ£ö generates fallback when item has no useful fields (1.2872ms)
+Γ£ö resolveRadarItemId() (2.6151ms)
+Γû╢ isInboundStatus()
+  Γ£ö returns true for "Inbound" (0.2329ms)
+  Γ£ö is case-insensitive (0.1289ms)
+  Γ£ö defaults to true for falsy input (0.0852ms)
+  Γ£ö returns false for other statuses (0.0818ms)
+Γ£ö isInboundStatus() (0.7626ms)
+Γû╢ mapLedgerEntryToRadarItem()
+  Γ£ö returns object with ledger_ prefixed id (0.2852ms)
+  Γ£ö sets expected fields (0.1263ms)
+  Γ£ö handles entry with no id (0.1041ms)
+Γ£ö mapLedgerEntryToRadarItem() (0.6265ms)
+Γû╢ applyLedgerPayload()
+  Γ£ö normalizes ledger entries into state.ledger (0.3359ms)
+  Γ£ö handles empty payload (0.1051ms)
+  Γ£ö preserves structured {label, type, url} evidence links (1.2313ms)
+  Γ£ö converts raw URL strings in evidenceLinks to structured entries (0.7586ms)
+  Γ£ö handles a mix of structured objects and raw URL strings (0.635ms)
+  Γ£ö produces empty evidenceLinks when array is empty (0.1136ms)
+  Γ£ö produces empty evidenceLinks when field is missing (0.1021ms)
+Γ£ö applyLedgerPayload() (3.4983ms)
+Γû╢ applyRadarPayload()
+  Γ£ö keeps only source-appropriate deep links for typed evidence (1.5181ms)
+  Γ£ö normalizes evidence signalAt to ISO (0.3577ms)
+Γ£ö applyRadarPayload() (1.9915ms)
+Γû╢ applyRadarPayload() inline citation extraction
+  Γ£ö extracts inline citations from summary before cleaning (0.4345ms)
+  Γ£ö structured evidenceLinks take priority over inline duplicates (0.4116ms)
+  Γ£ö merges structured and inline links from different URLs (0.363ms)
+  Γ£ö extracts from both summary and reason fields (0.3658ms)
+Γ£ö applyRadarPayload() inline citation extraction (1.7261ms)
+Γû╢ intervalValueToMinutes()
+  Γ£ö returns minutes for known interval values (0.626ms)
+  Γ£ö defaults to 30 for unknown value (0.1465ms)
+Γ£ö intervalValueToMinutes() (1.3715ms)
+Γû╢ computeNextRunAt()
+  Γ£ö returns null when monitorEnabled is false (1.1933ms)
+  Γ£ö returns ISO string for interval schedule (0.3431ms)
+  Γ£ö defaults to 30 min for unknown interval value (0.1294ms)
+  Γ£ö respects work-hours mode for interval schedules (0.1789ms)
+  Γ£ö returns ISO string for one-time schedule (0.1724ms)
+  Γ£ö returns null for one-time with no date (0.1537ms)
+  Γ£ö returns null for one-time with invalid date (0.1156ms)
+  Γ£ö delegates to computeNextWeeklyRun for weekly schedule (0.3866ms)
+Γ£ö computeNextRunAt() (3.0648ms)
+Γû╢ computeNextWeeklyRun()
+  Γ£ö finds next slot on same day if time is in future (0.2255ms)
+  Γ£ö advances to next matching day if past today's times (0.1215ms)
+  Γ£ö uses defaults when weeklyDays/weeklyTimes are empty (0.104ms)
+  Γ£ö returns null when no matching day in jsDaySet (0.0671ms)
+Γ£ö computeNextWeeklyRun() (0.6736ms)
+Γû╢ trackingItemSignature()
+  Γ£ö returns an 8-char hex hash (1.1288ms)
+  Γ£ö is deterministic for same input (0.2148ms)
+  Γ£ö changes when title changes (0.1577ms)
+  Γ£ö includes evidence link URLs in signature (0.1507ms)
+  Γ£ö handles null/undefined item fields gracefully (0.1306ms)
+Γ£ö trackingItemSignature() (1.9299ms)
+Γû╢ normalizeTrackingItem()
+  Γ£ö populates all expected fields (1.0073ms)
+  Γ£ö generates an id when none is provided (0.2272ms)
+  Γ£ö preserves valid severity values (0.1938ms)
+  Γ£ö normalizes unknown severity to Observe (0.1483ms)
+  Γ£ö defaults scheduleType to interval (0.1687ms)
+  Γ£ö preserves valid scheduleType values (0.2317ms)
+  Γ£ö defaults scheduleValue to 4h (0.1821ms)
+  Γ£ö preserves valid scheduleValue (0.2463ms)
+  Γ£ö rejects invalid scheduleValue (0.1563ms)
+  Γ£ö filters monitorSignals to valid types (0.768ms)
+  Γ£ö defaults workHoursOnly to false (0.2759ms)
+  Γ£ö preserves workHoursOnly when provided (0.1679ms)
+  Γ£ö defaults monitorSignals to all types (0.1558ms)
+  Γ£ö filters weeklyDays to valid values (0.2028ms)
+  Γ£ö validates weeklyTimes format (0.2426ms)
+  Γ£ö computes nextRunAt when monitorEnabled and none provided (0.1841ms)
+  Γ£ö preserves updateHistory with seen defaults (0.1944ms)
+  Γ£ö limits suggestedNextSteps to 2 (0.1923ms)
+  Γ£ö normalizes evidence links using source-type deep-link validation (1.8022ms)
+Γ£ö normalizeTrackingItem() (7.2691ms)
+Γû╢ buildDefaultMonitorPrompt()
+  Γ£ö includes title in prompt (0.1783ms)
+  Γ£ö includes summary when different from title (0.1026ms)
+  Γ£ö skips owner when "You" (0.0603ms)
+  Γ£ö includes owner when not "You" (0.0593ms)
+  Γ£ö includes counterparties (0.0706ms)
+  Γ£ö returns fallback for empty input (0.0606ms)
+Γ£ö buildDefaultMonitorPrompt() (0.7399ms)
+Γû╢ unseenHistoryCount()
+  Γ£ö counts entries with seen === false (0.1186ms)
+  Γ£ö returns 0 for empty history (0.0436ms)
+  Γ£ö returns 0 for missing history (0.1379ms)
+Γ£ö unseenHistoryCount() (1.2688ms)
+Γû╢ upsertTrackingItemFromRadar()
+  Γ£ö preserves suggestedNextSteps on newly tracked item (0.5126ms)
+  Γ£ö stores suggestedNextSteps in initial history entry (0.2236ms)
+  Γ£ö preserves suggestedNextSteps when updating existing item (0.2298ms)
+  Γ£ö suggestedNextSteps survive mark-seen (hasNewUpdate = false) (0.1926ms)
+  Γ£ö defaults radar tracking to monitored every 2h during work hours (0.1206ms)
+Γ£ö upsertTrackingItemFromRadar() (1.4073ms)
+Γû╢ monitorTaskItem()
+  Γ£ö does not mark new update when hasNewInfo is boolean false (4.3144ms)
+  Γ£ö treats string "false" as no-update and avoids new-update badge (3.302ms)
+  Γ£ö preserves previous evidence links when AI omits them from response (3.2446ms)
+  Γ£ö does not duplicate evidence links when AI re-reports existing URL (3.4522ms)
+Γ£ö monitorTaskItem() (14.505ms)
+Γû╢ normalizeItem() ΓÇö initial history seed
+  Γ£ö seeds a "Discovered" entry when updateHistory is empty (0.2044ms)
+  Γ£ö does not double-seed when updateHistory already has entries (0.1194ms)
+  Γ£ö uses discoveredAt as timestamp for the seed entry (0.1021ms)
+  Γ£ö falls back to trackedAt when discoveredAt is missing (0.0767ms)
+  Γ£ö includes summary in seed entry (0.078ms)
+Γ£ö normalizeItem() ΓÇö initial history seed (0.6972ms)
+Γû╢ enableItemMonitoring() ΓÇö history entries
+  Γ£ö adds "Monitoring enabled" entry on top of "Discovered" (0.8717ms)
+Γ£ö enableItemMonitoring() ΓÇö history entries (0.9393ms)
+Γû╢ upsertTrackingItemFromRadar() ΓÇö history entries
+  Γ£ö has Discovered + Monitoring enabled for new items (0.2636ms)
+Γ£ö upsertTrackingItemFromRadar() ΓÇö history entries (0.3453ms)
+Γû╢ moveItemToScanner()
+  Γ£ö moves item from Radar to a Scanner (0.7726ms)
+  Γ£ö moves item from Scanner to Radar (targetScannerId = null) (0.263ms)
+  Γ£ö moves item from Scanner A to Scanner B (0.1274ms)
+  Γ£ö updates scanner itemCounts correctly (0.1809ms)
+  Γ£ö does not crash when moving from Radar (no source scanner to decrement) (0.1683ms)
+  Γ£ö does not crash when moving to Radar (no target scanner to increment) (0.4601ms)
+  Γ£ö returns null for non-existent item (1.3296ms)
+  Γ£ö calls savePersistentState after a successful move (0.4637ms)
+Γ£ö moveItemToScanner() (4.5564ms)
+Γû╢ renderPopoutMode() integration
+  Γ£ö renders popout with unified activity timeline (20.4501ms)
+Γ£ö renderPopoutMode() integration (21.4396ms)
+Γû╢ saveCustomPrompt()
+  Γ£ö stores value under PROMPT_STORAGE_PREFIX + name (0.557ms)
+  Γ£ö saves empty string without error (0.1426ms)
+Γ£ö saveCustomPrompt() (1.0744ms)
+Γû╢ loadCustomPrompt()
+  Γ£ö returns saved value (0.1983ms)
+  Γ£ö returns null when no saved prompt exists (0.2513ms)
+Γ£ö loadCustomPrompt() (0.5827ms)
+Γû╢ clearCustomPrompt()
+  Γ£ö removes the stored value (0.1886ms)
+Γ£ö clearCustomPrompt() (0.2529ms)
+Γû╢ loadPromptFiles()
+  Γ£û uses localStorage value when present (IPC still called for fallback) (0.9061ms)
+  Γ£û falls back to IPC read when no localStorage value (0.1947ms)
+  Γ£û mixed: localStorage for radar, IPC for briefing and dayBriefing (0.1517ms)
+  Γ£û seeds editor elements with correct values regardless of source (0.1216ms)
+Γ£û loadPromptFiles() (1.5707ms)
+Γû╢ Apply handler
+  Γ£û radar Apply saves to promptCache AND store (0.2394ms)
+  Γ£ö briefing Apply saves to promptCache AND store (0.1708ms)
+  Γ£ö Apply with empty value does not save to store (0.1012ms)
+Γ£û Apply handler (0.5914ms)
+Γû╢ Reset handler
+  Γ£û radar Reset clears store AND reloads from disk (0.164ms)
+  Γ£û radar Reset updates the editor element with the disk version (0.1005ms)
+  Γ£ö briefing Reset clears store AND reloads from disk (0.163ms)
+  Γ£ö briefing Reset updates the editor element with the disk version (0.0995ms)
+  Γ£û Reset shows "Reset to default" status message (0.1952ms)
+Γ£û Reset handler (0.8535ms)
+Γû╢ extractScannerTopic()
+  Γ£ö extracts "Focus specifically on:" line (0.1883ms)
+  Γ£ö extracts "Focus on:" (without specifically) (0.067ms)
+  Γ£ö truncates long focus lines to 80 chars (0.0459ms)
+  Γ£ö falls back to first meaningful line when no focus match (0.0624ms)
+  Γ£ö falls back to name when no usable lines (0.0339ms)
+  Γ£ö strips {lastRunAt} placeholders before extraction (0.0228ms)
+  Γ£ö handles empty/null prompt (0.025ms)
+Γ£ö extractScannerTopic() (0.544ms)
+Γû╢ buildCrossScannerDedupBlock()
+  Γ£ö returns empty string when no other scanners exist (0.1125ms)
+  Γ£ö returns empty string when other scanners are disabled (0.0812ms)
+  Γ£ö includes other enabled scanners with topics (0.0821ms)
+  Γ£ö caps at 5 other scanners (0.1272ms)
+  Γ£ö skips scanners without a prompt (0.1177ms)
+  Γ£ö contains the soft-boundary instruction phrase (0.0445ms)
+Γ£ö buildCrossScannerDedupBlock() (0.6696ms)
+Γû╢ buildScannerPrompt() ΓÇö signalTypes filtering
+  Γ£ö does not inject signal filter when all signal types are selected (0.9728ms)
+  Γ£ö injects signal filter when a subset of signal types is selected (0.1148ms)
+  Γ£ö includes multiple selected signal types in the filter instruction (0.0717ms)
+  Γ£ö treats undefined signalTypes as all types (no restriction) (0.0506ms)
+Γ£ö buildScannerPrompt() ΓÇö signalTypes filtering (1.3022ms)
+Γû╢ rescheduleOverdueScanners()
+  Γ£ö reschedules a scanner whose nextRunAt is in the past (1.9417ms)
+  Γ£ö does not touch a scanner whose nextRunAt is in the future (0.31ms)
+  Γ£ö does not touch a scanner with null nextRunAt (0.152ms)
+  Γ£ö skips disabled scanners (0.1612ms)
+  Γ£ö reschedules multiple overdue scanners in one pass (0.2498ms)
+Γ£ö rescheduleOverdueScanners() (3.6399ms)
+Γû╢ normalizeScannerDefinition() ΓÇö new scanner settings
+  Γ£ö defaults autoMonitorNewItems to false (1.2553ms)
+  Γ£ö accepts autoMonitorNewItems = true (0.2301ms)
+  Γ£ö defaults notificationMode to "all" (0.0996ms)
+  Γ£ö accepts valid notificationMode values (0.1428ms)
+  Γ£ö rejects invalid notificationMode and defaults to "all" (0.0805ms)
+  Γ£ö defaults signalTypes to all signal types (0.077ms)
+  Γ£ö accepts a subset of signalTypes (0.0796ms)
+  Γ£ö filters out invalid signalTypes entries (0.0805ms)
+  Γ£ö falls back to all signal types when signalTypes is empty array (0.0636ms)
+  Γ£ö defaults crossScannerDedup to true (0.0723ms)
+  Γ£ö accepts crossScannerDedup = false (0.0726ms)
+Γ£ö normalizeScannerDefinition() ΓÇö new scanner settings (2.5158ms)
+Γû╢ deduplicateAgainstInbox() ΓÇö crossScannerDedup
+  Γ£ö with crossScannerDedup=true, deduplicates against items from other scanners (0.2638ms)
+  Γ£ö with crossScannerDedup=false, only deduplicates against same scanner items (0.0876ms)
+  Γ£ö with crossScannerDedup=true (default), still deduplicates within same scanner (0.0682ms)
+Γ£ö deduplicateAgainstInbox() ΓÇö crossScannerDedup (0.5079ms)
+Γû╢ normalizeScannerDefinition() ΓÇö medium-priority fields
+  Γ£ö defaults autoMonitorSeverityThreshold to "all" (0.2184ms)
+  Γ£ö accepts valid autoMonitorSeverityThreshold values (0.0785ms)
+  Γ£ö rejects invalid autoMonitorSeverityThreshold (0.0396ms)
+  Γ£ö defaults maxItemsPerScan to 10 (0.0321ms)
+  Γ£ö accepts valid maxItemsPerScan in range 1-25 (0.069ms)
+  Γ£ö rejects out-of-range maxItemsPerScan (0.0592ms)
+  Γ£ö defaults runOnStartup to false (0.0345ms)
+  Γ£ö accepts runOnStartup = true (0.0513ms)
+  Γ£ö defaults missedRunPolicy to "run-once" (0.0604ms)
+  Γ£ö accepts valid missedRunPolicy values (0.072ms)
+  Γ£ö rejects invalid missedRunPolicy (0.0472ms)
+  Γ£ö defaults dedupStrategy to "evidence-url" (0.0359ms)
+  Γ£ö accepts valid dedupStrategy values (0.0886ms)
+  Γ£ö defaults excludeKeywords to empty array (0.0458ms)
+  Γ£ö accepts excludeKeywords array of strings (0.0575ms)
+  Γ£ö filters out empty strings in excludeKeywords (0.053ms)
+  Γ£ö defaults defaultMonitorSchedule to "4h" (0.0687ms)
+  Γ£ö accepts valid defaultMonitorSchedule values (0.1149ms)
+  Γ£ö defaults autoArchiveAfterDays to 0 (0.0371ms)
+  Γ£ö accepts autoArchiveAfterDays = 7 (0.0539ms)
+  Γ£ö defaults retentionDays to 365 (0.0305ms)
+  Γ£ö accepts retentionDays in range 1-365 (0.0464ms)
+  Γ£ö rejects out-of-range retentionDays (0.083ms)
+  Γ£ö defaults webhookUrl to empty string (0.0356ms)
+  Γ£ö accepts valid webhookUrl (0.0451ms)
+  Γ£ö defaults scannerGroupId to empty string (0.0314ms)
+  Γ£ö accepts scannerGroupId (0.0621ms)
+  Γ£ö defaults defaultMonitorScheduleType to "interval" (0.0293ms)
+  Γ£ö accepts valid defaultMonitorScheduleType values (0.066ms)
+  Γ£ö defaults defaultMonitorWorkHoursOnly to false (0.028ms)
+  Γ£ö accepts defaultMonitorWorkHoursOnly = true (0.0333ms)
+  Γ£ö defaults defaultMonitorSignals to all signal types (0.609ms)
+  Γ£ö accepts a subset of defaultMonitorSignals (0.0584ms)
+  Γ£ö defaults defaultMonitorNotifyEnabled to true (0.0289ms)
+  Γ£ö accepts defaultMonitorNotifyEnabled = false (0.0335ms)
+  Γ£ö defaults defaultMonitorWeeklyDays to Mon-Fri (0.0291ms)
+  Γ£ö defaults defaultMonitorWeeklyTimes to 08:00, 12:00 (0.0278ms)
+Γ£ö normalizeScannerDefinition() ΓÇö medium-priority fields (2.9965ms)
+Γû╢ deduplicateAgainstInbox() ΓÇö dedupStrategy
+  Γ£ö title-similarity: filters item with nearly identical title (0.2571ms)
+  Γ£ö title-similarity: keeps items with different titles (0.0906ms)
+  Γ£ö both: filters if either URL or title matches (0.0842ms)
+  Γ£ö evidence-url: does not filter by title (0.0617ms)
+Γ£ö deduplicateAgainstInbox() ΓÇö dedupStrategy (0.5603ms)
+Γû╢ titlesSimilar()
+  Γ£ö returns true for identical titles (0.0466ms)
+  Γ£ö returns true for titles with 70%+ word overlap (0.024ms)
+  Γ£ö returns false for very different titles (0.0249ms)
+  Γ£ö returns false for empty strings (0.0257ms)
+Γ£ö titlesSimilar() (0.1675ms)
+Γû╢ rescheduleOverdueScanners() ΓÇö missedRunPolicy
+  Γ£ö skip policy: reschedules to the future (0.1481ms)
+  Γ£ö run-once policy: sets nextRunAt to approximately now (0.0803ms)
+  Γ£ö catch-up policy: sets _catchUpRemaining (0.063ms)
+Γ£ö rescheduleOverdueScanners() ΓÇö missedRunPolicy (0.3349ms)
+Γû╢ runScannerAutoArchiveAndRetention()
+  Γ£ö auto-archives stale items when autoArchiveAfterDays > 0 (0.3119ms)
+  Γ£ö does not archive items newer than threshold (0.106ms)
+  Γ£ö removes archived items older than retentionDays (0.1053ms)
+  Γ£ö does not remove active items even if older than retentionDays (0.0958ms)
+  Γ£ö does nothing when autoArchiveAfterDays is 0 (0.0861ms)
+Γ£ö runScannerAutoArchiveAndRetention() (0.7958ms)
+[flightdeck] cold storage eviction failed, keeping items hot window.workiq.getColdItems is not a function
+[flightdeck] cold storage migration on load failed window.workiq.getColdItems is not a function
+[flightdeck] cold storage migration on load failed window.workiq.getColdItems is not a function
+Γû╢ loadPersistentState()
+  Γ£ö loads data from the v2 storage key (3.0036ms)
+  Γ£ö loads data from legacy key when v2 key is absent (0.3675ms)
+  Γ£ö prefers v2 key when both v2 and legacy exist (0.4264ms)
+  Γ£ö handles missing/empty localStorage gracefully (0.2866ms)
+  Γ£ö handles malformed JSON gracefully (0.2199ms)
+  Γ£ö defaults arrays to empty when stored data is non-array (0.1426ms)
+  Γ£ö defaults briefingsByMeetingId to {} when stored value is non-object (0.5139ms)
+  Γ£ö does NOT restore radarItems or meetings from persisted data (0.2205ms)
+  Γ£ö trims oversized updateHistory to 20 on load (0.3382ms)
+Γ£ö loadPersistentState() (6.1508ms)
+Γû╢ Legacy key cleanup (Fix 1)
+  Γ£ö removes legacy key after loading from it (0.2241ms)
+  Γ£ö does not remove legacy key when v2 key exists (migration not triggered) (0.2195ms)
+Γ£ö Legacy key cleanup (Fix 1) (0.5335ms)
+Γû╢ pruneHistory()
+  Γ£ö removes entries older than 30 days (0.3947ms)
+  Γ£ö keeps entries exactly at the 30-day boundary (0.1752ms)
+  Γ£ö removes entries with invalid timestamps (0.0826ms)
+  Γ£ö handles empty history gracefully (0.1307ms)
+Γ£ö pruneHistory() (0.9072ms)
+Γû╢ History pruning on save (Fix 3)
+  Γ£ö savePersistentState prunes entries older than 30 days (0.3943ms)
+Γ£ö History pruning on save (Fix 3) (0.4659ms)
+Γû╢ History max cap (Fix 5)
+  Γ£ö pruneHistory trims history to the cap when exceeding max entries (0.9323ms)
+  Γ£ö keeps the most recent entries when capping (0.8916ms)
+Γ£ö History max cap (Fix 5) (1.9001ms)
+Γû╢ pruneStaleBriefings()
+  Γ£ö removes briefings for meetings that started before today (0.1837ms)
+  Γ£ö keeps briefings for meetings starting today or later (0.0674ms)
+  Γ£ö keeps briefings with no startAt (cannot determine staleness) (0.0477ms)
+  Γ£ö removes seenAt alongside briefing for stale meetings (0.7399ms)
+  Γ£ö handles mixed stale and fresh briefings (0.1305ms)
+Γ£ö pruneStaleBriefings() (1.3261ms)
+Γû╢ briefingSeenAt orphan cleanup (Fix 2)
+  Γ£ö reconcileMeetingScopedState drops briefings for missing meetings (0.2136ms)
+  Γ£ö prunes orphan briefingSeenAt keys for meetings not in the list or briefings map (0.0923ms)
+  Γ£ö keeps briefingSeenAt for meetings that still have aligned briefings (0.2665ms)
+  Γ£ö cleans up seenAt when briefing is reassigned to a different meeting (0.0835ms)
+Γ£ö briefingSeenAt orphan cleanup (Fix 2) (0.7342ms)
+Γû╢ savePersistentState()
+  Γ£ö persists state to the store under the v2 key (0.1267ms)
+  Γ£ö round-trips through save and load (0.1851ms)
+  Γ£ö persists briefingsByMeetingId and briefingSeenAt (0.0631ms)
+  Γ£ö does NOT include meetings in saved payload (0.0739ms)
+Γ£ö savePersistentState() (0.5108ms)
+Γû╢ loadPersistentState runs cleanup on load
+  Γ£ö prunes old history entries during load (0.1154ms)
+  Γ£ö prunes stale briefings during load (0.0926ms)
+Γ£ö loadPersistentState runs cleanup on load (0.2483ms)
+Γû╢ loadPersistentState clears stale new flags
+  Γ£ö clears hasNewUpdate and isNew on completed items (0.9443ms)
+  Γ£ö clears hasNewUpdate and isNew on archived items (0.3636ms)
+  Γ£ö preserves new flags on in-progress items (0.1748ms)
+Γ£ö loadPersistentState clears stale new flags (1.5677ms)
+Γû╢ buildTrackerHistoryMarkup()
+  Γ£ö renders default empty state when no history exists (0.5656ms)
+  Γ£ö renders custom empty text when provided (0.1111ms)
+  Γ£ö renders history entries with unseen class, links, and suggestions (11.4982ms)
+  Γ£ö hides summary when entry summary matches current item summary (0.4192ms)
+  Γ£ö shows previous summary when it differs from current item summary (0.2158ms)
+Γ£ö buildTrackerHistoryMarkup() (13.3732ms)
+Γû╢ rendering guard for completed/archived items
+  Γ£ö hides new badge on completed items even if hasNewUpdate is true (1.2195ms)
+  Γ£ö hides new badge on archived items even if hasNewUpdate is true (0.402ms)
+  Γ£ö hides Mark as Seen button on completed items (0.7577ms)
+  Γ£ö shows new badge on in-progress items when hasNewUpdate is true (0.3695ms)
+  Γ£ö hides new badge on completed items in row view (0.6743ms)
+Γ£ö rendering guard for completed/archived items (4.3556ms)
+Γû╢ buildActivityTimelineHtml() ΓÇö no synthetic fallback
+  Γ£ö returns empty string when history is empty (no synthetic fallback) (0.3198ms)
+  Γ£ö renders real history entries normally (0.6518ms)
+Γ£ö buildActivityTimelineHtml() ΓÇö no synthetic fallback (4.2191ms)
+Γû╢ escapeHtml()
+  Γ£ö escapes &, <, >, ", ' (0.3682ms)
+  Γ£ö passes through plain text unchanged (0.0717ms)
+  Γ£ö coerces non-string to string (0.0571ms)
+Γ£ö escapeHtml() (0.8216ms)
+Γû╢ normalizeExternalUrl()
+  Γ£ö returns null for falsy values (0.1161ms)
+  Γ£ö normalizes a simple https URL (0.2091ms)
+  Γ£ö decodes &amp; entities (0.1192ms)
+  Γ£ö strips surrounding quotes and brackets (0.0947ms)
+  Γ£ö prepends https:// for bare domain paths (0.2136ms)
+  Γ£ö returns null for non-http protocols (0.0927ms)
+  Γ£ö returns null for garbage strings (0.0636ms)
+  Γ£ö strips whitespace and newlines (0.0617ms)
+Γ£ö normalizeExternalUrl() (1.1817ms)
+Γû╢ isGenericUrl()
+  Γ£ö returns true for falsy input (0.1596ms)
+  Γ£ö identifies generic Outlook calendar URL (0.0994ms)
+  Γ£ö identifies generic Teams URL (0.0998ms)
+  Γ£ö returns false for a specific URL (0.2373ms)
+  Γ£ö identifies generic SharePoint root (0.0663ms)
+  Γ£ö treats SharePoint site root as generic (0.0575ms)
+  Γ£ö treats SharePoint with document path as NOT generic (0.073ms)
+  Γ£ö treats OneDrive personal root as generic (0.0272ms)
+  Γ£ö treats Outlook empty message ID as generic (0.024ms)
+  Γ£ö treats Outlook with real message ID as NOT generic (0.0274ms)
+  Γ£ö treats Teams container-level path as generic (0.0264ms)
+  Γ£ö treats URL with truncation ellipsis as generic (0.0213ms)
+Γ£ö isGenericUrl() (1.0931ms)
+Γû╢ isHallucinatedUrl()
+  Γ£ö returns true for falsy input (0.1281ms)
+  Γ£ö detects turn1search pattern (0.1212ms)
+  Γ£ö detects dummy GUID (0.095ms)
+  Γ£ö detects placeholder keyword (0.0588ms)
+  Γ£ö returns false for a clean URL (0.0884ms)
+Γ£ö isHallucinatedUrl() (0.6622ms)
+Γû╢ isDeepLink()
+  Γ£ö returns false for falsy input (0.196ms)
+  Γ£ö returns false for undefined (0.0534ms)
+  Γ£ö recognizes Outlook mail deep link (0.0754ms)
+  Γ£ö recognizes Teams meeting link (0.134ms)
+  Γ£ö recognizes SharePoint document link (0.1496ms)
+  Γ£ö returns false for generic URL (0.3349ms)
+  Γ£ö accepts Power BI deep link (0.1618ms)
+  Γ£ö accepts Viva Engage / Yammer deep link (0.0738ms)
+  Γ£ö accepts Forms deep link (0.1008ms)
+  Γ£ö accepts custom internal site deep link (0.0429ms)
+  Γ£ö rejects plain domain root with trailing slash (0.0291ms)
+  Γ£ö rejects plain domain root without trailing slash (0.0277ms)
+  Γ£ö rejects HTTP (non-HTTPS) URL even with path (0.0213ms)
+Γ£ö isDeepLink() (1.654ms)
+Γû╢ normalizeSignalType()
+  Γ£ö maps common source labels to canonical signal types (0.227ms)
+  Γ£ö returns source for unknown values (0.0932ms)
+Γ£ö normalizeSignalType() (0.4162ms)
+Γû╢ isSignalTypeDeepLink()
+  Γ£ö accepts matching links for email/chat/doc signal types (0.3671ms)
+  Γ£ö rejects non-matching links for typed signals (0.1636ms)
+Γ£ö isSignalTypeDeepLink() (0.6126ms)
+Γû╢ hashString()
+  Γ£ö returns an 8-char hex string (0.2491ms)
+  Γ£ö is deterministic (0.0814ms)
+  Γ£ö produces different hashes for different inputs (0.0978ms)
+  Γ£ö handles empty/falsy input (0.0904ms)
+Γ£ö hashString() (0.6224ms)
+Γû╢ safeDate()
+  Γ£ö returns fallback for falsy input (0.1287ms)
+  Γ£ö returns custom fallback when provided (0.0429ms)
+  Γ£ö returns locale string for valid ISO date (13.0414ms)
+  Γ£ö returns fallback for invalid date string (0.1824ms)
+Γ£ö safeDate() (14.617ms)
+Γû╢ relativeTime()
+  Γ£ö returns null for falsy input (0.1311ms)
+  Γ£ö returns null for invalid date (0.032ms)
+  Γ£ö returns "just now" for a future date (0.1639ms)
+  Γ£ö returns "just now" for less than 60 seconds ago (0.034ms)
+  Γ£ö returns minutes for 1-59 min ago (0.0846ms)
+  Γ£ö returns hours for 1-23 hr ago (0.035ms)
+  Γ£ö returns days for 24+ hr ago (0.0278ms)
+Γ£ö relativeTime() (0.6156ms)
+Γû╢ normalizeSpacingArtifacts()
+  Γ£ö fixes Teamschat ΓåÆ Teams chat (0.1881ms)
+  Γ£ö inserts space between camelCase (0.0406ms)
+  Γ£ö inserts space between letters and digits (0.0269ms)
+  Γ£ö collapses multiple spaces (0.0951ms)
+  Γ£ö handles falsy input (0.0386ms)
+Γ£ö normalizeSpacingArtifacts() (0.5355ms)
+Γû╢ cleanDisplayText()
+  Γ£ö strips markdown links, keeping label (0.384ms)
+  Γ£ö strips footnote references (0.0691ms)
+  Γ£ö strips bare URLs (0.0382ms)
+  Γ£ö strips bold markers (0.031ms)
+  Γ£ö handles falsy input (0.0333ms)
+Γ£ö cleanDisplayText() (0.6186ms)
+Γû╢ sanitizeBriefingText()
+  Γ£ö strips markdown links (0.1232ms)
+  Γ£ö strips bold markers (0.0405ms)
+  Γ£ö strips footnote references (0.0577ms)
+  Γ£ö handles falsy input (0.0304ms)
+Γ£ö sanitizeBriefingText() (0.2999ms)
+Γû╢ compactLinkLabel()
+  Γ£ö returns host for a valid URL (0.1336ms)
+  Γ£ö strips www. prefix (0.048ms)
+  Γ£ö truncates long hostnames (0.0355ms)
+  Γ£ö returns fallback for invalid URL (0.0292ms)
+Γ£ö compactLinkLabel() (0.3051ms)
+Γû╢ normalizeSeverity()
+  Γ£ö maps critical variants (0.0587ms)
+  Γ£ö maps elevated variants (0.0213ms)
+  Γ£ö defaults to Observe (0.023ms)
+Γ£ö normalizeSeverity() (0.1397ms)
+Γû╢ extractExternalUrls()
+  Γ£ö extracts URLs from markdown links (0.3ms)
+  Γ£ö extracts bare URLs (0.0542ms)
+  Γ£ö deduplicates URLs (0.0608ms)
+  Γ£ö returns empty array for falsy input (0.0664ms)
+Γ£ö extractExternalUrls() (0.5603ms)
+Γû╢ toIsoOrNull()
+  Γ£ö returns ISO string for valid date (0.1215ms)
+  Γ£ö returns null for falsy input (0.0467ms)
+  Γ£ö returns null for invalid date (0.0275ms)
+Γ£ö toIsoOrNull() (0.2466ms)
+Γû╢ normalizeEvidenceLink()
+  Γ£ö normalizes typed links and preserves signalAt when valid (0.2545ms)
+  Γ£ö drops links that do not match the expected signal type (0.0603ms)
+Γ£ö normalizeEvidenceLink() (0.351ms)
+Γû╢ signalRecencyLabel()
+  Γ£ö returns today/yesterday for very recent signals (0.1085ms)
+  Γ£ö returns short date for older signals in the same year (0.4018ms)
+  Γ£ö includes year for signals from a different year (0.1246ms)
+Γ£ö signalRecencyLabel() (0.6897ms)
+Γû╢ nowIso()
+  Γ£ö returns an ISO 8601 timestamp (0.1ms)
+Γ£ö nowIso() (0.1536ms)
+Γû╢ extractInlineCitations()
+  Γ£ö returns empty array for null/undefined/empty (0.6087ms)
+  Γ£ö extracts numeric footnote citation with domain label (0.1588ms)
+  Γ£ö extracts descriptive label citation (0.0754ms)
+  Γ£ö extracts multiple citations from one text (0.1018ms)
+  Γ£ö deduplicates by URL (first match wins) (0.0629ms)
+  Γ£ö skips non-https URLs (0.0477ms)
+  Γ£ö skips generic URLs (0.0508ms)
+  Γ£ö skips hallucinated URLs (0.0446ms)
+  Γ£ö infers signal type from URL (0.1569ms)
+  Γ£ö returns empty array for plain text with no citations (0.0391ms)
+  Γ£ö handles URLs with special characters (0.0654ms)
+Γ£ö extractInlineCitations() (1.5646ms)
+Γû╢ extractBareUrlCitations()
+  Γ£ö returns empty array for null/undefined/empty (0.1216ms)
+  Γ£ö extracts a bare deep URL from text (0.0927ms)
+  Γ£ö skips URLs inside markdown links (0.0621ms)
+  Γ£ö extracts bare URLs but NOT markdown URLs from mixed text (0.0621ms)
+  Γ£ö skips generic/truncated URLs (0.0332ms)
+  Γ£ö skips hallucinated URLs (0.9842ms)
+  Γ£ö deduplicates by URL (0.0884ms)
+  Γ£ö infers type from URL (0.1029ms)
+Γ£ö extractBareUrlCitations() (1.66ms)
+Γû╢ adoptStructuredLabels()
+  Γ£ö returns inlineLinks unchanged when structuredLinks is empty (0.1825ms)
+  Γ£ö returns inlineLinks unchanged when structuredLinks is null (0.0289ms)
+  Γ£ö adopts descriptive label from structured link matching by type (0.0471ms)
+  Γ£ö adopts signalAt from structured link when inline has none (0.0372ms)
+  Γ£ö does not overwrite existing signalAt on inline link (0.0265ms)
+  Γ£ö skips structured links with numeric-only labels (0.0266ms)
+  Γ£ö matches multiple inline links to multiple structured by type (0.0444ms)
+  Γ£ö consumes each structured label at most once and numbers overflow (0.061ms)
+  Γ£ö numbers overflow sequentially for 3+ inline citations (0.036ms)
+Γ£ö adoptStructuredLabels() (0.5693ms)
+Γû╢ extractLabelEmbeddedUrl()
+  Γ£ö returns null for empty/null input (0.0846ms)
+  Γ£ö extracts URL from label with embedded citation (0.0967ms)
+  Γ£ö returns null when label has no embedded citation (0.0308ms)
+  Γ£ö strips multiple embedded citations from label (0.0351ms)
+Γ£ö extractLabelEmbeddedUrl() (0.2941ms)
+Γû╢ normalizeEvidenceLink() with label-embedded URLs
+  Γ£ö extracts URL from label when url field is missing (0.1119ms)
+  Γ£ö returns null when no url field and no embedded URL in label (0.0307ms)
+  Γ£ö prefers explicit url field over label-embedded URL (0.0554ms)
+Γ£ö normalizeEvidenceLink() with label-embedded URLs (0.2335ms)
+Γä╣ tests 574
+Γä╣ suites 114
+Γä╣ pass 560
+Γä╣ fail 10
+Γä╣ cancelled 0
+Γä╣ skipped 4
+Γä╣ todo 0
+Γä╣ duration_ms 4236.4714
+
+Γ£û failing tests:
+
+test at test\renderer-delete-scanner.test.js:92:3
+Γ£û returns false and does nothing for the default scanner (0.9949ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-delete-scanner.test.js:94:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\renderer-delete-scanner.test.js:110:3
+Γ£û does not call savePersistentState when delete is rejected (0.1683ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-delete-scanner.test.js:113:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\renderer-prompts.test.js:199:3
+Γ£û uses localStorage value when present (IPC still called for fallback) (0.9061ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '' !== 'local-radar'
+  
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-prompts.test.js:207:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1533:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: 'local-radar',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\renderer-prompts.test.js:215:3
+Γ£û falls back to IPC read when no localStorage value (0.1947ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2 !== 3
+  
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-prompts.test.js:219:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 3,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\renderer-prompts.test.js:229:3
+Γ£û mixed: localStorage for radar, IPC for briefing and dayBriefing (0.1517ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '' !== 'local-radar'
+  
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-prompts.test.js:235:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: 'local-radar',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\renderer-prompts.test.js:246:3
+Γ£û seeds editor elements with correct values regardless of source (0.1216ms)
+  AssertionError [ERR_ASSERTION]: Radar editor should be seeded from store
+  
+  '' !== 'local-radar'
+  
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-prompts.test.js:252:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: 'local-radar',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\renderer-prompts.test.js:265:3
+Γ£û radar Apply saves to promptCache AND store (0.2394ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + ''
+  - 'my edited radar prompt'
+  
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-prompts.test.js:270:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1533:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: 'my edited radar prompt',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\renderer-prompts.test.js:307:3
+Γ£û radar Reset clears store AND reloads from disk (0.164ms)
+  AssertionError [ERR_ASSERTION]: Store entry should be cleared on reset
+  + actual - expected
+  
+  + 'custom radar'
+  - undefined
+  
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-prompts.test.js:315:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1533:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'custom radar',
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\renderer-prompts.test.js:326:3
+Γ£û radar Reset updates the editor element with the disk version (0.1005ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'custom radar'
+  - 'disk-radar-content'
+  
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-prompts.test.js:332:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'custom radar',
+    expected: 'disk-radar-content',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\renderer-prompts.test.js:359:3
+Γ£û Reset shows "Reset to default" status message (0.1952ms)
+  AssertionError [ERR_ASSERTION]: Status should indicate reset to default
+      at TestContext.<anonymous> (C:\dev\repos\FlightDeck\test\renderer-prompts.test.js:365:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /reset to default/i,
+    operator: 'match',
+    diff: 'simple'
+  }

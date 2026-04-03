@@ -38,7 +38,7 @@ describe('rescheduleOverdueScanners()', () => {
   it('reschedules a scanner whose nextRunAt is in the past', () => {
     const pastDate = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(); // 3h ago
     ctx.state.scanners = [
-      { id: 's1', name: 'Test', enabled: true, isDefault: false,
+      { id: 's1', name: 'Test', enabled: true,
         scheduleType: 'interval', scheduleValue: '30m',
         missedRunPolicy: 'skip',
         nextRunAt: pastDate, lastRunAt: null,
@@ -56,7 +56,7 @@ describe('rescheduleOverdueScanners()', () => {
   it('does not touch a scanner whose nextRunAt is in the future', () => {
     const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // 2h from now
     ctx.state.scanners = [
-      { id: 's1', name: 'Test', enabled: true, isDefault: false,
+      { id: 's1', name: 'Test', enabled: true,
         scheduleType: 'interval', scheduleValue: '30m',
         nextRunAt: futureDate, lastRunAt: null,
         weeklyDays: [], weeklyTimes: [], workHoursOnly: false },
@@ -70,7 +70,7 @@ describe('rescheduleOverdueScanners()', () => {
 
   it('does not touch a scanner with null nextRunAt', () => {
     ctx.state.scanners = [
-      { id: 's1', name: 'Test', enabled: true, isDefault: false,
+      { id: 's1', name: 'Test', enabled: true,
         scheduleType: 'interval', scheduleValue: '30m',
         nextRunAt: null, lastRunAt: null,
         weeklyDays: [], weeklyTimes: [], workHoursOnly: false },
@@ -85,7 +85,7 @@ describe('rescheduleOverdueScanners()', () => {
   it('skips disabled scanners', () => {
     const pastDate = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
     ctx.state.scanners = [
-      { id: 's1', name: 'Disabled', enabled: false, isDefault: false,
+      { id: 's1', name: 'Disabled', enabled: false,
         scheduleType: 'interval', scheduleValue: '30m',
         nextRunAt: pastDate, lastRunAt: null,
         weeklyDays: [], weeklyTimes: [], workHoursOnly: false },
@@ -103,17 +103,17 @@ describe('rescheduleOverdueScanners()', () => {
     const pastDate2 = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString();
     const futureDate = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
     ctx.state.scanners = [
-      { id: 's1', name: 'Overdue 1', enabled: true, isDefault: false,
+      { id: 's1', name: 'Overdue 1', enabled: true,
         scheduleType: 'interval', scheduleValue: '1h',
         missedRunPolicy: 'skip',
         nextRunAt: pastDate1, lastRunAt: null,
         weeklyDays: [], weeklyTimes: [], workHoursOnly: false },
-      { id: 's2', name: 'Overdue 2', enabled: true, isDefault: false,
+      { id: 's2', name: 'Overdue 2', enabled: true,
         scheduleType: 'interval', scheduleValue: '4h',
         missedRunPolicy: 'skip',
         nextRunAt: pastDate2, lastRunAt: null,
         weeklyDays: [], weeklyTimes: [], workHoursOnly: false },
-      { id: 's3', name: 'Not overdue', enabled: true, isDefault: false,
+      { id: 's3', name: 'Not overdue', enabled: true,
         scheduleType: 'interval', scheduleValue: '30m',
         nextRunAt: futureDate, lastRunAt: null,
         weeklyDays: [], weeklyTimes: [], workHoursOnly: false },

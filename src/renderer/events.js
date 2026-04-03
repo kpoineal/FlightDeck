@@ -390,13 +390,6 @@ function bindEvents() {
           return;
         }
         if (editId) {
-          const scanner = getScannerById(editId);
-          // For default radar scanner, sync prompt with promptCache
-          if (scanner && scanner.isDefault && values.prompt) {
-            promptCache.radarScan = values.prompt;
-            saveCustomPrompt('radarScan', values.prompt);
-            if (elements.radarPromptEditor) elements.radarPromptEditor.value = values.prompt;
-          }
           updateScanner(editId, values);
         } else {
           createScanner(values.name, values.prompt, values);
@@ -410,29 +403,11 @@ function bindEvents() {
       if (deleteBtn) {
         const id = deleteBtn.getAttribute('data-scanner-modal-delete');
         const scanner = getScannerById(id);
-        if (scanner && scanner.isDefault) return; // Cannot delete default scanner
         const name = scanner ? scanner.name : id;
         if (!confirm(`Delete scanner "${name}"?`)) return;
         deleteScanner(id);
         closeScannerSettingsModal();
         renderRadarMode();
-        return;
-      }
-
-      // Reset radar prompt to default (from file)
-      const resetPromptBtn = event.target.closest('[data-radar-prompt-reset]');
-      if (resetPromptBtn) {
-        (async () => {
-          clearCustomPrompt('radarScan');
-          const result = await window.workiq.readPromptFile('radar-scan.md');
-          if (result.success) {
-            promptCache.radarScan = result.content.trim();
-            if (elements.radarPromptEditor) elements.radarPromptEditor.value = promptCache.radarScan;
-            // Update the textarea in the modal
-            const promptInput = scannerSettingsModal.querySelector('[data-scanner-input="prompt"]');
-            if (promptInput) promptInput.value = promptCache.radarScan;
-          }
-        })();
         return;
       }
 
@@ -896,7 +871,7 @@ function bindEvents() {
     const moveToScannerSelect = event.target.closest('[data-move-to-scanner-id]');
     if (moveToScannerSelect) {
       const itemId = moveToScannerSelect.getAttribute('data-move-to-scanner-id');
-      const targetScannerId = moveToScannerSelect.value || RADAR_SCANNER_ID;
+      const targetScannerId = moveToScannerSelect.value || null;
       moveItemToScanner(itemId, targetScannerId);
       renderRadarMode();
       return;

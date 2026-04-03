@@ -141,7 +141,6 @@ function groupItemsBySource(filteredItems) {
 
   // Sort scanners: default first, then by enabled + severity
   const sortedScanners = [...scanners].sort((a, b) => {
-    if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
     const aEnabled = a.enabled !== false;
     const bEnabled = b.enabled !== false;
     if (aEnabled !== bEnabled) return aEnabled ? -1 : 1;
@@ -152,14 +151,12 @@ function groupItemsBySource(filteredItems) {
     scannerGroups.set(scanner.id, { scanner, items: [] });
   }
 
-  // Orphaned items (no scanner match) go into default radar scanner
-  const defaultScanner = scanners.find((s) => s.isDefault);
-
+  // Orphaned items (no scanner match) go into the first scanner group
   for (const item of filteredItems) {
     if (item.scannerId && scannerGroups.has(item.scannerId)) {
       scannerGroups.get(item.scannerId).items.push(item);
-    } else if (defaultScanner && scannerGroups.has(defaultScanner.id)) {
-      scannerGroups.get(defaultScanner.id).items.push(item);
+    } else if (scannerGroups.size > 0) {
+      [...scannerGroups.values()][0].items.push(item);
     }
   }
 
@@ -167,7 +164,7 @@ function groupItemsBySource(filteredItems) {
 }
 
 // ── Section header (from scanner branch) ─────────────────────────────
-function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, enabled = true, isDefault = false, items = [] } = {}) {
+function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, enabled = true, items = [] } = {}) {
   const collapsed = Array.isArray(state.collapsedSections) && state.collapsedSections.includes(sourceId);
 
   // Severity micro-counts
@@ -302,13 +299,12 @@ function _renderRadarListFromItems(allItems) {
     const sourceId = `scanner-${scanner.id}`;
     const enabled = scanner.enabled !== false;
     const collapsed = Array.isArray(state.collapsedSections) && state.collapsedSections.includes(sourceId);
-    const icon = scanner.isDefault ? '\uD83D\uDCE1' : '\uD83D\uDD0D';
+    const icon = '\uD83D\uDD0D';
 
     html += `<div class="radar-section ${enabled ? '' : 'disabled'}">`;
     html += buildSectionHeader(sourceId, icon, scanner.name || 'Unnamed Scanner', group.items.length, {
       scannerId: scanner.id,
       enabled,
-      isDefault: scanner.isDefault,
       items: group.items,
     });
 
@@ -364,23 +360,13 @@ function renderScannerSettingsModal(scannerId) {
   if (!modal) return;
   const scanner = scannerId ? getScannerById(scannerId) : null;
   const isEdit = scanner != null;
-  const isDefaultRadar = isEdit && scanner.isDefault;
   const title = isEdit ? escapeHtml(scanner.name || 'Scanner Settings') : 'New Scanner';
-
-  // For the default radar scanner, pre-fill prompt from promptCache
-  if (isDefaultRadar && scanner) {
-    scanner._displayPrompt = promptCache.radarScan || scanner.prompt || '';
-  }
-
-  const formScanner = isDefaultRadar
-    ? { ...scanner, prompt: scanner._displayPrompt || promptCache.radarScan || '' }
-    : scanner;
 
   modal.innerHTML = `
     <div class="modal-card">
       <h3 class="scanner-modal-title">${title}</h3>
-      ${buildScannerForm(formScanner)}
-      ${isEdit && !isDefaultRadar ? `<button class="scanner-modal-delete" data-scanner-modal-delete="${escapeHtml(String(scannerId))}">Delete this scanner</button>` : ''}
+      ${buildScannerForm(scanner)}
+      ${isEdit ? `<button class="scanner-modal-delete" data-scanner-modal-delete="${escapeHtml(String(scannerId))}">Delete this scanner</button>` : ''}
     </div>
   `;
 
@@ -391,7 +377,6 @@ function renderScannerSettingsModal(scannerId) {
       actions.innerHTML = `
         <button class="small-btn primary" data-scanner-save="${escapeHtml(String(scannerId))}">Update Scanner</button>
         <button class="small-btn" data-scanner-run-now="${escapeHtml(String(scannerId))}">Run Now</button>
-        ${isDefaultRadar ? '<button class="small-btn" data-radar-prompt-reset>Reset Prompt to Default</button>' : ''}
         <button class="small-btn" data-scanner-modal-close>Cancel</button>
       `;
     }
@@ -403,12 +388,6 @@ function renderScannerSettingsModal(scannerId) {
         <button class="small-btn" data-scanner-modal-close>Cancel</button>
       `;
     }
-  }
-
-  // For default radar scanner, make name readonly
-  if (isDefaultRadar) {
-    const nameInput = modal.querySelector('[data-scanner-input="name"]');
-    if (nameInput) nameInput.readOnly = true;
   }
 
   // Bind schedule type change within the form
@@ -459,7 +438,7 @@ function renderAddTaskModal(scannerId) {
   const scanners = Array.isArray(state.scanners) ? state.scanners : [];
   const scannerOptions = scanners.map((s) => {
     const selected = s.id === scannerId ? ' selected' : '';
-    const label = s.isDefault ? `${escapeHtml(s.name || 'Radar')} (default)` : escapeHtml(s.name || 'Unnamed');
+    const label = escapeHtml(s.name || 'Unnamed');
     return `<option value="${escapeHtml(s.id)}"${selected}>${label}</option>`;
   }).join('');
 

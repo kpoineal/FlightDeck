@@ -77,7 +77,6 @@ function buildMockElements() {
 function resetTestState() {
   ctx.localStorage._store = {};
   mockStore = {};
-  ctx.promptCache.radarScan = '';
   ctx.promptCache.briefing = '';
   ctx.promptCache.dayBriefing = '';
   // Reset element values and textContent
@@ -87,7 +86,6 @@ function resetTestState() {
   }
   readPromptFileCalls = [];
   readPromptFileResults = {
-    'radar-scan.md': { success: true, content: '  disk-radar-content  ' },
     'briefing.md': { success: true, content: '  disk-briefing-content  ' },
     'day-briefing.md': { success: true, content: '  disk-day-briefing-content  ' },
   };
@@ -97,7 +95,6 @@ before(() => {
   mockElements = buildMockElements();
   readPromptFileCalls = [];
   readPromptFileResults = {
-    'radar-scan.md': { success: true, content: '  disk-radar-content  ' },
     'briefing.md': { success: true, content: '  disk-briefing-content  ' },
     'day-briefing.md': { success: true, content: '  disk-day-briefing-content  ' },
   };
@@ -197,60 +194,50 @@ describe('loadPromptFiles()', () => {
   beforeEach(resetTestState);
 
   it('uses localStorage value when present (IPC still called for fallback)', async () => {
-    ctx.saveCustomPrompt('radarScan', 'local-radar');
     ctx.saveCustomPrompt('briefing', 'local-briefing');
     ctx.saveCustomPrompt('dayBriefing', 'local-day-briefing');
 
     await ctx.loadPromptFiles();
 
     // store values used for promptCache even though IPC was called
-    assert.equal(ctx.promptCache.radarScan, 'local-radar');
     assert.equal(ctx.promptCache.briefing, 'local-briefing');
     assert.equal(ctx.promptCache.dayBriefing, 'local-day-briefing');
     // IPC is still called to keep disk versions available as fallback
-    assert.equal(readPromptFileCalls.length, 3,
+    assert.equal(readPromptFileCalls.length, 2,
       'IPC always called for fallback even when store has values');
   });
 
   it('falls back to IPC read when no localStorage value', async () => {
     await ctx.loadPromptFiles();
 
-    // All three prompts fall through to IPC
-    assert.equal(readPromptFileCalls.length, 3);
-    assert.ok(readPromptFileCalls.includes('radar-scan.md'));
+    // Both prompts fall through to IPC (radar prompt removed in DEC-063)
+    assert.equal(readPromptFileCalls.length, 2);
     assert.ok(readPromptFileCalls.includes('briefing.md'));
     assert.ok(readPromptFileCalls.includes('day-briefing.md'));
     // Disk content should be trimmed
-    assert.equal(ctx.promptCache.radarScan, 'disk-radar-content');
     assert.equal(ctx.promptCache.briefing, 'disk-briefing-content');
     assert.equal(ctx.promptCache.dayBriefing, 'disk-day-briefing-content');
   });
 
-  it('mixed: localStorage for radar, IPC for briefing and dayBriefing', async () => {
-    ctx.saveCustomPrompt('radarScan', 'local-radar');
-    // briefing + dayBriefing not in store → fall back to IPC
+  it('mixed: localStorage for briefing, IPC fallback for dayBriefing', async () => {
+    ctx.saveCustomPrompt('briefing', 'local-briefing');
+    // dayBriefing not in store → fall back to IPC
 
     await ctx.loadPromptFiles();
 
-    assert.equal(ctx.promptCache.radarScan, 'local-radar');
-    assert.equal(ctx.promptCache.briefing, 'disk-briefing-content');
+    assert.equal(ctx.promptCache.briefing, 'local-briefing');
     assert.equal(ctx.promptCache.dayBriefing, 'disk-day-briefing-content');
-    // IPC always called for all three (disk fallback), but store wins for radar
-    assert.equal(readPromptFileCalls.length, 3,
+    // IPC always called for both prompts as fallback
+    assert.equal(readPromptFileCalls.length, 2,
       'IPC always called for all prompts as fallback');
-    assert.ok(readPromptFileCalls.includes('radar-scan.md'));
     assert.ok(readPromptFileCalls.includes('briefing.md'));
     assert.ok(readPromptFileCalls.includes('day-briefing.md'));
   });
 
   it('seeds editor elements with correct values regardless of source', async () => {
-    ctx.saveCustomPrompt('radarScan', 'local-radar');
     // briefing from IPC
-
     await ctx.loadPromptFiles();
 
-    assert.equal(mockElements.radarPromptEditor.value, 'local-radar',
-      'Radar editor should be seeded from store');
     assert.equal(mockElements.briefingPromptEditor.value, 'disk-briefing-content',
       'Briefing editor should be seeded from disk via IPC');
   });
@@ -261,17 +248,6 @@ describe('loadPromptFiles()', () => {
 /* ================================================================== */
 describe('Apply handler', () => {
   beforeEach(resetTestState);
-
-  it('radar Apply saves to promptCache AND store', async () => {
-    mockElements.radarPromptEditor.value = 'my edited radar prompt';
-
-    await mockElements.promptEditorApply._trigger('click');
-
-    assert.equal(ctx.promptCache.radarScan, 'my edited radar prompt');
-    const stored = mockStore[ctx.PROMPT_STORAGE_PREFIX + 'radarScan'];
-    assert.equal(stored, 'my edited radar prompt',
-      'Edited prompt should persist in store');
-  });
 
   it('briefing Apply saves to promptCache AND store', async () => {
     mockElements.briefingPromptEditor.value = 'my edited briefing prompt';
@@ -285,14 +261,14 @@ describe('Apply handler', () => {
   });
 
   it('Apply with empty value does not save to store', async () => {
-    mockElements.radarPromptEditor.value = '   ';
+    mockElements.briefingPromptEditor.value = '   ';
 
-    await mockElements.promptEditorApply._trigger('click');
+    await mockElements.briefingPromptEditorApply._trigger('click');
 
-    assert.equal(ctx.promptCache.radarScan, '',
+    assert.equal(ctx.promptCache.briefing, '',
       'promptCache should remain empty');
     assert.equal(
-      mockStore[ctx.PROMPT_STORAGE_PREFIX + 'radarScan'],
+      mockStore[ctx.PROMPT_STORAGE_PREFIX + 'briefing'],
       undefined,
       'Empty/whitespace-only value should not be persisted');
   });
@@ -303,34 +279,6 @@ describe('Apply handler', () => {
 /* ================================================================== */
 describe('Reset handler', () => {
   beforeEach(resetTestState);
-
-  it('radar Reset clears store AND reloads from disk', async () => {
-    // Pre-condition: custom prompt is saved
-    ctx.saveCustomPrompt('radarScan', 'custom radar');
-    ctx.promptCache.radarScan = 'custom radar';
-
-    await mockElements.promptEditorReset._trigger('click');
-
-    // store entry should be removed
-    assert.equal(
-      mockStore[ctx.PROMPT_STORAGE_PREFIX + 'radarScan'],
-      undefined,
-      'Store entry should be cleared on reset'
-    );
-    // promptCache should have the disk version (trimmed)
-    assert.equal(ctx.promptCache.radarScan, 'disk-radar-content');
-    // IPC should have been called to read disk
-    assert.ok(readPromptFileCalls.includes('radar-scan.md'));
-  });
-
-  it('radar Reset updates the editor element with the disk version', async () => {
-    ctx.saveCustomPrompt('radarScan', 'custom radar');
-    mockElements.radarPromptEditor.value = 'custom radar';
-
-    await mockElements.promptEditorReset._trigger('click');
-
-    assert.equal(mockElements.radarPromptEditor.value, 'disk-radar-content');
-  });
 
   it('briefing Reset clears store AND reloads from disk', async () => {
     ctx.saveCustomPrompt('briefing', 'custom briefing');
@@ -357,13 +305,14 @@ describe('Reset handler', () => {
   });
 
   it('Reset shows "Reset to default" status message', async () => {
-    ctx.saveCustomPrompt('radarScan', 'custom');
+    ctx.saveCustomPrompt('briefing', 'custom');
+    ctx.promptCache.briefing = 'custom';
 
-    await mockElements.promptEditorReset._trigger('click');
+    await mockElements.briefingPromptEditorReset._trigger('click');
 
     // showPromptEditorStatus sets textContent; setTimeout clears it later
     assert.match(
-      mockElements.promptEditorStatus.textContent,
+      mockElements.briefingPromptEditorStatus.textContent,
       /reset to default/i,
       'Status should indicate reset to default'
     );
@@ -516,5 +465,71 @@ describe('buildScannerPrompt() — signalTypes filtering', () => {
     ctx.state.scanners = [{ id: 's1', name: 'No Types', enabled: true, prompt: 'Look for stuff' }];
     const result = ctx.buildScannerPrompt(ctx.state.scanners[0]);
     assert.ok(!result.includes('Signal source filter'), 'Should not restrict when signalTypes is undefined');
+  });
+});
+
+/* ================================================================== */
+/*  buildScannerPrompt() — radar-like prompts (DEC-063)               */
+/* ================================================================== */
+describe('buildScannerPrompt() — radar-like prompts (DEC-063)', () => {
+
+  beforeEach(() => {
+    ctx.state.items = [];
+    ctx.state.scanners = [];
+  });
+
+  it('builds prompt for a scanner previously handled by buildRadarScanPrompt', () => {
+    const radarScanner = {
+      id: 'scanner_radar',
+      name: 'Radar',
+      enabled: true,
+      prompt: 'Analyze recent Microsoft 365 signals. Focus specifically on: all actionable work items.\n\nLook for items with signals since {lastRunAt}.',
+      lastRunAt: '2026-04-01T10:00:00Z',
+      signalTypes: ['email', 'chat', 'meeting', 'doc'],
+      maxItemsPerScan: 10,
+    };
+    ctx.state.scanners = [radarScanner];
+
+    const result = ctx.buildScannerPrompt(radarScanner);
+
+    assert.ok(result.includes('work-signal scanner agent'), 'Should include scanner agent preamble');
+    assert.ok(result.includes('all actionable work items'), 'Should include the focus topic');
+    assert.ok(result.includes('2026-04-01T10:00:00Z'), 'Should substitute lastRunAt in the prompt');
+    assert.ok(result.includes('radarItems'), 'Should include the JSON schema for radarItems');
+  });
+
+  it('handles scanner with no lastRunAt (falls back to 14-day window)', () => {
+    const scanner = {
+      id: 's1',
+      name: 'Fresh Scanner',
+      enabled: true,
+      prompt: 'Look for items with signals since {lastRunAt}.',
+      lastRunAt: null,
+    };
+    ctx.state.scanners = [scanner];
+
+    const result = ctx.buildScannerPrompt(scanner);
+
+    // When lastRunAt is null, buildScannerPrompt uses a 14-day fallback
+    assert.ok(!result.includes('{lastRunAt}'), 'Should not leave placeholder unreplaced');
+    assert.ok(result.includes('Last scan was at'), 'Should include time window reference');
+  });
+
+  it('includes dedup block when scanner has existing items', () => {
+    const scanner = {
+      id: 's1',
+      name: 'Radar',
+      enabled: true,
+      prompt: 'Focus specifically on: all signals',
+    };
+    ctx.state.scanners = [scanner];
+    ctx.state.items = [
+      { id: 'existing-1', scannerId: 's1', title: 'Budget Review', lifecycleStatus: 'in-progress', evidenceLinks: [] },
+    ];
+
+    const result = ctx.buildScannerPrompt(scanner);
+
+    assert.ok(result.includes('Budget Review'), 'Should include existing items in dedup block');
+    assert.ok(result.includes('do NOT re-report'), 'Should include dedup instruction');
   });
 });

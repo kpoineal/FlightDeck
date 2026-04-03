@@ -56,6 +56,7 @@ before(() => {
       return Promise.resolve({ success: true });
     },
     broadcastStateChanged: () => {},
+    readPromptFile: () => Promise.resolve({ success: true, content: 'seed prompt content' }),
   };
 
   // Load all dependencies as a single script so const declarations are shared
@@ -65,6 +66,7 @@ before(() => {
     'renderer/models/item.js',
     'renderer/models/tracking.js',
     'renderer/models/briefing.js',
+    'renderer/models/scanner.js',
     'renderer/state.js',
   ]);
 });
@@ -81,6 +83,7 @@ function resetState() {
   ctx.state.radarItems = [];
   ctx.state.meetings = [];
   ctx.state.trackingItems = [];
+  ctx.state.scanners = [];
   ctx.state.briefingsByMeetingId = {};
   ctx.state.briefingSeenAt = {};
   ctx.state.history = [];
@@ -777,5 +780,148 @@ describe('loadPersistentState clears stale new flags', () => {
     assert.equal(item.hasNewUpdate, true);
     assert.equal(item.isNew, true);
     assert.equal(item.updateHistory[0].seen, false);
+  });
+});
+
+/* ================================================================== */
+/*  DEC-063: Radar/Scanner unification — isDefault migration          */
+/* ================================================================== */
+describe('loadPersistentState — isDefault migration (DEC-063)', () => {
+  beforeEach(resetState);
+
+  it('strips isDefault from loaded scanners', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      scanners: [
+        { id: 'scanner_radar_default', name: 'Radar', isDefault: true, enabled: true, scheduleType: 'interval', scheduleValue: '4h' },
+        { id: 's2', name: 'Custom Scanner', isDefault: false, enabled: true },
+      ],
+    };
+
+    await ctx.loadPersistentState();
+
+    for (const scanner of ctx.state.scanners) {
+      assert.equal('isDefault' in scanner, false,
+        `Scanner "${scanner.name}" should not have isDefault after migration`);
+    }
+  });
+
+  it('preserves scanner fields other than isDefault', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      scanners: [
+        { id: 'scanner_radar_default', name: 'Radar', isDefault: true, enabled: true, scheduleType: 'interval', scheduleValue: '4h', prompt: 'my radar prompt' },
+      ],
+    };
+
+    await ctx.loadPersistentState();
+
+    assert.equal(ctx.state.scanners.length, 1);
+    assert.equal(ctx.state.scanners[0].name, 'Radar');
+    assert.equal(ctx.state.scanners[0].enabled, true);
+    assert.equal(ctx.state.scanners[0].scheduleValue, '4h');
+    assert.equal(ctx.state.scanners[0].prompt, 'my radar prompt');
+  });
+});
+
+/* ================================================================== */
+/*  DEC-063: First-run seed scanner                                   */
+/* ================================================================== */
+describe('loadPersistentState — first-run seed (DEC-063)', () => {
+  beforeEach(resetState);
+
+  it('creates a seed Radar scanner when no scanners exist', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      items: [],
+      history: [],
+      // No scanners key at all
+    };
+
+    await ctx.loadPersistentState();
+
+    assert.equal(ctx.state.scanners.length, 1, 'Should create one seed scanner');
+    assert.equal(ctx.state.scanners[0].name, 'Radar');
+    assert.equal(ctx.state.scanners[0].enabled, true);
+    assert.ok(ctx.state.scanners[0].id, 'Seed scanner should have an id');
+    assert.equal('isDefault' in ctx.state.scanners[0], false,
+      'Seed scanner should NOT have isDefault flag');
+  });
+
+  it('creates a seed scanner when scanners array is empty', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      scanners: [],
+      items: [],
+      history: [],
+    };
+
+    await ctx.loadPersistentState();
+
+    assert.equal(ctx.state.scanners.length, 1, 'Should create seed scanner from empty array');
+    assert.equal(ctx.state.scanners[0].name, 'Radar');
+  });
+
+  it('does NOT create seed scanner when scanners already exist', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      scanners: [
+        { id: 'existing', name: 'My Scanner', enabled: true },
+      ],
+      items: [],
+      history: [],
+    };
+
+    await ctx.loadPersistentState();
+
+    assert.equal(ctx.state.scanners.length, 1);
+    assert.equal(ctx.state.scanners[0].name, 'My Scanner');
+  });
+
+  it('seed scanner has a valid nextRunAt', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      items: [],
+      history: [],
+    };
+
+    await ctx.loadPersistentState();
+
+    assert.ok(ctx.state.scanners[0].nextRunAt, 'Seed scanner should have nextRunAt');
+    const nextRunTime = new Date(ctx.state.scanners[0].nextRunAt).getTime();
+    assert.ok(nextRunTime > Date.now() - 10000, 'nextRunAt should be in the future (or very near now)');
+  });
+
+  it('seed scanner uses radar-scan.md prompt content', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      items: [],
+      history: [],
+    };
+
+    await ctx.loadPersistentState();
+
+    // The mock readPromptFile returns 'seed prompt content'
+    assert.equal(ctx.state.scanners[0].prompt, 'seed prompt content');
+  });
+});
+
+/* ================================================================== */
+/*  DEC-063: Orphan items — no auto-assign to default scanner         */
+/* ================================================================== */
+describe('loadPersistentState — orphan items (DEC-063)', () => {
+  beforeEach(resetState);
+
+  it('does NOT auto-assign scannerId to items without one', async () => {
+    mockStore[ctx.STORAGE_KEY] = {
+      items: [
+        { id: 'orphan-item', title: 'No Scanner', scannerId: null, lifecycleStatus: 'in-progress' },
+      ],
+      scanners: [
+        { id: 'existing', name: 'My Scanner', enabled: true },
+      ],
+    };
+
+    await ctx.loadPersistentState();
+
+    const item = ctx.state.items.find((i) => i.id === 'orphan-item');
+    assert.ok(item, 'Orphan item should still exist');
+    // In the unified model, orphan items keep their null scannerId
+    // rather than being auto-assigned to the default radar scanner
+    assert.equal(item.scannerId, null,
+      'Orphan items should NOT be auto-assigned to any scanner');
   });
 });

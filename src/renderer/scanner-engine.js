@@ -116,34 +116,6 @@ async function checkScannersDue() {
 async function runScanner(scanner) {
   logToMain(`Running "${scanner.name}"...`);
 
-  // Default radar scanner uses dedicated prompt + merge logic
-  if (scanner.isDefault) {
-    const prompt = buildRadarScanPrompt(scanner.lastRunAt, scanner.id);
-
-    const payload = await runWorkiqJson(
-      prompt,
-      (candidate) => candidate && Array.isArray(candidate.radarItems),
-      'radar'
-    );
-
-    applyRadarPayload(payload, scanner.id);
-
-    // Update scanner metadata
-    scanner.lastRunAt = nowIso();
-    scanner.nextRunAt = scanner.scheduleType === 'one-time' ? null : computeScannerNextRunAt(scanner);
-    scanner.itemCount = state.items.filter((item) => item.scannerId === scanner.id).length;
-
-    if (scanner.scheduleType === 'one-time') {
-      scanner.enabled = false;
-    }
-
-    logToMain(`"${scanner.name}" (default radar) completed`);
-    addHistory('scan', 'Radar scan completed', { scannerId: scanner.id });
-    renderRadarMode();
-    savePersistentState();
-    return;
-  }
-
   const prompt = buildScannerPrompt(scanner);
 
   const payload = await runWorkiqJson(

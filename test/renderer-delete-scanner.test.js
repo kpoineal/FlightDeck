@@ -29,9 +29,9 @@ describe('deleteScanner()', () => {
   beforeEach(() => {
     saveCalls = [];
     ctx.state.scanners = [
-      { id: 'default', name: 'Default', isDefault: true, enabled: true, itemCount: 1 },
-      { id: 'scanner-A', name: 'Scanner A', isDefault: false, enabled: true, itemCount: 4 },
-      { id: 'scanner-B', name: 'Scanner B', isDefault: false, enabled: true, itemCount: 1 },
+      { id: 'radar', name: 'Radar', enabled: true, itemCount: 1 },
+      { id: 'scanner-A', name: 'Scanner A', enabled: true, itemCount: 4 },
+      { id: 'scanner-B', name: 'Scanner B', enabled: true, itemCount: 1 },
     ];
     ctx.state.items = [
       { id: 'i1', title: 'Active item', scannerId: 'scanner-A', lifecycleStatus: 'in-progress' },
@@ -39,7 +39,7 @@ describe('deleteScanner()', () => {
       { id: 'i3', title: 'Completed item', scannerId: 'scanner-A', lifecycleStatus: 'complete' },
       { id: 'i4', title: 'Archived item', scannerId: 'scanner-A', lifecycleStatus: 'archived' },
       { id: 'i5', title: 'Other scanner item', scannerId: 'scanner-B', lifecycleStatus: 'in-progress' },
-      { id: 'i6', title: 'Default item', scannerId: 'default', lifecycleStatus: 'in-progress' },
+      { id: 'i6', title: 'Radar item', scannerId: 'radar', lifecycleStatus: 'in-progress' },
     ];
   });
 
@@ -89,11 +89,13 @@ describe('deleteScanner()', () => {
     assert.ok(!ctx.state.items.find((i) => i.id === 'i8'), 'waiting item should be removed');
   });
 
-  it('returns false and does nothing for the default scanner', () => {
-    const result = ctx.deleteScanner('default');
-    assert.equal(result, false);
-    assert.equal(ctx.state.scanners.length, 3);
-    assert.equal(ctx.state.items.length, 6);
+  it('deletes ANY scanner including one that was formerly the default (DEC-063)', () => {
+    const result = ctx.deleteScanner('radar');
+    assert.equal(result, true);
+    assert.ok(!ctx.state.scanners.find((s) => s.id === 'radar'));
+    assert.equal(ctx.state.scanners.length, 2);
+    // Active radar items removed, completed/archived retained with null scannerId
+    assert.ok(!ctx.state.items.find((i) => i.id === 'i6'));
   });
 
   it('returns false for a non-existent scanner', () => {
@@ -109,7 +111,7 @@ describe('deleteScanner()', () => {
 
   it('does not call savePersistentState when delete is rejected', () => {
     const before = saveCalls.length;
-    ctx.deleteScanner('default');
+    ctx.deleteScanner('no-such-scanner');
     assert.equal(saveCalls.length, before);
   });
 
@@ -117,5 +119,39 @@ describe('deleteScanner()', () => {
     ctx.deleteScanner('scanner-A');
     assert.deepEqual(ctx.state.radarItems, ctx.state.items);
     assert.deepEqual(ctx.state.trackingItems, ctx.state.items);
+  });
+});
+
+/* ================================================================== */
+/*  updateScanner(id, updates) — isDefault no longer protected        */
+/* ================================================================== */
+describe('updateScanner() — unified scanner model (DEC-063)', () => {
+
+  beforeEach(() => {
+    saveCalls = [];
+    ctx.state.scanners = [
+      ctx.normalizeScannerDefinition({ id: 'scanner-1', name: 'My Scanner', enabled: true }),
+    ];
+  });
+
+  it('allows updating any field except id', () => {
+    const result = ctx.updateScanner('scanner-1', { name: 'Renamed' });
+    assert.ok(result);
+    assert.equal(result.name, 'Renamed');
+  });
+
+  it('does not allow updating id', () => {
+    ctx.updateScanner('scanner-1', { id: 'hacked' });
+    assert.equal(ctx.state.scanners[0].id, 'scanner-1');
+  });
+
+  it('returns null for non-existent scanner', () => {
+    const result = ctx.updateScanner('no-such', { name: 'X' });
+    assert.equal(result, null);
+  });
+
+  it('persists after update', () => {
+    ctx.updateScanner('scanner-1', { name: 'Updated' });
+    assert.equal(saveCalls.length, 1);
   });
 });

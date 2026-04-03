@@ -55,3 +55,25 @@ Designed a cross-scanner dedup block for `buildScannerPrompt()` to prevent dupli
 **Prompt engineering insight:** For LLM exclusion instructions, "skip items that clearly belong to X" outperforms "do NOT report items about X" — the positive-scope framing gives the model a classification basis rather than a negation to track. Soft boundaries ("clearly belong to") are more robust than hard exclusions when domains overlap.
 
 **Decision:** `.squad/decisions/inbox/charlie-cross-scanner-dedup.md`
+
+### 2026-04-03 — Phase 2: Prompt builder & scanner-engine unification (DEC-063)
+
+Unified the prompt system so all scanners (including the former "default radar") flow through the same code path.
+
+**Changes to `src/renderer/prompts.js`:**
+- Removed `buildRadarScanPrompt()` — was a thin wrapper around `promptCache.radarScan` + schema + dedup. All scanners now use `buildScannerPrompt(scanner)` which already handled everything the radar builder did, plus signal filtering, cross-scanner dedup, and structured prompt composition.
+- Removed `promptCache.radarScan` property and all loading/saving/clearing of the `radarScan` custom prompt.
+- Removed `loadPromptFiles()` loading of `radar-scan.md` into prompt cache. The radar prompt template now lives as the scanner's `.prompt` field (set at creation time by Goose's model layer).
+- Removed the legacy radar prompt editor event bindings from `initPromptEditor()` (that UI was already removed; this cleans up dead code).
+- Removed `RADAR_SCANNER_ID` reference (constant being deleted by Goose).
+
+**Changes to `src/renderer/scanner-engine.js`:**
+- Removed the `if (scanner.isDefault)` branch from `runScanner()`. All scanners now follow the single path: `buildScannerPrompt()` → LLM → normalize → maxItemsPerScan cap → keyword filter → dedup → auto-monitor → append.
+- Removed references to `buildRadarScanPrompt` and `applyRadarPayload`.
+
+**Key architecture decision — upsert vs append:**
+- `applyRadarPayload()` did full upsert: existing items got their content refreshed while preserving monitoring state.
+- The scanner path does dedup-then-append: items matching existing evidence/titles are filtered out; existing items stay untouched.
+- Chose dedup-then-append for all scanners. The dedup pipeline achieves the same "no duplicates" goal more predictably, and existing items preserve their user edits. If we ever want "content refresh" behavior, it can be added as a scanner option later.
+
+**Test impact:** 8 test failures in `renderer-prompts.test.js` (6) and `renderer-delete-scanner.test.js` (2) — all reference removed radar-specific functions/behavior. Merlin owns test updates.

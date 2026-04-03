@@ -118,9 +118,9 @@ async function refreshRadarData() {
     return;
   }
 
-  const scanner = getDefaultRadarScanner();
+  const scanner = state.scanners.find(s => s.enabled);
   if (!scanner) {
-    setStatus('No radar scanner configured');
+    setStatus('No scanner configured');
     return;
   }
 

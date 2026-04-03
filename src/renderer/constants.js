@@ -169,8 +169,6 @@ const LIFECYCLE_LABELS = {
   'archived': 'Archived',
 };
 
-const RADAR_SCANNER_ID = 'scanner_radar_default';
-
 const SCANNER_ENGINE_TICK_MS = 60 * 1000; // 1 minute check cycle
 
 const DEFAULT_SCANNER_PROMPT = `Focus specifically on: [describe what to look for]
