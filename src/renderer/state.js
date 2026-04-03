@@ -20,6 +20,7 @@ const elements = {
   summTotal: document.getElementById('summTotal'),
   summBlocked: document.getElementById('summBlocked'),
   summNew: document.getElementById('summNew'),
+  summComplete: document.getElementById('summComplete'),
 
   viewRadar: document.getElementById('viewRadar'),
   viewTracking: null, // Removed — unified into viewRadar
@@ -294,11 +295,16 @@ async function loadPersistentState() {
       if (Array.isArray(item.evidenceLinks) && item.evidenceLinks.length > MAX_EVIDENCE_LINKS_PER_ITEM) {
         item.evidenceLinks = item.evidenceLinks.slice(-MAX_EVIDENCE_LINKS_PER_ITEM);
       }
-      // Clear stale "new" flags on completed/archived items
-      // (setItemLifecycleStatus now clears these, but items completed before that fix retain them)
+      // Clear stale "new" flags on completed/archived items and ensure monitoring is stopped
+      // (handles items whose lifecycle was reconciled to 'complete' by normalizeItem on load)
       if (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived') {
         item.hasNewUpdate = false;
         item.isNew = false;
+        item.monitorEnabled = false;
+        item.nextRunAt = null;
+        if (!item.completedAt && item.lifecycleStatus === 'complete') {
+          item.completedAt = item.lastChangedAt || new Date().toISOString();
+        }
         if (Array.isArray(item.updateHistory)) {
           item.updateHistory.forEach((e) => { e.seen = true; });
         }

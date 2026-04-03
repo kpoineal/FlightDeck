@@ -129,12 +129,12 @@ body {
 .main {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
   min-width: 0;
 }
 
 .mode-view { display: none; }
-.mode-view.active { display: block; animation: fadeIn 0.3s ease; }
+.mode-view.active { display: flex; flex-direction: column; gap: 12px; animation: fadeIn 0.3s ease; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
@@ -190,7 +190,7 @@ body {
   -webkit-backdrop-filter: blur(var(--blur-radius));
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 12px 20px;
+  padding: 10px 20px;
   box-shadow: var(--shadow-card);
   animation: fadeIn 0.3s ease;
 }

@@ -181,6 +181,19 @@ function renderSummaryStrip(counts, mode) {
     elements.summNew.style.background = newCount > 0 ? 'color-mix(in srgb, var(--color-success, #30d158) 15%, transparent)' : '';
     elements.summNew.style.color = newCount > 0 ? 'var(--color-success, #30d158)' : '';
   }
+  if (elements.summComplete) {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const completeCount = (state.items || []).filter(i => {
+      if (i.lifecycleStatus !== 'complete') return false;
+      const ts = i.completedAt || i.lastChangedAt;
+      if (!ts) return true; // no timestamp — include to avoid hiding valid completions
+      const t = new Date(ts).getTime();
+      return Number.isFinite(t) && t >= weekAgo;
+    }).length;
+    elements.summComplete.textContent = completeCount > 0 ? `${completeCount} complete this week` : '';
+    elements.summComplete.style.background = completeCount > 0 ? 'color-mix(in srgb, var(--color-success, #30d158) 15%, transparent)' : '';
+    elements.summComplete.style.color = completeCount > 0 ? 'var(--color-success, #30d158)' : '';
+  }
 }
 
 function renderKpis() {

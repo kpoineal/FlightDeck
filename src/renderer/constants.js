@@ -23,7 +23,8 @@ const RADAR_SCAN_JSON_SCHEMA = `Return only valid JSON and nothing else using th
           "signalAt": "ISO-8601 timestamp when the signal was sent or updated, or null"
         }
       ],
-      "suggestedNextSteps": ["string"]
+      "suggestedNextSteps": ["string"],
+      "doneCriteria": "string — one sentence describing what 'done' looks like for this item (e.g. 'Jordan confirms receipt of the budget spreadsheet'), or null if unclear"
     }
   ]
 }

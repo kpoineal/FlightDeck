@@ -1,5 +1,55 @@
 /* ── FlightDeck Tracking ── */
 
+/* ── Activity timeline status pills ── */
+.at-status-transition {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.at-status-pill {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid;
+  line-height: 1.5;
+}
+.at-arrow {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.at-status-in-progress {
+  background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.at-status-blocked {
+  background-color: color-mix(in srgb, var(--color-critical) 12%, transparent);
+  color: var(--color-critical);
+  border-color: color-mix(in srgb, var(--color-critical) 50%, transparent);
+}
+.at-status-waiting {
+  background-color: color-mix(in srgb, var(--color-elevated) 12%, transparent);
+  color: var(--color-elevated);
+  border-color: color-mix(in srgb, var(--color-elevated) 50%, transparent);
+}
+.at-status-complete {
+  background-color: color-mix(in srgb, var(--color-success, #30d158) 15%, transparent);
+  color: var(--color-success, #30d158);
+  border-color: color-mix(in srgb, var(--color-success, #30d158) 50%, transparent);
+}
+.at-status-archived {
+  background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-muted);
+  border-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+}
+.at-status-snoozed {
+  background-color: color-mix(in srgb, var(--color-elevated) 12%, transparent);
+  color: var(--color-elevated);
+  border-color: color-mix(in srgb, var(--color-elevated) 30%, transparent);
+}
+
 /* ── Transition suppression (used during incremental DOM patching) ── */
 .no-transition,
 .no-transition * {
@@ -168,9 +218,9 @@
   border-color: color-mix(in srgb, var(--color-elevated) 50%, transparent);
 }
 .status-select.status-complete {
-  background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);
-  color: var(--text-muted);
-  border-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  background-color: color-mix(in srgb, var(--color-success, #30d158) 15%, transparent);
+  color: var(--color-success, #30d158);
+  border-color: color-mix(in srgb, var(--color-success, #30d158) 50%, transparent);
 }
 .status-select.status-archived {
   background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);

@@ -136,6 +136,7 @@ function buildDefaultMonitorPrompt(item) {
   if (owner && owner !== 'You') parts.push(`Owner: ${owner}`);
   if (people) parts.push(`People: ${people}`);
   if (source && source !== 'Signal' && source !== 'Custom') parts.push(`Source: ${source}`);
+  if (item.doneCriteria) parts.push(`Done when: ${item.doneCriteria}`);
 
   return parts.join('\n') || title || 'Tracked task';
 }
@@ -227,6 +228,7 @@ function normalizeItem(item) {
     summary: cleanDisplayText(item?.summary || ''),
     reason: cleanDisplayText(item?.reason || ''),
     status: cleanDisplayText(item?.status || 'Inbound'),
+    doneCriteria: cleanDisplayText(item?.doneCriteria || '') || null,
     evidenceLinks: _buildEvidenceLinks(item, inlineLinks).slice(0, MAX_EVIDENCE_LINKS_PER_ITEM),
     suggestedNextSteps: Array.isArray(item?.suggestedNextSteps)
       ? item.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2)
@@ -255,13 +257,19 @@ function normalizeItem(item) {
     lastChangedAt: item?.lastChangedAt
       || (Array.isArray(item?.updateHistory) && item.updateHistory.length > 0 ? item.updateHistory[0].timestamp : null)
       || null,
+    completedAt: item?.completedAt || null,
     lastCheckSignature: item?.lastCheckSignature || null,
     lastNotifiedSignature: item?.lastNotifiedSignature || null,
     notifyEnabled: item?.notifyEnabled !== false,
     origin: item?.origin === 'custom' ? 'custom' : 'imported',
     lifecycleStatus: (() => {
       if (item?.archived === true || item?.completed === true) return 'archived';
-      // Always check the status field — it reflects the latest AI-reported state
+      // Explicit lifecycle set by user action (e.g. manually marking Complete)
+      // takes priority over AI-reported status text to prevent "zombie" items
+      // that resurrect from complete back to blocked/waiting on reload.
+      if (item?.lifecycleStatus === 'complete' || item?.lifecycleStatus === 'archived') return item.lifecycleStatus;
+      if (item?.lifecycleStatus === 'snoozed') return 'snoozed';
+      // Derive from AI-reported status text for non-terminal states
       const s = String(item?.status || '').toLowerCase();
       if (s.includes('complete') || s.includes('resolved') || s.includes('closed') || s.includes('done')) return 'complete';
       if (s.includes('block') || s.includes('stalled')) return 'blocked';
@@ -865,6 +873,9 @@ function setItemLifecycleStatus(id, newStatus) {
     if (Array.isArray(item.updateHistory)) {
       item.updateHistory.forEach((e) => { e.seen = true; });
     }
+  }
+  if (newStatus === 'complete' && !item.completedAt) {
+    item.completedAt = nowIso();
   }
   if (!Array.isArray(item.updateHistory)) item.updateHistory = [];
   item.updateHistory.unshift({

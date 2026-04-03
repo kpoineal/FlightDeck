@@ -233,6 +233,7 @@ Analysis procedure:
 3. Classify each item as Critical, Elevated, or Observe based on urgency and impact.
 4. Include inline citations in summary and reason fields for every signal referenced.
 5. Return at most ${maxItems} items. Prefer quality over quantity.
+6. For each item, define what "done" looks like — a concrete, observable condition that would indicate this item is resolved. If the completion condition is unclear from available signals, return null for doneCriteria.
 
 ${RADAR_SCAN_JSON_SCHEMA}
 
@@ -279,6 +280,10 @@ function buildTaskMonitorPrompt(item) {
     ? item.evidenceLinks.map((e) => `  - [${e.type}] ${e.label}: ${e.url}${e.signalAt ? ` (signalAt: ${e.signalAt})` : ''}`).join('\n')
     : null;
 
+  const doneCriteriaBlock = item?.doneCriteria
+    ? `\n\n--- DONE CRITERIA ---\n${item.doneCriteria}\nEvaluate whether signals indicate this done criteria has been met. If met, set status to "Complete".`
+    : '';
+
   const activeSignals = Array.isArray(item?.monitorSignals) && item.monitorSignals.length
     ? item.monitorSignals
     : ALL_SIGNAL_TYPES;
@@ -302,7 +307,7 @@ Task to monitor:
 - ${lastCheckInfo}
 
 --- MONITORING CONTEXT ---
-${context}${lastSummary ? `\n\nPrevious summary: ${lastSummary}` : ''}${existingLinks ? `\n\nPreviously known evidence:\n${existingLinks}` : ''}${signalFilterInstruction}
+${context}${lastSummary ? `\n\nPrevious summary: ${lastSummary}` : ''}${existingLinks ? `\n\nPreviously known evidence:\n${existingLinks}` : ''}${doneCriteriaBlock}${signalFilterInstruction}
 ${previousSummaries}
 Analysis procedure:
 1. Search for recent signals (emails, chats, meetings, documents) related to this task.
@@ -328,7 +333,9 @@ Return strict valid JSON only:
       "signalAt": "ISO-8601 timestamp when the signal was sent/written/updated, or null"
     }
   ],
-  "suggestedNextSteps": ["string"]
+  "suggestedNextSteps": ["string"],
+  "doneCriteria": "string — observable completion condition for this item, or null if unchanged/unknown",
+  "completionConfidence": "high|medium|low|null — confidence that this item is complete (high = explicit closure signal, medium = likely resolved, low = possibly done)"
 }
 
 Due date rules:
@@ -349,7 +356,7 @@ Status rules:
 - "In Progress" — active work, normal signal activity.
 - "Blocked" — stalled on a dependency, missing response, or unresolved issue.
 - "Waiting" — ball is in someone else's court (response, approval, deliverable).
-- "Complete" — clear evidence of resolution (confirmation email, explicit closure).
+- "Complete" — the item's done criteria have been met (see DONE CRITERIA above), OR clear evidence of resolution (confirmation email, explicit closure). When marking Complete, set completionConfidence to reflect your certainty.
 - "No Update" — no new signals found. Only use with hasNewInfo: false.
 
 Suggested next steps rules:
