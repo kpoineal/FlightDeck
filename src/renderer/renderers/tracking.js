@@ -214,7 +214,7 @@ function buildActivityTimelineHtml(updateHistory, options = {}) {
           ${!isNewest ? `<span class="at-severity pill severity-${escapeHtml(curSeverity)}">${escapeHtml(label)}</span>` : ''}
           ${sevChanged ? `<span class="at-transition-badge">${escalated ? '▲' : '▼'}</span>` : ''}
         </div>
-        <p class="at-changes">${escapeHtml(changeSummary || 'No changes recorded')}</p>
+        <p class="at-changes">${changeSummary || 'No changes recorded'}</p>
         ${summaryHtml}
         ${linkChips}
       </div>
@@ -576,6 +576,7 @@ function buildCardTabsHtml(item) {
           <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
           <span>Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
           <span>Owner: <span class="editable-field" data-edit-field="owner" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.owner ? escapeHtml(item.owner) : '<span class="field-placeholder">Set owner</span>'}</span></span>
+          <span>Done when: <span class="editable-field" data-edit-field="doneCriteria" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.doneCriteria ? escapeHtml(item.doneCriteria) : '<span class="field-placeholder">Set done criteria</span>'}</span></span>
         </div>
         <div class="tracker-timestamp">
           Tracked: ${escapeHtml(safeDate(item.trackedAt, 'Unknown'))} \u00b7 Last checked: ${escapeHtml(safeDate(item.lastRunAt, 'Never'))}
@@ -643,7 +644,7 @@ function buildTrackingCard(item) {
           ${item.lifecycleStatus === 'snoozed' ? `<span class="snooze-until-label" title="Snoozed until ${item.snoozeUntil ? escapeHtml(safeDate(item.snoozeUntil)) : 'next scan'}">💤 ${item.snoozeUntil ? escapeHtml(relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}</span>` : ''}
         </div>
         <div class="tracker-head-right">
-          ${item.monitorEnabled === false ? '<span class="pill paused-pill">Paused</span>' : ''}
+          ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
           ${hasNew ? '<span class="tracker-new-badge">' + (unseenCount > 1 ? unseenCount + ' ' : '') + 'New</span>' : (() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? '<span class="pill last-updated-pill" title="Last update: ' + escapeHtml(safeDate(lastUpdate)) + '">' + escapeHtml(rt) + '</span>' : ''; })()}
           <button class="popout-icon-btn" data-popout-id="${escapeHtml(item.id)}" title="Pop Out" aria-label="Pop out">\u2197</button>
         </div>
@@ -702,7 +703,7 @@ function buildTrackingRow(item, expandedRowId) {
         ${LIFECYCLE_STATUSES.map(s => `<option value="${escapeHtml(s)}" ${item.lifecycleStatus === s ? 'selected' : ''}>${escapeHtml(LIFECYCLE_LABELS[s])}</option>`).join('')}
       </select>
       ${item.lifecycleStatus === 'snoozed' ? `<span class="snooze-until-label" title="Snoozed until ${item.snoozeUntil ? escapeHtml(safeDate(item.snoozeUntil)) : 'next scan'}">💤 ${item.snoozeUntil ? escapeHtml(relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}</span>` : ''}
-      ${item.monitorEnabled === false ? '<span class="pill paused-pill">Paused</span>' : ''}
+      ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
       ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
       ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
       <span class="tracker-row-title">
@@ -722,6 +723,7 @@ function buildTrackingRow(item, expandedRowId) {
         <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>
         <span>Due: <span class="editable-field" data-edit-field="dueAt" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.dueAt ? escapeHtml(safeDate(item.dueAt)) : '<span class="field-placeholder">Set due date</span>'}</span></span>
         <span>Owner: <span class="editable-field" data-edit-field="owner" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.owner ? escapeHtml(item.owner) : '<span class="field-placeholder">Set owner</span>'}</span></span>
+        <span>Done when: <span class="editable-field" data-edit-field="doneCriteria" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${item.doneCriteria ? escapeHtml(item.doneCriteria) : '<span class="field-placeholder">Set done criteria</span>'}</span></span>
       </div>
       <div class="tracker-timestamp">
         Tracked: ${escapeHtml(safeDate(item.trackedAt, 'Unknown'))} \u00b7 Last checked: ${escapeHtml(safeDate(item.lastRunAt, 'Never'))}
@@ -826,7 +828,7 @@ void function _deadCode() {
             <option value="Elevated" ${item.severity === 'Elevated' ? 'selected' : ''}>Elevated</option>
             <option value="Observe" ${item.severity === 'Observe' ? 'selected' : ''}>Observe</option>
           </select>
-          ${item.monitorEnabled === false ? '<span class="pill paused-pill">Paused</span>' : ''}
+          ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
           ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
           ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
           <span class="tracker-row-title">
@@ -928,7 +930,7 @@ void function _deadCode() {
           ${item.lifecycleStatus === 'snoozed' ? `<span class="snooze-until-label" title="Snoozed until ${item.snoozeUntil ? escapeHtml(safeDate(item.snoozeUntil)) : 'next scan'}">💤 ${item.snoozeUntil ? escapeHtml(relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}</span>` : ''}
         </div>
         <div class="tracker-head-right">
-          ${item.monitorEnabled === false ? '<span class="pill paused-pill">Paused</span>' : ''}
+          ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
           ${(() => { if (hasNew) { const label = unseenCount > 1 ? `${unseenCount} NEW` : 'NEW'; const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return `<span class="tracker-new-badge">${label}${timeStr ? ` \u00b7 ${timeStr}` : ''}</span>`; } const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Last update: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
         </div>
       </div>

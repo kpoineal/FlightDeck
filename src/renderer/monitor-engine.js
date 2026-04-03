@@ -58,20 +58,22 @@ async function monitorTaskItem(item, { manual = false } = {}) {
     item.status = cleanDisplayText(payload.status || item.status || 'Monitoring');
 
     // Auto-update lifecycle status based on AI-reported status
+    // IMPORTANT: check completion FIRST — a status like "blocked → complete"
+    // contains both keywords and completion must take priority.
     const statusLower = (item.status || '').toLowerCase();
-    if (statusLower.includes('blocked') || statusLower.includes('stalled')) {
+    if (statusLower.includes('resolved') || statusLower.includes('complete') || statusLower.includes('closed')) {
+      if (item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived') {
+        item.lifecycleStatus = 'complete';
+        item.monitorEnabled = false;
+        item.nextRunAt = null;
+      }
+    } else if (statusLower.includes('blocked') || statusLower.includes('stalled')) {
       if (item.lifecycleStatus === 'in-progress') {
         item.lifecycleStatus = 'blocked';
       }
     } else if (statusLower.includes('waiting') || statusLower.includes('pending')) {
       if (item.lifecycleStatus === 'in-progress') {
         item.lifecycleStatus = 'waiting';
-      }
-    } else if (statusLower.includes('resolved') || statusLower.includes('complete') || statusLower.includes('closed')) {
-      if (item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived') {
-        item.lifecycleStatus = 'complete';
-        item.monitorEnabled = false;
-        item.nextRunAt = null;
       }
     } else if (statusLower.includes('in progress') || statusLower.includes('active') || statusLower.includes('ongoing')) {
       if (item.lifecycleStatus === 'blocked' || item.lifecycleStatus === 'waiting') {
@@ -88,6 +90,19 @@ async function monitorTaskItem(item, { manual = false } = {}) {
     item.suggestedNextSteps = Array.isArray(payload.suggestedNextSteps)
       ? payload.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2)
       : [];
+
+    // Record completion metadata when auto-completing
+    if (item.lifecycleStatus === 'complete' && !item.completedAt) {
+      item.completedAt = nowIso();
+      item.completionConfidence = cleanDisplayText(payload.completionConfidence || '') || null;
+    }
+
+    // Backfill doneCriteria from AI if not yet defined
+    const aiDoneCriteria = cleanDisplayText(payload.doneCriteria || '') || null;
+    if (aiDoneCriteria && !item.doneCriteria) {
+      item.doneCriteria = aiDoneCriteria;
+    }
+
     item.lastRunAt = nowIso();
   }
 
@@ -204,10 +219,9 @@ async function monitorTaskItem(item, { manual = false } = {}) {
       });
     }
 
-    // Only flag "New Update" for substantive field changes (status, severity,
-    // or summary-only).  Links-only discoveries are logged in history but
-    // don't warrant the prominent badge / notification.
-    const substantiveChange = statusChanged || severityChanged || (summaryChanged && !linksChanged);
+    // Flag "New Update" for any substantive change — status, severity,
+    // summary-only updates, or newly discovered evidence links.
+    const substantiveChange = statusChanged || severityChanged || linksChanged || (summaryChanged && !linksChanged);
     if (substantiveChange) {
       item.hasNewUpdate = true;
     }
@@ -230,6 +244,13 @@ async function monitorTaskItem(item, { manual = false } = {}) {
   if (item.scheduleType === 'one-time') {
     item.monitorEnabled = false;
     item.nextRunAt = null;
+    // One-time monitors are inherently "done" after running
+    if (item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived') {
+      item.lifecycleStatus = 'complete';
+      if (!item.completedAt) item.completedAt = nowIso();
+      item.hasNewUpdate = false;
+      item.isNew = false;
+    }
   } else {
     item.nextRunAt = computeNextRunAt(item);
   }

@@ -900,6 +900,12 @@ function renderMorningBanner() {
   const newCount = activeItems.filter(i => (i.isNew || i.hasNewUpdate) && i.lifecycleStatus !== 'snoozed').length;
   const blockedCount = activeItems.filter(i => i.lifecycleStatus === 'blocked').length;
   const snoozedCount = activeItems.filter(i => i.lifecycleStatus === 'snoozed').length;
+  const completedItems = items.filter(i => i.lifecycleStatus === 'complete');
+  const completedCount = completedItems.length;
+  const recentlyCompleted = completedItems
+    .filter(i => i.completedAt && (Date.now() - new Date(i.completedAt).getTime()) < 24 * 60 * 60 * 1000)
+    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+  const recentlyCompletedCount = recentlyCompleted.length;
   const meetingCount = (state.meetings || []).length;
   const unbriefedCount = (state.meetings || []).filter(m => {
     const b = state.briefingsByMeetingId?.[m.id];
@@ -917,6 +923,7 @@ function renderMorningBanner() {
   if (newCount > 0) highlights.push(`${newCount} new update${newCount > 1 ? 's' : ''}`);
   if (blockedCount > 0) highlights.push(`${blockedCount} blocked`);
   if (meetingCount > 0) highlights.push(`${meetingCount} meeting${meetingCount > 1 ? 's' : ''} today`);
+  if (recentlyCompletedCount > 0) highlights.push(`${recentlyCompletedCount} completed`);
 
   const headlineSuffix = highlights.length ? `. ${highlights.join(' \u00B7 ')}` : '. All clear \u2014 no urgent items.';
 
@@ -937,6 +944,7 @@ function renderMorningBanner() {
       ${meetingCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83D\uDCC5 Meetings</strong>${meetingCount} today${unbriefedCount > 0 ? `, ${unbriefedCount} unbriefed` : ', all briefed'}</div>` : '<div class="morning-banner-detail-card"><strong>\uD83D\uDCC5 Meetings</strong>No meetings today</div>'}
       ${snoozedCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83D\uDCA4 Snoozed</strong>${snoozedCount} item${snoozedCount > 1 ? 's' : ''} snoozed</div>` : ''}
       ${newCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83C\uDD95 Updates</strong>${newCount} item${newCount > 1 ? 's have' : ' has'} new activity</div>` : '<div class="morning-banner-detail-card"><strong>\u2705 Current</strong>No new updates since last check</div>'}
+      ${recentlyCompletedCount > 0 ? `<div class="morning-banner-detail-card"><strong>\u2705 Completed</strong>${recentlyCompletedCount} item${recentlyCompletedCount > 1 ? 's' : ''} completed recently${recentlyCompleted.slice(0, 3).map(i => `<br><small>\u2022 ${escapeHtml(i.title || 'Untitled')}</small>`).join('')}</div>` : ''}
     </div>
   `;
 }
