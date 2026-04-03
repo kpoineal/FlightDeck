@@ -265,3 +265,31 @@
 ### 2026-03-19 — Cross-Agent: Iceman Feature Priority Recommendations
 
 **Context:** Iceman delivered product analysis in parallel. Key divergence: Iceman ranks Sparkline → Scanners → Todos (strategic value), while Maverick ranks Todo → Sparkline → Scanners (complexity). Both agree sparkline should ship first. Iceman's critical insight: frame todos as "Tracking Item Completion" to avoid scope creep into generic task management. Decisions captured: DEC-051, DEC-052.
+
+### 2026-04-02 — Radar Unification Analysis (Kyle Request)
+
+**Context:** Kyle wants radar to be "just another scanner" — deletable, editable, governed by the same rules. Currently the Radar scanner is protected by 7+ mechanisms across the codebase that make it undeletable and special-cased.
+
+**Architecture findings — seven reinforcing mechanisms that make radar "special":**
+1. `RADAR_SCANNER_ID` constant in `constants.js` — well-known hardcoded ID.
+2. `isDefault` flag on scanner model — preserved/immutable in `normalizeScannerDefinition()` and `updateScanner()`.
+3. `ensureDefaultRadarScanner()` in `scanner.js` — auto-creates on every load if missing (called from `loadPersistentState`).
+4. `deleteScanner()` guard — `if (!scanner || scanner.isDefault) return false`.
+5. UI suppression — delete button hidden, name field readonly for default scanner.
+6. Event handler guard — `if (scanner && scanner.isDefault) return` in delete click handler.
+7. Separate prompt pipeline — `buildRadarScanPrompt()` vs. `buildScannerPrompt()`, plus `promptCache.radarScan` system.
+
+**Key files for unification (12 files, medium complexity):**
+- `constants.js` — remove `RADAR_SCANNER_ID`
+- `models/scanner.js` — remove `ensureDefaultRadarScanner()`, `getDefaultRadarScanner()`, delete guard, `isDefault` immutability
+- `state.js` — remove `ensureDefaultRadarScanner()` call and orphan migration
+- `scanner-engine.js` — remove `if (scanner.isDefault)` branch in `runScanner()`
+- `prompts.js` — remove `buildRadarScanPrompt()`, `promptCache.radarScan` system
+- `renderers/radar.js` — remove `isDefaultRadar` conditionals, always show delete, allow name editing
+- `events.js` — remove `isDefault` guards and `promptCache.radarScan` sync
+
+**Risks:** orphaned items after scanner deletion, existing-user migration, prompt template discoverability, empty-state (all scanners deleted).
+
+**User preference:** Kyle does NOT want radar as a separate construct. It should be deletable and behave identically to custom scanners. A seed scanner on first launch is fine.
+
+**Decision written to:** `.squad/decisions/inbox/maverick-radar-unification.md`

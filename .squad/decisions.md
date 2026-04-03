@@ -1204,3 +1204,24 @@
 **Impact:** Background monitor refreshes invisible to user unless data changed. 446 tests pass.
 
 **Source:** `.squad/decisions/inbox/goose-fix-screen-flicker.md`
+
+---
+
+## DEC-063: Unify Radar as "Just Another Scanner"
+
+**Author:** Maverick (Lead) | **Date:** 2026-04-02 | **Status:** Proposed | **Requested by:** Kyle
+
+**Summary:** Radar is currently a protected, undeletable first-class construct enforced by seven reinforcing mechanisms: hardcoded `RADAR_SCANNER_ID` constant, `isDefault` flag with delete/update guards, auto-recreation on load (`ensureDefaultRadarScanner`), UI suppression of delete button, event handler guards, separate prompt pipeline (`buildRadarScanPrompt` / `promptCache.radarScan`), and rendering special-casing (icon, sort order, orphan assignment). Kyle wants radar to be "just another scanner" — deletable, editable, governed by the same rules as user-created scanners.
+
+**Proposed four-phase plan:**
+
+| Phase | Scope | Key Changes |
+|-------|-------|-------------|
+| 1 — Remove undeletable default | `models/scanner.js`, `state.js`, `constants.js` | Remove `isDefault` guard from `deleteScanner()`/`updateScanner()`, remove `ensureDefaultRadarScanner()`/`getDefaultRadarScanner()`, remove `RADAR_SCANNER_ID`, handle orphaned items |
+| 2 — Unify execution path | `scanner-engine.js`, `prompts.js` | Remove `if (scanner.isDefault)` branch — all scanners use `buildScannerPrompt()`. Radar prompt content becomes default pre-filled `.prompt` field |
+| 3 — Unify UI | `renderers/radar.js`, `events.js` | Remove all `isDefaultRadar` conditionals, always show delete/edit, remove special prompt reset, unify icons |
+| 4 — First-run seed | `state.js` or `app.js` | On first launch, create "Radar" scanner with radar-scan.md prompt pre-filled, but fully deletable/editable |
+
+**Risks:** Orphaned items (items whose `scannerId` points to deleted scanner) need a fallback strategy — either "Unassigned" section or re-assign on deletion confirmation.
+
+**Source:** `.squad/decisions/inbox/maverick-radar-unification.md`
