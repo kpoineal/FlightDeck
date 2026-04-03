@@ -273,7 +273,6 @@ async function runDueMonitoringChecks() {
   } finally {
     monitorCycleInProgress = false;
     setStatus('Updated');
-    setUpdatedNow();
     savePersistentState();
     // Final KPI sync — individual items were already patched in-place.
     renderKpis();

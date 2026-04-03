@@ -117,162 +117,73 @@ function getModeScopeLabel(mode) {
   return 'Current View';
 }
 
-function updateLegendEntry(countEl, dotClass, label, value, visible) {
-  if (!countEl) return;
-  countEl.textContent = String(value);
-  const span = countEl.parentElement;
-  if (!span) return;
-  span.classList.toggle('d-none', !visible);
-  const dot = span.querySelector('.legend-dot');
-  if (dot) dot.className = 'legend-dot ' + dotClass;
-  for (const child of span.childNodes) {
-    if (child.nodeType === 3 && child.textContent.includes(':')) {
-      child.textContent = label + ': ';
-      break;
-    }
-  }
-}
+function renderSummaryStrip(counts, mode) {
+  // Update counts
+  if (elements.summCriticalCount) elements.summCriticalCount.textContent = String(counts.critical ?? counts.unbriefed ?? 0);
+  if (elements.summElevatedCount) elements.summElevatedCount.textContent = String(counts.elevated ?? counts.briefed ?? 0);
+  if (elements.summObserveCount) elements.summObserveCount.textContent = String(counts.observe ?? 0);
 
-function renderSeverityCharts(counts, mode) {
-  if (!elements.severityBarCritical || !elements.severityBarElevated || !elements.severityBarMonitor) {
-    return;
-  }
-
-  const legendContainer = elements.chartCriticalCount?.closest('.viz-legend');
+  // Labels for briefing mode
+  const critLabel = elements.summCriticalCount?.parentElement;
+  const elevLabel = elements.summElevatedCount?.parentElement;
+  const obsLabel = elements.summObserveCount?.parentElement;
 
   if (mode === 'Briefings') {
-    const total = (counts.briefed || 0) + (counts.unbriefed || 0);
-    const unbriefedPct = total ? (counts.unbriefed / total) * 100 : 0;
-    const briefedPct = total ? (counts.briefed / total) * 100 : 0;
-
-    elements.severityBarCritical.className = 'stack-segment unbriefed';
-    elements.severityBarCritical.style.setProperty('--bar-width', `${unbriefedPct}%`);
-    elements.severityBarCritical.style.setProperty('--bar-opacity', counts.unbriefed ? '1' : '0.25');
-
-    elements.severityBarElevated.className = 'stack-segment briefed';
-    elements.severityBarElevated.style.setProperty('--bar-width', `${briefedPct}%`);
-    elements.severityBarElevated.style.setProperty('--bar-opacity', counts.briefed ? '1' : '0.25');
-
-    elements.severityBarMonitor.style.setProperty('--bar-width', '0%');
-    elements.severityBarMonitor.style.setProperty('--bar-opacity', '0');
-
-    updateLegendEntry(elements.chartCriticalCount, 'unbriefed', 'Unbriefed', counts.unbriefed, true);
-    updateLegendEntry(elements.chartElevatedCount, 'briefed', 'Briefed', counts.briefed, true);
-    updateLegendEntry(elements.chartMonitorCount, 'observe', 'Observe', 0, false);
-    if (legendContainer) legendContainer.classList.add('viz-legend--briefing');
-
-    if (elements.chartTotalItems) elements.chartTotalItems.textContent = `${total} meeting${total === 1 ? '' : 's'}`;
-
-    if (elements.severityDonut) {
-      const u = Math.round(unbriefedPct);
-      const gradient = total
-        ? `conic-gradient(#6076ab 0% ${u}%, #48d5ff ${u}% 100%)`
-        : `conic-gradient(var(--bg-donut-track) 0% 100%)`;
-      elements.severityDonut.style.setProperty('--donut-bg', gradient);
-      elements.severityDonut.dataset.total = String(total);
-    }
-
-    if (elements.severityInsight) {
-      if (!total) {
-        elements.severityInsight.textContent = `No meetings in ${getModeScopeLabel(mode)}.`;
-      } else {
-        const pct = Math.round((counts.briefed / total) * 100);
-        elements.severityInsight.textContent = `${pct}% of meetings are briefed.`;
-      }
-    }
-    return;
+    if (critLabel) { critLabel.querySelector('.legend-dot').className = 'legend-dot unbriefed'; critLabel.lastChild.textContent = ' Unbriefed'; }
+    if (elevLabel) { elevLabel.querySelector('.legend-dot').className = 'legend-dot briefed'; elevLabel.lastChild.textContent = ' Briefed'; }
+    if (obsLabel) obsLabel.classList.add('d-none');
+  } else {
+    if (critLabel) { critLabel.querySelector('.legend-dot').className = 'legend-dot critical'; critLabel.lastChild.textContent = ' Critical'; }
+    if (elevLabel) { elevLabel.querySelector('.legend-dot').className = 'legend-dot elevated'; elevLabel.lastChild.textContent = ' Elevated'; }
+    if (obsLabel) { obsLabel.classList.remove('d-none'); }
   }
 
-  // 3-tier severity for Radar / Tracking / History
-  elements.severityBarCritical.className = 'stack-segment critical';
-  elements.severityBarElevated.className = 'stack-segment elevated';
-  elements.severityBarMonitor.className = 'stack-segment observe';
+  // Severity bar
+  const total = (counts.critical ?? 0) + (counts.elevated ?? 0) + (counts.observe ?? 0);
+  const briefTotal = (counts.unbriefed ?? 0) + (counts.briefed ?? 0);
+  const barTotal = mode === 'Briefings' ? briefTotal : total;
 
-  const total = counts.critical + counts.elevated + counts.observe;
-  const criticalPct = total ? (counts.critical / total) * 100 : 0;
-  const elevatedPct = total ? (counts.elevated / total) * 100 : 0;
-  const observePct = total ? (counts.observe / total) * 100 : 0;
-
-elements.severityBarCritical.style.setProperty('--bar-width', `${criticalPct}%`);
-    elements.severityBarElevated.style.setProperty('--bar-width', `${elevatedPct}%`);
-    elements.severityBarMonitor.style.setProperty('--bar-width', `${observePct}%`);
-
-    elements.severityBarCritical.style.setProperty('--bar-opacity', counts.critical ? '1' : '0.25');
-    elements.severityBarElevated.style.setProperty('--bar-opacity', counts.elevated ? '1' : '0.25');
-    elements.severityBarMonitor.style.setProperty('--bar-opacity', counts.observe ? '1' : '0.25');
-
-  updateLegendEntry(elements.chartCriticalCount, 'critical', 'Critical', counts.critical, true);
-  updateLegendEntry(elements.chartElevatedCount, 'elevated', 'Elevated', counts.elevated, true);
-  updateLegendEntry(elements.chartMonitorCount, 'observe', 'Observe', counts.observe, true);
-if (legendContainer) legendContainer.classList.remove('viz-legend--briefing');
-
-  if (elements.chartTotalItems) elements.chartTotalItems.textContent = `${total} item${total === 1 ? '' : 's'}`;
-
-  if (elements.severityDonut) {
-    const c = Math.round(criticalPct);
-    const e = Math.round(elevatedPct);
-    const gradient = total
-      ? `conic-gradient(#ff2d97 0% ${c}%, #48d5ff ${c}% ${c + e}%, #6076ab ${c + e}% 100%)`
-      : `conic-gradient(var(--bg-donut-track) 0% 100%)`;
-      elements.severityDonut.style.setProperty('--donut-bg', gradient);
-    elements.severityDonut.dataset.total = String(total);
+  if (elements.summBarCritical) {
+    const pct = barTotal ? ((mode === 'Briefings' ? counts.unbriefed : counts.critical) / barTotal * 100) : 0;
+    elements.summBarCritical.style.setProperty('--bar-width', pct + '%');
+    elements.summBarCritical.className = 'stack-segment ' + (mode === 'Briefings' ? 'unbriefed' : 'critical');
+  }
+  if (elements.summBarElevated) {
+    const pct = barTotal ? ((mode === 'Briefings' ? counts.briefed : counts.elevated) / barTotal * 100) : 0;
+    elements.summBarElevated.style.setProperty('--bar-width', pct + '%');
+    elements.summBarElevated.className = 'stack-segment ' + (mode === 'Briefings' ? 'briefed' : 'elevated');
+  }
+  if (elements.summBarMonitor) {
+    const pct = barTotal ? ((counts.observe ?? 0) / barTotal * 100) : 0;
+    elements.summBarMonitor.style.setProperty('--bar-width', pct + '%');
+    elements.summBarMonitor.style.setProperty('--bar-opacity', mode === 'Briefings' ? '0' : '1');
   }
 
-  if (elements.severityInsight) {
-    if (!total) {
-      elements.severityInsight.textContent = `No classified items in ${getModeScopeLabel(mode)}.`;
-      return;
+  // Total
+  if (elements.summTotal) {
+    if (mode === 'Briefings') {
+      elements.summTotal.textContent = `${briefTotal} meeting${briefTotal === 1 ? '' : 's'}`;
+    } else {
+      elements.summTotal.textContent = `${total} item${total === 1 ? '' : 's'}`;
     }
+  }
 
-    const dominant = [
-      ['Critical', counts.critical],
-      ['Elevated', counts.elevated],
-      ['Observe', counts.observe],
-    ].sort((a, b) => b[1] - a[1])[0];
-
-    elements.severityInsight.textContent = `${dominant[0]} is the largest segment for ${getModeScopeLabel(mode)}.`;
+  // Blocked / new counts
+  if (elements.summBlocked) {
+    const blocked = (state.items || []).filter(i => i.lifecycleStatus === 'blocked').length;
+    elements.summBlocked.textContent = blocked > 0 ? `${blocked} blocked` : '';
+    elements.summBlocked.style.background = blocked > 0 ? 'color-mix(in srgb, var(--color-critical) 18%, transparent)' : '';
+    elements.summBlocked.style.color = blocked > 0 ? 'var(--color-critical)' : '';
+  }
+  if (elements.summNew) {
+    const newCount = (state.items || []).filter(i => (i.isNew || i.hasNewUpdate) && i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived').length;
+    elements.summNew.textContent = newCount > 0 ? `${newCount} new` : '';
+    elements.summNew.style.background = newCount > 0 ? 'color-mix(in srgb, var(--color-success, #30d158) 15%, transparent)' : '';
+    elements.summNew.style.color = newCount > 0 ? 'var(--color-success, #30d158)' : '';
   }
 }
 
 function renderKpis() {
   const counts = getModeSeverityCounts(state.mode);
-  const card1 = elements.kpiCritical.parentElement;
-  const card2 = elements.kpiElevated.parentElement;
-  const card3 = elements.kpiMonitor.parentElement;
-
-  if (state.mode === 'Briefings') {
-    card1.className = 'kpi-card unbriefed';
-    card1.querySelector('.kpi-label').textContent = 'Unbriefed';
-    elements.kpiCritical.textContent = counts.unbriefed;
-    card1.querySelector('.kpi-sub').textContent = 'Not yet prepared';
-
-    card2.className = 'kpi-card briefed';
-    card2.querySelector('.kpi-label').textContent = 'Briefed';
-    elements.kpiElevated.textContent = counts.briefed;
-    card2.querySelector('.kpi-sub').textContent = 'Ready to go';
-
-    card3.classList.add('d-none');
-  } else {
-    card1.className = 'kpi-card critical';
-    card1.querySelector('.kpi-label').textContent = 'Critical';
-    elements.kpiCritical.textContent = counts.critical;
-    card1.querySelector('.kpi-sub').textContent = 'Needs action < 24h';
-
-    card2.className = 'kpi-card elevated';
-    card2.querySelector('.kpi-label').textContent = 'Elevated';
-    elements.kpiElevated.textContent = counts.elevated;
-    card2.querySelector('.kpi-sub').textContent = 'This week';
-
-    card3.className = 'kpi-card observe';
-    card3.querySelector('.kpi-label').textContent = 'Observe';
-    elements.kpiMonitor.textContent = counts.observe;
-    card3.querySelector('.kpi-sub').textContent = 'Watchlist';
-    card3.classList.remove('d-none');
-  }
-
-  if (elements.kpiScopeLabel) {
-    elements.kpiScopeLabel.textContent = getModeScopeLabel(state.mode);
-  }
-
-  renderSeverityCharts(counts, state.mode);
+  renderSummaryStrip(counts, state.mode);
 }

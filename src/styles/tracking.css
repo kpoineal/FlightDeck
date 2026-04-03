@@ -177,6 +177,35 @@
   color: var(--text-muted);
   border-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
 }
+
+/* ── Snoozed status ── */
+.status-snoozed { color: var(--text-muted); font-style: italic; }
+.status-select.status-snoozed { border-color: color-mix(in srgb, var(--color-elevated) 30%, transparent); }
+.tracker-card.snoozed-card { opacity: 0.65; }
+.tracker-row-wrapper.snoozed-card { opacity: 0.65; }
+.snooze-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+.snooze-picker select,
+.snooze-picker input {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  color: var(--text);
+}
+.snooze-until-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .status-select:focus {
   box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
 }
@@ -625,6 +654,21 @@
   flex-direction: column;
   overflow: hidden;
 }
+
+.paused-pill {
+  background: color-mix(in srgb, var(--color-elevated) 15%, transparent);
+  color: var(--color-elevated);
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+}
+.mark-seen-btn {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  transition: opacity 0.15s ease;
+}
+.mark-seen-btn:hover { opacity: 1; }
 
 .tracker-card.has-new-update {
   /* Glow handled by .is-new — only show the badge here */

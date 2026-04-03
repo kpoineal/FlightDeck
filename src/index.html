@@ -37,6 +37,7 @@
       <button class="mode-btn" data-mode="History">History</button>
     </div>
     <div class="topbar-controls">
+      <span class="status-pill" id="dashboardStatus">Ready</span>
       <button id="themeToggle" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle theme">
         <svg class="theme-icon sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"/>
@@ -63,64 +64,32 @@
         <button id="enableBtn" class="btn">Enable WorkIQ</button>
       </div>
 
-      <div class="toolbar">
-        <span class="status-pill" id="dashboardStatus">Ready</span>
-        <div class="toolbar-right">
-          <span id="storageSize" class="storage-pill" title="LocalStorage usage"></span>
-          <span id="dashboardUpdatedAt">Updated: --</span>
-          <button id="refreshBtn" class="btn">Refresh</button>
+      <section class="summary-strip">
+        <div class="summary-strip-left">
+          <span class="summary-sev summary-sev--critical" id="summCritical" title="Critical items">
+            <i class="legend-dot critical"></i> <strong id="summCriticalCount">0</strong> Critical
+          </span>
+          <span class="summary-sev summary-sev--elevated" id="summElevated" title="Elevated items">
+            <i class="legend-dot elevated"></i> <strong id="summElevatedCount">0</strong> Elevated
+          </span>
+          <span class="summary-sev summary-sev--observe" id="summObserve" title="Observe items">
+            <i class="legend-dot observe"></i> <strong id="summObserveCount">0</strong> Observe
+          </span>
+          <span class="summary-sep"></span>
+          <div class="severity-stack summary-bar" aria-label="Severity distribution">
+            <span class="stack-segment critical" id="summBarCritical"></span>
+            <span class="stack-segment elevated" id="summBarElevated"></span>
+            <span class="stack-segment observe" id="summBarMonitor"></span>
+          </div>
+          <span class="summary-sep"></span>
+          <span class="summary-total" id="summTotal">0 items</span>
+          <span class="summary-attn" id="summBlocked"></span>
+          <span class="summary-attn" id="summNew"></span>
         </div>
-      </div>
-
-      <section class="kpis">
-        <article class="kpi-card critical">
-          <div class="kpi-label">Critical</div>
-          <div class="kpi-value" id="kpiCritical">—</div>
-          <div class="kpi-sub">Needs action &lt; 24h</div>
-        </article>
-        <article class="kpi-card elevated">
-          <div class="kpi-label">Elevated</div>
-          <div class="kpi-value" id="kpiElevated">—</div>
-          <div class="kpi-sub">This week</div>
-        </article>
-        <article class="kpi-card observe">
-          <div class="kpi-label">Observe</div>
-          <div class="kpi-value" id="kpiMonitor">—</div>
-          <div class="kpi-sub">Watchlist</div>
-        </article>
-      </section>
-
-      <section class="kpi-visuals">
-        <article class="viz-card">
-          <div class="viz-head">
-            <div class="viz-title">Severity Mix</div>
-            <div class="viz-meta" id="kpiScopeLabel">Current View</div>
-          </div>
-          <div class="severity-stack" aria-label="Severity distribution">
-            <span class="stack-segment critical" id="severityBarCritical"></span>
-            <span class="stack-segment elevated" id="severityBarElevated"></span>
-            <span class="stack-segment observe" id="severityBarMonitor"></span>
-          </div>
-          <div class="viz-legend">
-            <span><i class="legend-dot critical"></i>Critical: <strong id="chartCriticalCount">0</strong></span>
-            <span><i class="legend-dot elevated"></i>Elevated: <strong id="chartElevatedCount">0</strong></span>
-            <span><i class="legend-dot observe"></i>Observe: <strong id="chartMonitorCount">0</strong></span>
-          </div>
-        </article>
-
-        <article class="viz-card">
-          <div class="viz-head">
-            <div class="viz-title">Load</div>
-            <div class="viz-total" id="chartTotalItems">0 items</div>
-          </div>
-          <div class="severity-donut-wrap">
-            <div class="severity-donut" id="severityDonut" data-total="0" aria-label="Total classified items"></div>
-            <div class="viz-insight" id="severityInsight">No classified items in current view.</div>
-          </div>
-        </article>
       </section>
 
       <section id="viewRadar" class="mode-view active">
+        <div id="morningBanner" class="morning-banner d-none"></div>
         <div class="cockpit-grid">
           <article class="panel">
             <div class="tracking-heading-row">

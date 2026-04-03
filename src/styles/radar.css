@@ -40,7 +40,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
+  background: linear-gradient(135deg, transparent 0%, color-mix(in srgb, var(--accent) 4%, transparent) 100%);
   border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
   margin-bottom: 12px;
   user-select: none;
   cursor: pointer;
@@ -199,12 +201,36 @@
   transition: background 0.15s ease, color 0.15s ease;
 }
 .icon-btn:hover { background: var(--bg-raised, var(--bg-hover, var(--bg-inset))); color: var(--text); }
+
+/* Run Now button on scanner header */
+.scanner-run-now-btn { font-size: 0.85rem; }
+.scanner-run-now-btn.running { animation: scan-pulse 1.2s ease-in-out infinite; pointer-events: none; opacity: 0.7; }
+
+/* Next run countdown */
+.radar-next-run {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Scanning state on section header */
+.radar-section-header.scanning {
+  border-bottom: 2px solid var(--accent);
+  animation: scan-pulse 1.5s ease-in-out infinite;
+}
+@keyframes scan-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .radar-section-collapse { transition: transform 0.2s ease; }
 .radar-section-collapse.collapsed { transform: rotate(-90deg); }
 .radar-section-items {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 12px;
+  padding: 4px 0;
   transition: max-height 0.3s ease, opacity 0.2s ease;
   overflow: hidden;
 }
@@ -392,9 +418,6 @@
 /* ── Minimal (row) density ── */
 
 /* ── Responsive ── */
-@media (max-width: 1400px) {
-  .radar-section-items { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 @media (max-width: 860px) {
   .radar-section-items { grid-template-columns: 1fr; }
 }

@@ -69,6 +69,9 @@ function startScannerEngine() {
   scannerIntervalHandle = setInterval(() => {
     checkScannersDue();
   }, SCANNER_ENGINE_TICK_MS);
+
+  // Update next-run countdowns every 30 seconds
+  setInterval(updateScannerCountdowns, 30000);
 }
 
 function stopScannerEngine() {
@@ -84,7 +87,20 @@ async function checkScannersDue() {
   // Periodic auto-archive and retention (lightweight, runs every tick)
   runScannerAutoArchiveAndRetention();
 
+  // Auto-unsnooze items whose snooze period has expired
   const nowMs = Date.now();
+  for (const item of state.items) {
+    if (item.lifecycleStatus === 'snoozed' && item.snoozeUntil) {
+      const snoozeEnd = new Date(item.snoozeUntil).getTime();
+      if (Number.isFinite(snoozeEnd) && snoozeEnd <= nowMs) {
+        item.lifecycleStatus = 'in-progress';
+        delete item.snoozeUntil;
+        item.hasNewUpdate = true;
+        addHistory('status', `"${item.title}" un-snoozed (snooze expired)`);
+      }
+    }
+  }
+
   const dueScanners = getActiveScanners().filter((scanner) => {
     if (!scanner.nextRunAt) return false;
     const dueAt = new Date(scanner.nextRunAt).getTime();
@@ -110,6 +126,8 @@ async function checkScannersDue() {
   } finally {
     scannerCycleInProgress = false;
     savePersistentState();
+    // Update next-run countdowns in scanner headers
+    updateScannerCountdowns();
   }
 }
 
