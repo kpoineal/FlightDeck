@@ -1,7 +1,6 @@
 // ── FlightDeck prompt construction ──────────────────────────────────
 
 const promptCache = {
-  radarScan: '',
   briefing: '',
   dayBriefing: '',
 };
@@ -35,25 +34,14 @@ function clearCustomPrompt(name) {
 
 async function loadPromptFiles() {
   // Check electron-store for user-customised prompts first
-  const savedRadar = await loadCustomPrompt('radarScan');
   const savedBriefing = await loadCustomPrompt('briefing');
   const savedDayBriefing = await loadCustomPrompt('dayBriefing');
 
   // Always read from disk so we have a fallback / can seed editors on first load
-  const [radarResult, briefingResult, dayBriefingResult] = await Promise.all([
-    window.workiq.readPromptFile('radar-scan.md'),
+  const [briefingResult, dayBriefingResult] = await Promise.all([
     window.workiq.readPromptFile('briefing.md'),
     window.workiq.readPromptFile('day-briefing.md'),
   ]);
-
-  // Radar prompt — prefer stored custom version, fall back to disk
-  if (savedRadar) {
-    promptCache.radarScan = savedRadar;
-  } else if (radarResult.success) {
-    promptCache.radarScan = radarResult.content.trim();
-  } else {
-    console.error('Failed to load radar-scan.md:', radarResult.error);
-  }
 
   // Briefing prompt
   if (savedBriefing) {
@@ -74,47 +62,12 @@ async function loadPromptFiles() {
   }
 
   // Seed the prompt editors with the active prompts
-  if (elements.radarPromptEditor) {
-    elements.radarPromptEditor.value = promptCache.radarScan;
-  }
   if (elements.briefingPromptEditor) {
     elements.briefingPromptEditor.value = promptCache.briefing;
   }
 }
 
 function initPromptEditor() {
-  // Radar prompt editor (removed from UI — prompt edited via scanner settings gear)
-  if (elements.promptEditorToggle) {
-    elements.promptEditorToggle.addEventListener('click', () => {
-      const isExpanded = elements.promptEditorBody.classList.toggle('show');
-      elements.promptEditorToggle.classList.toggle('expanded', isExpanded);
-    });
-  }
-
-  if (elements.promptEditorApply) {
-    elements.promptEditorApply.addEventListener('click', () => {
-      const edited = (elements.radarPromptEditor.value || '').trim();
-      if (!edited) return;
-      promptCache.radarScan = edited;
-      saveCustomPrompt('radarScan', edited);
-      showPromptEditorStatus(elements.promptEditorStatus, 'Prompt applied — next scan will use this version');
-    });
-  }
-
-  if (elements.promptEditorReset) {
-    elements.promptEditorReset.addEventListener('click', async () => {
-      clearCustomPrompt('radarScan');
-      const result = await window.workiq.readPromptFile('radar-scan.md');
-      if (result.success) {
-        promptCache.radarScan = result.content.trim();
-        elements.radarPromptEditor.value = promptCache.radarScan;
-        showPromptEditorStatus(elements.promptEditorStatus, 'Reset to default');
-      } else {
-        showPromptEditorStatus(elements.promptEditorStatus, 'Failed to reload file');
-      }
-    });
-  }
-
   // Briefing prompt editor
   elements.briefingPromptEditorToggle.addEventListener('click', () => {
     const isExpanded = elements.briefingPromptEditorBody.classList.toggle('show');
@@ -176,29 +129,6 @@ function normalizePromptLabel(value) {
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function buildRadarScanPrompt(lastRunAt, scannerId) {
-  let basePrompt = promptCache.radarScan;
-  if (lastRunAt) {
-    basePrompt = basePrompt.replace(/\{lastRunAt\}/g, lastRunAt);
-  }
-  basePrompt += RADAR_SCAN_JSON_SCHEMA;
-
-  const exclusions = getScannerExclusionLabels(scannerId || RADAR_SCANNER_ID);
-  if (!exclusions.length) {
-    return basePrompt;
-  }
-
-  const exclusionLines = exclusions.map((label) => `- ${label}`).join('\n');
-  return `${basePrompt}
-
-De-duplication guidance:
-- Exclude items that are substantially the same as currently tracked items.
-- Prefer truly net-new work signals.
-
-Exclude items like:
-${exclusionLines}`;
 }
 
 function getScannerExclusionLabels(scannerId) {

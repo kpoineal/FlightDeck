@@ -50,3 +50,4 @@ mailmap.txt
 # Squad: SubSquad activation file (local to this machine)
 .squad-workstream
 test-results.json
+test-results-full.txt

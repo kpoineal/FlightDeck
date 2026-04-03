@@ -39,9 +39,11 @@ function createWindow() {
     opts.height = savedState.bounds.height;
   }
 
-  opts.icon = path.join(APP_ROOT, process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+  const iconPath = path.join(APP_ROOT, process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+  opts.icon = nativeImage.createFromPath(iconPath);
 
   const win = new BrowserWindow(opts);
+  win.setIcon(opts.icon);
 
   if (savedState && savedState.isMaximized) {
     win.maximize();

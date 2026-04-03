@@ -9,6 +9,23 @@
 ## Learnings
 <!-- Append learnings below -->
 
+### 2026-04-03 — DEC-063: Radar/Scanner Unification Test Updates
+
+**Context:** Removed the concept of a "default/undeletable" radar scanner. Radar becomes just another scanner. Source changes were made by Goose/Viper; this task updated all affected tests.
+
+**Files modified (4 test files):**
+- `test/renderer-delete-scanner.test.js` — Removed `isDefault` from all scanner fixtures. Replaced "returns false for default scanner" test with "deletes ANY scanner including formerly default" (DEC-063). Added `updateScanner()` test suite (4 tests) verifying id is immutable but all other fields are updatable.
+- `test/renderer-scanner-engine.test.js` — Removed `isDefault: false` from 7 scanner fixtures in rescheduleOverdueScanners tests.
+- `test/renderer-prompts.test.js` — Removed `promptCache.radarScan` from resetTestState. Removed `radar-scan.md` from IPC mock results. Updated `loadPromptFiles()` tests (IPC count 3→2, removed radar assertions). Replaced radar Apply/Reset handler tests with briefing-only equivalents. Added `buildScannerPrompt() — radar-like prompts` test suite (3 tests).
+- `test/renderer-state.test.js` — Added `models/scanner.js` to loadRendererBundle (needed for `normalizeScannerDefinition` called by first-run seed). Added `readPromptFile` mock for seed path. Added `scanners = []` to resetState. Added 3 new test suites: isDefault migration (2 tests), first-run seed (5 tests), orphan items (1 test).
+
+**Key findings:**
+- Cold storage eviction pitfall: Adding `getColdItems`/`setColdItems` mocks to the state test caused completed/archived items without timestamps to be evicted during load (since `t=0 < coldCutoff`). Fix: omit these mocks so cold storage fails silently in tests (matching pre-existing behavior). If cold storage tests are needed later, test items must include valid timestamps.
+- `_loaded` guard: `savePersistentState()` has `if (!state._loaded) return;`. Resetting `_loaded` in `resetState()` silently broke save tests. Fix: don't reset `_loaded` — it's managed by `loadPersistentState()`.
+- `scanner.js` dependency: The first-run seed in `state.js` calls `normalizeScannerDefinition()` and `computeScannerNextRunAt()` from `scanner.js`. Test bundles that load `state.js` must now also load `models/scanner.js`.
+
+**Test count:** 586 total (582 pass, 4 skipped), 119 suites. Net new: 15 tests, 4 suites added, ~10 tests rewritten, ~7 tests removed (radar prompt editor tests).
+
 ### 2026-02-25 — Phase 5 Part 1: Test Infrastructure + Main Process Unit Tests
 
 **Test runner:** Node's built-in `node:test` + `node:assert/strict` — zero dependencies added. Run via `npm test`.

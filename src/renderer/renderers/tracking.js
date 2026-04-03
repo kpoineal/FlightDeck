@@ -594,7 +594,7 @@ function buildCardTabsHtml(item) {
           <label class="monitor-source-label">Source</label>
           <select class="monitor-source-select" data-move-to-scanner-id="${escapeHtml(item.id)}">
             ${(state.scanners || []).map(s => {
-              const effectiveId = item.scannerId || RADAR_SCANNER_ID;
+              const effectiveId = item.scannerId || '';
               return `<option value="${escapeHtml(s.id)}"${effectiveId === s.id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`;
             }).join('')}
           </select>

@@ -326,20 +326,32 @@ async function loadPersistentState() {
       ? parsed.scanners.map((entry) => normalizeScannerDefinition(entry))
       : [];
 
-    // Ensure the default radar scanner exists (migration + first-run)
-    if (typeof ensureDefaultRadarScanner === 'function') {
-      ensureDefaultRadarScanner();
+    // Migration: strip legacy isDefault flag from any scanner (DEC-063)
+    for (const scanner of state.scanners) {
+      if ('isDefault' in scanner) delete scanner.isDefault;
     }
 
-    // Migration: assign radar scanner ID to items without a scannerId
-    const defaultRadar = typeof getDefaultRadarScanner === 'function' ? getDefaultRadarScanner() : null;
-    if (defaultRadar) {
-      for (const item of state.items) {
-        if (!item.scannerId) {
-          item.scannerId = defaultRadar.id;
-        }
-      }
+    // Phase 4: First-run seed scanner — when no scanners exist, create a
+    // default "Radar" scanner seeded with the radar-scan.md prompt.
+    if (!state.scanners.length && typeof normalizeScannerDefinition === 'function') {
+      let radarPrompt = DEFAULT_SCANNER_PROMPT;
+      try {
+        const result = await window.workiq.readPromptFile('radar-scan.md');
+        if (result.success && result.content) radarPrompt = result.content.trim();
+      } catch (_) {}
+      const seed = normalizeScannerDefinition({
+        id: `scanner_${hashString(`${Date.now()}_${Math.random()}`)}`,
+        name: 'Radar',
+        prompt: radarPrompt,
+        enabled: true,
+        scheduleType: 'interval',
+        scheduleValue: '4h',
+      });
+      seed.nextRunAt = typeof computeScannerNextRunAt === 'function'
+        ? computeScannerNextRunAt(seed) : null;
+      state.scanners.push(seed);
     }
+
     state.history = Array.isArray(parsed.history) ? parsed.history : [];
     state.density = parsed.density === 'minimal' ? 'minimal'
       : (parsed.trackingDensity === 'minimal' ? 'minimal' : 'full');
