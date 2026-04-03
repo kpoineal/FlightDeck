@@ -645,7 +645,6 @@ function buildTrackingCard(item) {
         <div class="tracker-head-right">
           ${item.monitorEnabled === false ? '<span class="pill paused-pill">Paused</span>' : ''}
           ${hasNew ? '<span class="tracker-new-badge">' + (unseenCount > 1 ? unseenCount + ' ' : '') + 'New</span>' : (() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? '<span class="pill last-updated-pill" title="Last update: ' + escapeHtml(safeDate(lastUpdate)) + '">' + escapeHtml(rt) + '</span>' : ''; })()}
-          ${(hasNew || unseenCount > 0) ? `<button class="icon-btn mark-seen-btn" data-mark-seen-id="${escapeHtml(item.id)}" title="Mark as seen">👁️</button>` : ''}
           <button class="popout-icon-btn" data-popout-id="${escapeHtml(item.id)}" title="Pop Out" aria-label="Pop out">\u2197</button>
         </div>
       </div>
@@ -656,8 +655,10 @@ function buildTrackingCard(item) {
             <button class="edit-field-btn" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Edit title" aria-label="Edit title">\u270f\ufe0f</button>
           </h3>
         </div>
-        ${buildNextStepHintsHtml(item)}
         ${buildCardTabsHtml(item)}
+        <div class="action-row">
+          ${(hasNew || unseenCount > 0) ? '<button class="small-btn primary" data-mark-seen-id="' + escapeHtml(item.id) + '">Mark as Seen</button>' : ''}
+        </div>
       </div>
     </article>
   `;

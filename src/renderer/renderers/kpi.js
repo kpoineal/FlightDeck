@@ -176,7 +176,7 @@ function renderSummaryStrip(counts, mode) {
     elements.summBlocked.style.color = blocked > 0 ? 'var(--color-critical)' : '';
   }
   if (elements.summNew) {
-    const newCount = (state.items || []).filter(i => (i.isNew || i.hasNewUpdate) && i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived').length;
+    const newCount = (state.items || []).filter(i => (i.isNew || i.hasNewUpdate) && i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived' && i.lifecycleStatus !== 'snoozed').length;
     elements.summNew.textContent = newCount > 0 ? `${newCount} new` : '';
     elements.summNew.style.background = newCount > 0 ? 'color-mix(in srgb, var(--color-success, #30d158) 15%, transparent)' : '';
     elements.summNew.style.color = newCount > 0 ? 'var(--color-success, #30d158)' : '';

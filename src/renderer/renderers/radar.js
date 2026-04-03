@@ -897,7 +897,7 @@ function renderMorningBanner() {
   const activeItems = items.filter(i => i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived');
   const criticalCount = activeItems.filter(i => normalizeSeverity(i.severity) === 'Critical').length;
   const elevatedCount = activeItems.filter(i => normalizeSeverity(i.severity) === 'Elevated').length;
-  const newCount = activeItems.filter(i => i.isNew || i.hasNewUpdate).length;
+  const newCount = activeItems.filter(i => (i.isNew || i.hasNewUpdate) && i.lifecycleStatus !== 'snoozed').length;
   const blockedCount = activeItems.filter(i => i.lifecycleStatus === 'blocked').length;
   const snoozedCount = activeItems.filter(i => i.lifecycleStatus === 'snoozed').length;
   const meetingCount = (state.meetings || []).length;
