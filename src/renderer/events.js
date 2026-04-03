@@ -565,22 +565,21 @@ function bindEvents() {
 
       // Toggle: clicking active pill clears, clicking different pill switches
       const current = state.scannerFilters[sourceId];
-      if (current && current.type === type && current.value === value) {
+      const isClearing = current && current.type === type && current.value === value;
+      if (isClearing) {
         delete state.scannerFilters[sourceId];
       } else {
         state.scannerFilters[sourceId] = { type, value };
       }
 
-      // If scanner is collapsed, we need a full render to expand it
-      const colIdx = state.collapsedSections.indexOf(sourceId);
-      if (colIdx >= 0) {
-        state.collapsedSections.splice(colIdx, 1);
-        savePersistentState();
-        renderRadarMode();
-      } else {
-        // Scanner already expanded — just show/hide cards in place, no rebuild
-        applyInlineFilterDOM(sourceId);
+      // Accordion: collapse all other sections when activating a filter
+      if (!isClearing) {
+        collapseAllSectionsExcept(sourceId);
+        syncCollapsedSectionsDOM();
       }
+
+      applyInlineFilterDOM(sourceId);
+      savePersistentState();
       return;
     }
 
