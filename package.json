@@ -27,7 +27,7 @@
       "node_modules/@microsoft/workiq/**"
     ],
     "win": {
-      "icon": "src/icon.png",
+      "icon": "build/icon.ico",
       "target": [
         "msi"
       ]

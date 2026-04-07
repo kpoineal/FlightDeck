@@ -10,6 +10,15 @@
 ## Learnings
 <!-- Append new learnings below this line -->
 
+### 2026-04-07 — Icon Fix PR File Isolation
+- The correct Windows icon fix requires three repo changes on clean clones: point `build.win.icon` at `build/icon.ico`, unignore that single asset in `.gitignore`, and commit the real ICO file itself.
+- A modified `src/icon.ico` should stay out of the PR when its header is actually PNG (`89504e47...`), because it is not the packaging source used by `electron-builder`.
+
+### 2026-04-07 — Windows Taskbar Icon Packaging Fix
+- `electron-builder` Windows packaging must point at a real `.ico` file for the app executable icon; the previous `build.win.icon` value incorrectly targeted `src/icon.png`.
+- To avoid depending on dirty runtime assets in `src/`, Windows packaging now uses `build/icon.ico` as a dedicated build resource.
+- Verified the packaging ICO is a real ICO container (`00000100...` header), while the current worktree copy of `src/icon.ico` is a PNG payload and should not be used as the packaging source of truth.
+
 ### 2026-03-18 — Repo Protection Audit
 - **LICENSE file:** MISSING — critical gap for open source
 - **SECURITY.md:** does not exist
