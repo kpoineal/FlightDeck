@@ -177,7 +177,7 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
     else observe++;
     if (item.lifecycleStatus === 'blocked') blocked++;
     if (item.lifecycleStatus === 'waiting') waiting++;
-    if ((item.isNew || item.hasNewUpdate) && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived') newCount++;
+    if ((item.isNew || item.hasNewUpdate) && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' && item.lifecycleStatus !== 'snoozed') newCount++;
     const ts = new Date(item.lastChangedAt || item.lastRunAt || 0).getTime();
     if (ts > latestActivity) latestActivity = ts;
   }
@@ -781,6 +781,78 @@ function readScannerModalFormValues() {
 }
 
 /**
+ * Rebuild a single scanner section header in-place.
+ * Recomputes new/severity/blocked counts from current state.items.
+ */
+function patchSectionHeader(scannerId) {
+  const sourceId = `scanner-${scannerId}`;
+  const container = elements.radarList;
+  const headerEl = container.querySelector(`[data-source-id="${CSS.escape(sourceId)}"]`);
+  if (!headerEl) return;
+
+  const scanner = getScannerById(scannerId);
+  if (!scanner) return;
+
+  const enabled = scanner.enabled !== false;
+  const filtered = applyFilter(Array.isArray(state.items) ? state.items : []);
+  const sectionItems = filtered.filter((i) => i.scannerId === scannerId);
+
+  const newHeaderHtml = buildSectionHeader(sourceId, '\uD83D\uDD0D', scanner.name || 'Unnamed Scanner', sectionItems.length, {
+    scannerId: scanner.id,
+    enabled,
+    items: sectionItems,
+  });
+
+  const temp = document.createElement('div');
+  temp.innerHTML = newHeaderHtml;
+  const newHeaderEl = temp.firstElementChild;
+  if (newHeaderEl) headerEl.replaceWith(newHeaderEl);
+}
+
+/**
+ * Move an item to its correct sort position within its scanner section.
+ * New/updated items sort before non-new, then by severity.
+ */
+function repositionItemInSection(itemId) {
+  const container = elements.radarList;
+  const itemEl = container.querySelector(`[data-tracker-id="${CSS.escape(itemId)}"]`);
+  if (!itemEl) return;
+
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) return;
+
+  const sourceId = `scanner-${item.scannerId}`;
+  const section = container.querySelector(`[data-section-items="${CSS.escape(sourceId)}"]`);
+  if (!section) return;
+
+  // Collect all item elements in this section
+  const itemEls = [...section.querySelectorAll('[data-tracker-id]')];
+  if (itemEls.length <= 1) return;
+
+  // Build a comparable list to determine correct order
+  const elData = itemEls.map((el) => {
+    const id = el.getAttribute('data-tracker-id');
+    const it = state.items.find((i) => i.id === id);
+    const isNew = it ? (it.isNew === true || it.hasNewUpdate === true) : false;
+    const sevRank = it ? severityRankValue(it.severity) : 2;
+    return { el, id, isNew, sevRank };
+  });
+
+  // Sort: new first, then by severity
+  elData.sort((a, b) => {
+    const newA = a.isNew ? 0 : 1;
+    const newB = b.isNew ? 0 : 1;
+    if (newA !== newB) return newA - newB;
+    return a.sevRank - b.sevRank;
+  });
+
+  // Re-append in sorted order (only moves if order changed)
+  for (const d of elData) {
+    section.appendChild(d.el);
+  }
+}
+
+/**
  * Incrementally patch a single item's DOM node in-place.
  * Returns true if the item was found and updated, false if a full
  * re-render is needed (item not in DOM or filtered out).
@@ -883,6 +955,12 @@ function patchSingleItem(itemId) {
   requestAnimationFrame(() => {
     newEl.classList.remove('no-transition');
   });
+
+  // Update scanner section header counts and re-sort within section
+  if (item.scannerId) {
+    patchSectionHeader(item.scannerId);
+    repositionItemInSection(itemId);
+  }
 
   return true;
 }
