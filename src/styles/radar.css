@@ -34,7 +34,7 @@
 
 /* ── Radar grouped sections ── */
 .radar-section { margin-bottom: 20px; }
-.radar-section.disabled { opacity: 0.7; }
+.radar-section.disabled { opacity: 1; }
 .radar-section-header {
   display: flex;
   align-items: center;
@@ -47,7 +47,7 @@
   user-select: none;
   cursor: pointer;
 }
-.radar-section-header.disabled { opacity: 0.55; }
+.radar-section-header.disabled { opacity: 0.75; }
 
 /* Severity-tinted left border */
 .radar-section-header.sev-border-critical { border-left: 3px solid var(--color-critical); }
@@ -239,7 +239,7 @@
   opacity: 0;
   margin-bottom: 0;
 }
-.radar-section.disabled .radar-section-items { opacity: 0.5; }
+.radar-section.disabled .radar-section-items { opacity: 1; }
 .radar-section-items.list--minimal {
   grid-template-columns: 1fr;
 }
