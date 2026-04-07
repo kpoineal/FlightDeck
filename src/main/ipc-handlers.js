@@ -1,7 +1,16 @@
 const { app, ipcMain, BrowserWindow, shell, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { log, logError, normalizeExternalUrl, escapeHtml, markdownToHtml, attachExternalNavigationGuards } = require('./utils');
+const {
+  log,
+  logError,
+  normalizeExternalUrl,
+  escapeHtml,
+  markdownToHtml,
+  attachExternalNavigationGuards,
+  getRuntimeWindowIcon,
+  applyRuntimeWindowIcon,
+} = require('./utils');
 const { runWorkiqCommand, runWorkiqAcceptEula } = require('./pty-bridge');
 const { registerTrackerPopoutIpc } = require('./ipc/tracker-popout');
 const { IPC_CHANNELS } = require('../shared/ipc-contract');
@@ -48,12 +57,14 @@ function registerIpcHandlers(getMainWindow, popoutWindows) {
       width: 760,
       height: 620,
       autoHideMenuBar: true,
+      icon: getRuntimeWindowIcon(APP_ROOT),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
       },
     });
 
+    applyRuntimeWindowIcon(preview, APP_ROOT);
     attachExternalNavigationGuards(preview);
 
     preview.setTitle(title);

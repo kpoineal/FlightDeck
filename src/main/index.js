@@ -1,6 +1,6 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
-const { log, initLogFile, attachExternalNavigationGuards } = require('./utils');
+const { log, initLogFile, attachExternalNavigationGuards, getRuntimeWindowIcon, applyRuntimeWindowIcon } = require('./utils');
 const { loadWindowState, saveWindowState, debouncedSaveWindowState, isStateOnScreen } = require('./window-state');
 const { registerIpcHandlers } = require('./ipc-handlers');
 
@@ -39,11 +39,10 @@ function createWindow() {
     opts.height = savedState.bounds.height;
   }
 
-  const iconPath = path.join(APP_ROOT, process.platform === 'win32' ? 'icon.ico' : 'icon.png');
-  opts.icon = nativeImage.createFromPath(iconPath);
+  opts.icon = getRuntimeWindowIcon(APP_ROOT);
 
   const win = new BrowserWindow(opts);
-  win.setIcon(opts.icon);
+  applyRuntimeWindowIcon(win, APP_ROOT);
 
   if (savedState && savedState.isMaximized) {
     win.maximize();

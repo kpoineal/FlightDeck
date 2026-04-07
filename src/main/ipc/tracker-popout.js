@@ -1,6 +1,6 @@
 const { BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const { attachExternalNavigationGuards } = require('../utils');
+const { attachExternalNavigationGuards, getRuntimeWindowIcon, applyRuntimeWindowIcon } = require('../utils');
 const { IPC_CHANNELS } = require('../../shared/ipc-contract');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
@@ -11,12 +11,15 @@ function registerTrackerPopoutIpc(getMainWindow, popoutWindows) {
       width: 960,
       height: 720,
       autoHideMenuBar: true,
+      icon: getRuntimeWindowIcon(APP_ROOT),
       webPreferences: {
         preload: path.join(APP_ROOT, 'preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
       },
     });
+
+    applyRuntimeWindowIcon(popout, APP_ROOT);
 
     attachExternalNavigationGuards(popout);
     popoutWindows.add(popout);
