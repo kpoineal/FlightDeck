@@ -180,7 +180,16 @@ function buildActivityTimelineHtml(updateHistory, options = {}) {
   function renderEvent(e, i) {
     const label = severityLabel(e.severity);
     const timeLabel = timelineRelativeLabel(e.timestamp);
-    const changeSummary = Array.isArray(e.changes) ? e.changes.join(' · ') : '';
+    const changeSummary = Array.isArray(e.changes) ? e.changes.map(c => {
+      // Render lifecycle status changes as styled pills
+      const statusMatch = c.match(/^Status:\s*(.+?)\s*\u2192\s*(.+)$/);
+      if (statusMatch) {
+        const fromStatus = statusMatch[1].trim().toLowerCase().replace(/\s+/g, '-');
+        const toStatus = statusMatch[2].trim().toLowerCase().replace(/\s+/g, '-');
+        return `<span class="at-status-transition"><span class="pill at-status-pill at-status-${escapeHtml(fromStatus)}">${escapeHtml(statusMatch[1].trim())}</span> <span class="at-arrow">\u2192</span> <span class="pill at-status-pill at-status-${escapeHtml(toStatus)}">${escapeHtml(statusMatch[2].trim())}</span></span>`;
+      }
+      return escapeHtml(c);
+    }).join(' \u00b7 ') : '';
     const isNewest = i === 0;
     const isLast = i === entries.length - 1;
     const isTerminal = item && (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
