@@ -83,6 +83,18 @@ function attachExternalNavigationGuards(win) {
   });
 }
 
+function getRuntimeWindowIcon(appRoot) {
+  return path.join(appRoot, 'icon.png');
+}
+
+function applyRuntimeWindowIcon(win, appRoot) {
+  const iconPath = getRuntimeWindowIcon(appRoot);
+  if ((process.platform === 'win32' || process.platform === 'linux') && typeof win.setIcon === 'function') {
+    win.setIcon(iconPath);
+  }
+  return iconPath;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -146,6 +158,8 @@ module.exports = {
   normalizeExternalUrl,
   isSafeExternalUrl,
   attachExternalNavigationGuards,
+  getRuntimeWindowIcon,
+  applyRuntimeWindowIcon,
   escapeHtml,
   markdownToHtml,
 };
