@@ -84,6 +84,10 @@ function attachExternalNavigationGuards(win) {
 }
 
 function getRuntimeWindowIcon(appRoot) {
+  if (process.platform === 'win32') {
+    const icoPath = path.join(appRoot, '..', 'build', 'icon.ico');
+    if (fs.existsSync(icoPath)) return icoPath;
+  }
   return path.join(appRoot, 'icon.png');
 }
 
