@@ -1,4 +1,4 @@
-const { app, ipcMain, BrowserWindow, shell, Notification } = require('electron');
+const { app, ipcMain, BrowserWindow, shell, Notification, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -21,6 +21,54 @@ const APP_ROOT = path.join(__dirname, '..');
 // Hold references to active notifications to prevent garbage collection
 // before the user clicks them (Windows toast notifications).
 const activeNotifications = new Set();
+
+const UPDATE_CHECK_INTERVAL = 3600000; // 1 hour
+const updateCache = { result: null, checkedAt: 0 };
+
+function parseVersion(versionStr) {
+  const parts = String(versionStr).replace(/^v/, '').split('.').map(Number);
+  return { major: parts[0] || 0, minor: parts[1] || 0, patch: parts[2] || 0 };
+}
+
+// Releases use v1.x (major.minor), nightly/testing builds use v1.x.x (major.minor.patch).
+// A release is "newer" only when its major.minor exceeds the current major.minor.
+// e.g. current 1.5.2 (nightly) vs release 1.5 → NOT newer (same release line)
+//      current 1.5.2 (nightly) vs release 1.6 → newer
+function isNewer(latest, current) {
+  const l = parseVersion(latest);
+  const c = parseVersion(current);
+  if (l.major !== c.major) return l.major > c.major;
+  return l.minor > c.minor;
+}
+
+function fetchLatestRelease() {
+  return new Promise((resolve, reject) => {
+    const request = net.request({
+      method: 'GET',
+      url: 'https://api.github.com/repos/kpoineal/FlightDeck/releases/latest',
+    });
+    request.setHeader('User-Agent', 'FlightDeck');
+    request.setHeader('Accept', 'application/vnd.github.v3+json');
+
+    let body = '';
+    request.on('response', (response) => {
+      response.on('data', (chunk) => { body += chunk.toString(); });
+      response.on('end', () => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`GitHub API responded with ${response.statusCode}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(body));
+        } catch (e) {
+          reject(new Error('Failed to parse GitHub release response'));
+        }
+      });
+    });
+    request.on('error', reject);
+    request.end();
+  });
+}
 
 function registerIpcHandlers(getMainWindow, popoutWindows) {
 
@@ -329,6 +377,37 @@ function registerIpcHandlers(getMainWindow, popoutWindows) {
   ipcMain.handle(IPC_CHANNELS.STORE_SET_COLD_ITEMS, (_event, items) => {
     coldStoreSet('items', items);
     return { success: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CHECK_FOR_UPDATES, async () => {
+    const now = Date.now();
+    if (updateCache.result && (now - updateCache.checkedAt) < UPDATE_CHECK_INTERVAL) {
+      log('[updates] Returning cached update check result.');
+      return updateCache.result;
+    }
+
+    try {
+      const release = await fetchLatestRelease();
+      const currentVersion = app.getVersion();
+      const latestVersion = String(release.tag_name || '').replace(/^v/, '');
+      const available = isNewer(latestVersion, currentVersion);
+
+      const result = {
+        available,
+        currentVersion,
+        latestVersion,
+        releaseUrl: release.html_url || '',
+        releaseNotes: release.body || '',
+      };
+
+      updateCache.result = result;
+      updateCache.checkedAt = now;
+      log('[updates] Version check complete. Current:', currentVersion, 'Latest:', latestVersion, 'Update available:', available);
+      return result;
+    } catch (e) {
+      logError('[updates] Failed to check for updates:', e.message);
+      return { available: false, error: e.message };
+    }
   });
 }
 

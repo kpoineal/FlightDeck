@@ -20,6 +20,16 @@
       <img class="brand-logo" src="icon.png" alt="FlightDeck logo" />
       <span class="brand-name">FLIGHT<span class="brand-accent">DECK</span></span>
       <span id="versionBadge" class="version-badge"></span>
+      <span id="updateIndicator" class="update-indicator">
+        <span class="update-dot"></span>
+        <span class="update-tooltip">
+          <span id="updateText">Update available</span>
+          <span class="update-actions">
+            <a id="updateLink" class="update-link" href="#">View release ↗</a>
+            <button id="updateDismiss" class="update-dismiss" title="Dismiss">×</button>
+          </span>
+        </span>
+      </span>
     </div>
     <input id="commandInput" type="hidden" />
     <div class="search-wrap">
