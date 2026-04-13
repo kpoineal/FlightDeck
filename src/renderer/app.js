@@ -304,6 +304,42 @@ async function init() {
     } catch (_) { /* version display is non-critical */ }
   })();
 
+  // Update check — fire-and-forget, non-critical
+  if (!IS_DEMO) {
+    (async () => {
+      try {
+        const update = await window.workiq.checkForUpdates();
+        if (!update || !update.available) return;
+
+        // Check if user dismissed this version
+        const dismissed = await window.workiq.storeGet('dismissed-update-version');
+        if (dismissed === update.latestVersion) return;
+
+        const indicator = document.getElementById('updateIndicator');
+        const updateText = document.getElementById('updateText');
+        const updateLink = document.getElementById('updateLink');
+        const updateDismiss = document.getElementById('updateDismiss');
+
+        if (!indicator) return;
+
+        updateText.textContent = `v${update.latestVersion} available`;
+
+        updateLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.workiq.openExternal(update.releaseUrl);
+        });
+
+        updateDismiss.addEventListener('click', (e) => {
+          e.stopPropagation();
+          indicator.classList.remove('visible');
+          window.workiq.storeSet('dismissed-update-version', update.latestVersion);
+        });
+
+        indicator.classList.add('visible');
+      } catch (_) { /* update check is non-critical */ }
+    })();
+  }
+
   if (!IS_DEMO && state.connected) {
     setStatus('Verifying connection...');
     try {

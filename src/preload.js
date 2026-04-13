@@ -20,10 +20,12 @@ const IPC_CHANNELS = {
   STORE_MIGRATE_FROM_LOCALSTORAGE: 'store-migrate-from-localstorage',
   STORE_GET_COLD_ITEMS: 'store-get-cold-items',
   STORE_SET_COLD_ITEMS: 'store-set-cold-items',
+  CHECK_FOR_UPDATES: 'check-for-updates',
 };
 
 contextBridge.exposeInMainWorld('workiq', {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
+  checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES),
   ask: (question) => ipcRenderer.invoke(IPC_CHANNELS.ASK_WORKIQ, question),
   acceptEula: () => ipcRenderer.invoke(IPC_CHANNELS.ACCEPT_WORKIQ_EULA),
   readPromptFile: (filename) => ipcRenderer.invoke(IPC_CHANNELS.READ_PROMPT_FILE, filename),
