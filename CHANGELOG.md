@@ -4,6 +4,35 @@ All notable changes to FlightDeck will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-04-13
+
+### Added
+
+- **Version update notification** — Checks GitHub Releases API and notifies when a new version is available (#68).
+- **Auto-completion** — Added auto-completion support (#55).
+- **Unified radar & tracker** — Combined radar and tracker into a single cohesive view (#34, #52).
+- **Scanner UX improvements** — Enhanced scanner filter accordion, status pills, and new-item counts (#38, #50, #58, #59).
+- **Sparkline POC** — Multi-scanner sparkline visualizations for trend insight (#29, #30).
+- **Tiered storage** — Support for tiered storage backends.
+- **Cross-platform workiq** — workiq integration works across Windows, macOS, and Linux (#41).
+- **Dependabot** — Automated dependency updates for npm and GitHub Actions (#15).
+- **PR & issue templates** — Standardized contribution workflows (#16).
+
+### Fixed
+
+- **Windows taskbar identity** — Corrected icon and app identity in dev and packaged modes (#60, #61, #62, #66).
+- **macOS packaging** — Fixed DMG publishing and packaged app issues (#42, #46, #47).
+- **Dashboard UI** — Redesigned dashboard layout and fixed visual issues (#53, #54).
+- **Radar UX cleanup** — Fixed duplicate radar dropdown and other radar polish (#39, #44).
+- **Scanner paused dimming** — Cards no longer dim when scanner is paused.
+- **Startup status copy** — Neutralized unavailable status copy on startup (#67).
+
+### Changed
+
+- **Default scan interval** — Changed default scanner interval to 4 hours (#40).
+- **Pinned action SHAs** — All GitHub Actions pinned to full commit SHAs for supply-chain security (#48).
+- **Dependency bumps** — electron 41.0.3, electron-store 11.0.2, @microsoft/workiq 0.4.0, actions/checkout v6, actions/setup-node v6, azure/login v3, azure/trusted-signing-action v1.1.0.
+
 ## [1.0.4] - 2026-03-18
 
 ### Added
