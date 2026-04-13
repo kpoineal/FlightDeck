@@ -82,7 +82,7 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
-      - name: Create GitHub Release with MSI
+      - name: Upload MSI to GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -94,10 +94,7 @@ jobs:
             exit 1
           }
           Write-Host "Uploading artifact: $($msi.FullName)"
-          gh release create $tag $msi.FullName `
-            --title $tag `
-            --generate-notes `
-            --latest
+          gh release upload $tag $msi.FullName --clobber
 
       - name: Verify release
         shell: pwsh
