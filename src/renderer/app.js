@@ -17,6 +17,15 @@ function setStatus(text) {
   elements.dashboardStatus.textContent = text;
 }
 
+function requiresWorkiqReconnect(message) {
+  const lower = String(message || '').toLowerCase();
+  return lower.includes('eula')
+    || lower.includes('accept-eula')
+    || lower.includes('not accepted')
+    || lower.includes('sign in')
+    || lower.includes('login');
+}
+
 // ── In-app toast ─────────────────────────────────────────────────────
 function showToast(message, { icon = '\u2713', durationMs = 3500 } = {}) {
   let container = document.querySelector('.toast-container');
@@ -304,10 +313,14 @@ async function init() {
       addHistory('connect', 'WorkIQ connection verified on startup');
       await refreshAllData();
     } catch (error) {
-      state.connected = false;
-      savePersistentState();
-      if (elements.connectBanner) elements.connectBanner.classList.remove('d-none');
-      setStatus('Connection lost');
+      if (requiresWorkiqReconnect(error.message)) {
+        state.connected = false;
+        savePersistentState();
+        if (elements.connectBanner) elements.connectBanner.classList.remove('d-none');
+        setStatus('Connection lost');
+      } else {
+        setStatus('Service unavailable');
+      }
       addHistory('failure', `Startup connection check failed: ${error.message}`);
       renderAll();
     }
