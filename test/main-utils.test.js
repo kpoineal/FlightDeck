@@ -1,17 +1,43 @@
 'use strict';
 
-require('./helpers/electron-mock');
+const { electronMock } = require('./helpers/electron-mock');
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const {
   ts,
   normalizeExternalUrl,
   isSafeExternalUrl,
+  getRuntimeWindowIcon,
+  getWindowsAppUserModelId,
+  applyRuntimeWindowIcon,
   escapeHtml,
   markdownToHtml,
 } = require('../src/main/utils');
+
+function withPlatform(platform, fn) {
+  const original = process.platform;
+  Object.defineProperty(process, 'platform', { value: platform });
+  try {
+    fn();
+  } finally {
+    Object.defineProperty(process, 'platform', { value: original });
+  }
+}
+
+function withPackagedState(isPackaged, fn) {
+  const original = electronMock.app.isPackaged;
+  electronMock.app.isPackaged = isPackaged;
+  try {
+    fn();
+  } finally {
+    electronMock.app.isPackaged = original;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /*  ts()                                                               */
@@ -91,6 +117,116 @@ describe('isSafeExternalUrl()', () => {
     assert.equal(isSafeExternalUrl(null), false);
     assert.equal(isSafeExternalUrl('javascript:alert(1)'), false);
     assert.equal(isSafeExternalUrl('ftp://example.com'), false);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Windows icon helpers                                               */
+/* ------------------------------------------------------------------ */
+describe('getRuntimeWindowIcon()', () => {
+  it('prefers build/icon.ico on Windows when present', () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'flightdeck-icon-'));
+    const srcRoot = path.join(tempRoot, 'src');
+    const buildRoot = path.join(tempRoot, 'build');
+    fs.mkdirSync(srcRoot, { recursive: true });
+    fs.mkdirSync(buildRoot, { recursive: true });
+    fs.writeFileSync(path.join(buildRoot, 'icon.ico'), Buffer.from([0, 0, 1, 0]));
+
+    withPlatform('win32', () => {
+      assert.equal(
+        getRuntimeWindowIcon(srcRoot),
+        path.join(tempRoot, 'build', 'icon.ico')
+      );
+    });
+  });
+
+  it('falls back to icon.png when build/icon.ico is absent', () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'flightdeck-icon-'));
+    const srcRoot = path.join(tempRoot, 'src');
+    fs.mkdirSync(srcRoot, { recursive: true });
+
+    withPlatform('win32', () => {
+      assert.equal(
+        getRuntimeWindowIcon(srcRoot),
+        path.join(srcRoot, 'icon.png')
+      );
+    });
+  });
+});
+
+describe('getWindowsAppUserModelId()', () => {
+  it('uses the legacy FlightDeck identity in development', () => {
+    withPackagedState(false, () => {
+      assert.equal(getWindowsAppUserModelId(), 'FlightDeck');
+    });
+  });
+
+  it('preserves the packaged reverse-domain identity in builds', () => {
+    withPackagedState(true, () => {
+      assert.equal(getWindowsAppUserModelId(), 'com.flightdeck.app');
+    });
+  });
+});
+
+describe('applyRuntimeWindowIcon()', () => {
+  it('sets the legacy dev taskbar identity on Windows when supported', () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'flightdeck-icon-'));
+    const srcRoot = path.join(tempRoot, 'src');
+    const buildRoot = path.join(tempRoot, 'build');
+    fs.mkdirSync(srcRoot, { recursive: true });
+    fs.mkdirSync(buildRoot, { recursive: true });
+    const iconPath = path.join(buildRoot, 'icon.ico');
+    fs.writeFileSync(iconPath, Buffer.from([0, 0, 1, 0]));
+
+    const calls = [];
+    const win = {
+      setIcon(value) {
+        calls.push(['setIcon', value]);
+      },
+      setAppDetails(value) {
+        calls.push(['setAppDetails', value]);
+      },
+    };
+
+    withPlatform('win32', () => {
+      withPackagedState(false, () => {
+        const result = applyRuntimeWindowIcon(win, srcRoot);
+        assert.equal(result, iconPath);
+      });
+    });
+
+    assert.equal(calls[0][0], 'setIcon');
+    assert.equal(calls[0][1], iconPath);
+    assert.equal(calls[1][0], 'setAppDetails');
+    assert.equal(calls[1][1].appId, 'FlightDeck');
+    assert.equal(calls[1][1].appIconPath, iconPath);
+  });
+
+  it('keeps the packaged taskbar identity for builds', () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'flightdeck-icon-'));
+    const srcRoot = path.join(tempRoot, 'src');
+    const buildRoot = path.join(tempRoot, 'build');
+    fs.mkdirSync(srcRoot, { recursive: true });
+    fs.mkdirSync(buildRoot, { recursive: true });
+    const iconPath = path.join(buildRoot, 'icon.ico');
+    fs.writeFileSync(iconPath, Buffer.from([0, 0, 1, 0]));
+
+    let appDetails = null;
+    const win = {
+      setIcon() {},
+      setAppDetails(value) {
+        appDetails = value;
+      },
+    };
+
+    withPlatform('win32', () => {
+      withPackagedState(true, () => {
+        applyRuntimeWindowIcon(win, srcRoot);
+      });
+    });
+
+    assert.equal(appDetails.appId, 'com.flightdeck.app');
+    assert.equal(appDetails.appIconPath, iconPath);
   });
 });
 
