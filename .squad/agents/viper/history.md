@@ -233,3 +233,26 @@
 **Validation:** 566/566 tests pass.
 
 **Validation:** 430/430 tests pass.
+
+### 2026-04-13 — Check-for-Updates Backend (IPC + GitHub Releases)
+
+**Scope completed:** Added `CHECK_FOR_UPDATES` IPC channel with GitHub Releases API integration for version checking.
+
+**Changes made:**
+- `src/shared/ipc-contract.js` — Added `CHECK_FOR_UPDATES: 'check-for-updates'` to canonical `IPC_CHANNELS`.
+- `src/preload.js` — Mirrored channel string in local `IPC_CHANNELS`; added `checkForUpdates: () => ipcRenderer.invoke(...)` to the bridge, placed after `getAppVersion`.
+- `src/main/ipc-handlers.js` — Added `net` to the Electron destructure. Added module-level `fetchLatestRelease()` (uses `net.request` with `User-Agent` and `Accept` headers), `parseVersion()`, `isNewer()` semver comparison helpers, and 1-hour in-memory cache (`updateCache`). Handler returns `{ available, currentVersion, latestVersion, releaseUrl, releaseNotes }` or `{ available: false, error }` on failure.
+
+**Architecture decisions:**
+- Used `net.request` (Electron built-in) instead of `fetch` or `node-fetch` — respects Electron's proxy/session config and avoids external dependency.
+- 1-hour cache prevents rate-limiting from GitHub API (60 req/hr unauthenticated).
+- `parseVersion()` strips leading `v` and splits into major/minor/patch for comparison.
+- Cache is module-scoped, not persisted — resets on app restart which is fine for a version check.
+- Error path returns `{ available: false, error }` — renderer can show/hide notification accordingly.
+
+**Key file paths:**
+- Shared contract: `src/shared/ipc-contract.js`
+- Preload bridge: `src/preload.js`
+- Main handler: `src/main/ipc-handlers.js`
+
+**Validation:** 592/592 tests pass.

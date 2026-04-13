@@ -258,6 +258,16 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Key files**: `src/renderer/models/context-file.js` (new), `src/renderer/models/radar.js`, `src/renderer/models/tracking.js`, `src/renderer/prompts.js`, `src/index.html`, `test/renderer-models-radar.test.js`, `test/renderer-models-tracking.test.js`, `test/renderer-state.test.js`, `test/renderer-popout.test.js`, `test/renderer-prompts.test.js`.
 - **Pattern**: When changing accumulation vs. replacement behavior in model functions, tests that rely on index-based access (`state.radarItems[0]`) will break unless you reset shared state before each test. Use `beforeEach` resets in describe blocks that test stateful functions.
 
+### 2026-04-13 — "New Version Available" UI (Dot + Tooltip)
+- **Goal**: Add a non-intrusive update notification in the topbar — small green dot on the version badge with tooltip on hover showing version + release link + dismiss.
+- **Files modified**:
+  - `src/index.html` — added `#updateIndicator` element after `#versionBadge` inside `.brand` div. Contains `.update-dot`, `.update-tooltip` with text, release link, and dismiss button.
+  - `src/styles/layout.css` — added `.update-indicator`, `.update-dot`, `.update-tooltip`, `.update-actions`, `.update-link`, `.update-dismiss` styles after version-badge block. Tooltip uses existing glass surface tokens (`--bg-surface`, `--border-card`, `--shadow-card`). Green dot uses `--color-success`.
+  - `src/renderer/app.js` — added fire-and-forget async IIFE after version badge block. Calls `window.workiq.checkForUpdates()`, checks dismissed version via `storeGet`, sets tooltip text, wires release link via `openExternal` IPC, dismiss button stores version via `storeSet` and hides indicator.
+- **Behavior**: Hidden by default (`display: none`), shown via `.visible` class. Tooltip on hover. "View release ↗" opens GitHub release page. "×" dismiss persists version to electron-store — next newer version re-triggers. Skipped in demo mode.
+- **Backend IPC** (`checkForUpdates`, `storeGet`, `storeSet`, `openExternal`) handled by Viper separately.
+- **Key files**: `src/index.html`, `src/styles/layout.css`, `src/renderer/app.js`.
+
 ### 2026-03-12 — Dismissed Radar Item Reappearance Fix
 - **Problem**: The TDD red left by Merlin — `applyRadarPayload() merge behavior > dismissed items (removed from state before scan) do NOT reappear` — was failing because the merge logic only deduped against `state.radarItems` (current live items). Dismissed items (removed from `radarItems` by `dismissRadarItem()`) would be re-added by the next scan because the merge treated them as brand-new.
 - **Fix**: Added a `state.seenRadarIds` Set in `applyRadarPayload()`. On every call, (1) lazily initialise the Set, (2) seed it with all currently-live item IDs (handles pre-existing persistent state), (3) filter `newItems` against both `existingIds` AND `seenRadarIds`, (4) add newly-appended items to `seenRadarIds`. Dismissed items remain in `seenRadarIds` after they are removed from `radarItems`, so the next scan skips them.
