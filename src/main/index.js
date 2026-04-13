@@ -1,13 +1,22 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
-const { log, initLogFile, attachExternalNavigationGuards, getRuntimeWindowIcon, applyRuntimeWindowIcon } = require('./utils');
+const {
+  log,
+  initLogFile,
+  attachExternalNavigationGuards,
+  getRuntimeWindowIcon,
+  getWindowsAppUserModelId,
+  applyRuntimeWindowIcon,
+} = require('./utils');
 const { loadWindowState, saveWindowState, debouncedSaveWindowState, isStateOnScreen } = require('./window-state');
 const { registerIpcHandlers } = require('./ipc-handlers');
 
 const APP_ROOT = path.join(__dirname, '..');
 const IS_DEMO = process.argv.includes('--demo');
 
-app.setAppUserModelId('com.flightdeck.app');
+if (process.platform === 'win32') {
+  app.setAppUserModelId(getWindowsAppUserModelId());
+}
 
 // Start writing logs to file in userData/logs/
 initLogFile(path.join(app.getPath('userData'), 'logs'));

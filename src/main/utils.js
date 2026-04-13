@@ -1,6 +1,9 @@
-const { shell } = require('electron');
+const { app, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
+
+const WINDOWS_PACKAGED_APP_ID = 'com.flightdeck.app';
+const WINDOWS_DEV_APP_ID = 'FlightDeck';
 
 let logStream = null;
 
@@ -91,10 +94,25 @@ function getRuntimeWindowIcon(appRoot) {
   return path.join(appRoot, 'icon.png');
 }
 
+function getWindowsAppUserModelId() {
+  return app.isPackaged ? WINDOWS_PACKAGED_APP_ID : WINDOWS_DEV_APP_ID;
+}
+
 function applyRuntimeWindowIcon(win, appRoot) {
   const iconPath = getRuntimeWindowIcon(appRoot);
   if ((process.platform === 'win32' || process.platform === 'linux') && typeof win.setIcon === 'function') {
     win.setIcon(iconPath);
+  }
+  if (process.platform === 'win32' && typeof win.setAppDetails === 'function') {
+    win.setAppDetails({
+      appId: getWindowsAppUserModelId(),
+      appIconPath: iconPath,
+      appIconIndex: 0,
+      relaunchDisplayName: app.name || 'FlightDeck',
+      relaunchCommand: process.argv.map((argument) => (
+        argument.includes(' ') ? `"${argument}"` : argument
+      )).join(' '),
+    });
   }
   return iconPath;
 }
@@ -163,6 +181,7 @@ module.exports = {
   isSafeExternalUrl,
   attachExternalNavigationGuards,
   getRuntimeWindowIcon,
+  getWindowsAppUserModelId,
   applyRuntimeWindowIcon,
   escapeHtml,
   markdownToHtml,
