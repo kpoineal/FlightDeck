@@ -466,3 +466,9 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
   - Updated Quick Start sections to mention scanner setup.
 - **Key files**: `docs/user-guide.md`, `README.md`.
 - **Pattern**: When the UI architecture changes substantially (separate tabs → unified view), docs need a full rewrite of affected sections rather than incremental patches. Reading index.html + state.js + renderers/ gives the most accurate picture of current UI flow.
+
+### 2026-04-14 — v1.1.0 Upgrade Bug: Empty Store Causes Missing Default Scanner
+- **Issue**: Users upgrading from v1.0.4 to v1.1.0 saw no default scanner on initial load.
+- **Root cause found**: `loadPersistentState()` in `state.js` had `if (!parsed) return;` that returned early when store was empty, skipping seed scanner creation and `_loaded` flag.
+- **Fix applied by coordinator**: Replaced early return with `parsed = {}` fallback. Test added for empty store scenario. 589 tests pass.
+- **Pattern**: Early returns in state initialization functions can silently skip downstream setup logic. Always ensure fallback-to-empty-object instead of bail-out when a store read returns null/undefined.

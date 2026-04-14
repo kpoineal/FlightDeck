@@ -250,7 +250,11 @@ async function loadPersistentState() {
       parsed = await window.workiq.storeGet(LEGACY_STORAGE_KEY) ?? null;
       usedLegacyKey = Boolean(parsed);
     }
-    if (!parsed) return;
+    // When the store is empty (fresh install or data loss), treat as empty
+    // object so seed scanner creation and _loaded flag are still reached.
+    if (!parsed) {
+      parsed = {};
+    }
 
     // Migrate away from legacy v1 key so old data doesn't persist alongside v2
     if (usedLegacyKey) {
