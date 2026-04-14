@@ -21,10 +21,15 @@ graph TB
             App["app.js<br/>Tab routing & init"]
             Events["events.js<br/>DOM event wiring"]
             Monitor["monitor-engine.js<br/>30s tick scheduler"]
+            ScannerEng["scanner-engine.js<br/>Multi-scanner scheduler"]
+            Demo["demo.js<br/>Fixture mode (?demo=1)"]
             Prompts["prompts.js<br/>Prompt editor & cache"]
             Parser["json-parser.js<br/>LLM output → JSON"]
-            State["state.js<br/>localStorage persistence"]
+            State["state.js<br/>electron-store persistence"]
+            Utils["utils.js<br/>escapeHtml, URL safety"]
             subgraph Models["Models"]
+                Item["item.js<br/>Unified item model"]
+                Scanner["scanner.js<br/>Scanner definitions"]
                 Radar["radar.js"]
                 Tracking["tracking.js"]
                 Briefing["briefing.js"]
@@ -34,17 +39,26 @@ graph TB
                 RadarR["radar.js"]
                 TrackingR["tracking.js"]
                 BriefingR["briefing.js"]
+                ScannerR["scanner.js"]
+                ActionsR["actions.js"]
+                HistoryR["history.js"]
             end
         end
 
-        Preload["preload.js<br/>contextBridge → window.workiq"]
+        subgraph Shared["Shared"]
+            Contract["ipc-contract.js<br/>Channel name constants"]
+        end
+
+        Preload["preload.js<br/>contextBridge → window.workiq<br/>(20 methods)"]
 
         subgraph Main["Main Process · Node.js"]
             direction LR
             Index["index.js<br/>App lifecycle & tray"]
             IPC["ipc-handlers.js<br/>IPC channel routing"]
             PTY["pty-bridge.js<br/>node-pty spawn"]
-            PromptFiles["prompts/<br/>radar-scan.md<br/>briefing.md<br/>day-briefing.md"]
+            Store["store.js<br/>electron-store<br/>(data + cold)"]
+            PopoutIPC["ipc/tracker-popout.js<br/>Pop-out window mgmt"]
+            PromptFiles["prompts/<br/>radar-scan.md<br/>briefing.md<br/>day-briefing.md<br/>scanner-template.md"]
         end
     end
 
@@ -57,8 +71,12 @@ graph TB
     UI --> Renderer
     Renderer <-->|"IPC invoke/send"| Preload
     Preload <-->|"ipcRenderer ↔ ipcMain"| Main
+    Shared --- Preload
+    Shared --- Main
     IPC -->|"read prompt files"| PromptFiles
     IPC -->|"spawn PTY"| PTY
+    IPC -->|"read/write"| Store
+    IPC -->|"pop-out"| PopoutIPC
     PTY -->|"workiq ask -q 'prompt'"| WorkIQ
     WorkIQ -->|"Copilot API"| Copilot
     Copilot <-->|"Graph API"| M365
@@ -67,8 +85,11 @@ graph TB
 ```
 
 **Key architecture decisions:**
-- **Electron with context isolation** — The renderer is sandboxed. All Node.js access goes through `preload.js`, which exposes exactly 11 whitelisted methods via `window.workiq`.
+- **Electron with context isolation** — The renderer is sandboxed. All Node.js access goes through `preload.js`, which exposes exactly 20 whitelisted methods via `window.workiq`.
+- **Shared IPC contract** — All channel name strings are defined once in `shared/ipc-contract.js` and imported by both the main process and preload script, eliminating string duplication.
+- **electron-store for persistence** — State is backed by a JSON file on disk (`electron-store`) rather than `localStorage`. A separate cold store holds archived items to keep the active store lean.
 - **PTY bridge, not HTTP** — WorkIQ is a CLI tool, not an API. FlightDeck uses `node-pty` to spawn pseudo-terminal sessions, which handles interactive prompts (like EULA acceptance) and streaming output.
+- **Multi-scanner architecture** — Users can create multiple named scanners, each with independent prompts, schedules, and configurations. A dedicated scanner engine runs alongside the single-item monitor engine.
 - **No framework, no bundler** — The renderer is vanilla HTML/CSS/JS. This keeps the build chain minimal and the codebase auditable.
 
 ---
@@ -132,12 +153,14 @@ How FlightDeck's three core features connect to prompt templates and M365 data.
 flowchart LR
     subgraph Prompts["Prompt Templates"]
         RS["radar-scan.md<br/>Scan M365 signals,<br/>classify by urgency"]
+        ST["scanner-template.md<br/>Scanner default prompt<br/>with signal focus"]
         BF["briefing.md<br/>Meeting prep with<br/>talk track & risks"]
         DB["day-briefing.md<br/>Morning summary<br/>of full workday"]
     end
 
     subgraph Features["FlightDeck Features"]
         direction TB
+        ScanF["🔍 Scanners<br/>Named scan definitions<br/>Custom prompts + schedules"]
         RadarF["📡 Radar<br/>Inbound signal scan<br/>Critical · Elevated · Observe"]
         TrackF["📌 Tracking<br/>Monitor items over time<br/>Interval · Weekly · One-time"]
         BriefF["📋 Briefings<br/>AI meeting prep<br/>+ My Day overview"]
@@ -151,13 +174,17 @@ flowchart LR
     end
 
     RS --> RadarF
+    ST --> ScanF
     BF --> BriefF
     DB --> BriefF
     RS -.->|"Custom prompt<br/>via in-app editor"| RadarF
+    ST -.->|"User-defined<br/>scanner prompt"| ScanF
     BF -.->|"Custom prompt<br/>via in-app editor"| BriefF
 
     DataSources -->|"Graph API → Copilot → WorkIQ"| Prompts
 
+    ScanF -->|"Discovered items"| RadarF
+    ScanF -->|"Auto-monitor<br/>(severity threshold)"| TrackF
     RadarF -->|"Track Item"| TrackF
     RadarF -->|"Open Source Link"| Email
     RadarF -->|"Open Source Link"| Teams
@@ -167,6 +194,7 @@ flowchart LR
 
 | Feature | Prompt | What it does |
 |---------|--------|--------------|
+| **Scanners** | `scanner-template.md` (default) or user-defined | Named scan definitions with independent prompts and schedules. Each scanner discovers items, deduplicates across scanners, and can auto-monitor new items based on severity thresholds. |
 | **Radar** | `radar-scan.md` | Scans email, Teams, calendar, and documents for signals that need attention. Classifies each as Critical, Elevated, or Observe. Returns evidence links with deep URLs back to the source. |
 | **Tracking** | Dynamic per-item | Monitors a specific item on a user-configured schedule. Includes the last 2 update summaries for de-duplication so the LLM only reports *new* information. |
 | **Briefings** | `briefing.md` / `day-briefing.md` | Generates meeting prep (key updates, decisions needed, risks, talk track, follow-ups) or a full "My Day" morning briefing. |
@@ -223,7 +251,7 @@ graph TB
             Escape["All LLM output HTML-escaped<br/>before DOM insertion"]
         end
 
-        Bridge["contextBridge · preload.js<br/>Explicit API surface only"]
+        Bridge["contextBridge · preload.js<br/>20 whitelisted methods"]
 
         subgraph MainTrust["Main Process · Trusted"]
             URLCheck["URL validation<br/>HTTPS only"]
@@ -232,7 +260,7 @@ graph TB
         end
     end
 
-    RendererSandbox <-->|"window.workiq.*<br/>11 whitelisted methods"| Bridge
+    RendererSandbox <-->|"window.workiq.*<br/>20 whitelisted methods"| Bridge
     Bridge <-->|"Named IPC channels"| MainTrust
 ```
 
@@ -241,9 +269,9 @@ graph TB
 | **Content Security Policy** | `default-src 'self'; style-src 'self'; script-src 'self'` — no inline scripts, no external resources |
 | **Context isolation** | Renderer cannot access Node.js APIs directly |
 | **Node integration** | Explicitly disabled |
-| **IPC surface** | Only 11 named channels exposed through `preload.js` |
+| **IPC surface** | 20 named channels exposed through `preload.js`, defined centrally in `shared/ipc-contract.js` |
 | **External navigation** | All navigation attempts intercepted and opened in the system browser, never in the Electron window |
-| **URL validation** | Non-HTTPS schemes rejected before opening |
+| **URL validation** | Non-HTTPS schemes rejected before opening; generic M365 root URLs filtered out |
 | **LLM output sanitization** | All AI-generated text is HTML-escaped before DOM insertion to prevent injection |
 | **PTY timeout** | 5-minute hard timeout kills hung WorkIQ processes |
 
