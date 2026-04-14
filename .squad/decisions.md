@@ -1249,3 +1249,226 @@
 **Why:** Documentation was stale — still described 4 tabs, a separate Tracking view, and outdated UI elements. Users and contributors would be confused.
 
 **Source:** `.squad/decisions/inbox/goose-docs-update.md`
+
+---
+
+## DEC-066: No PII Directive (Reinforced)
+
+**Author:** Kyle Poineal (via Copilot) | **Date:** 2026-03-26, reinforced 2026-04-13 | **Status:** Active
+
+**Summary:** Never include any PII or customer/company-identifying information in code, prompts, test fixtures, or documentation. Before any push, PR, or merge, ensure outgoing changes are scrubbed.
+
+**Source:** `.squad/decisions/inbox/copilot-directive-no-pii.md`, `.squad/decisions/inbox/copilot-directive-2026-04-13T10-03-36Z.md`
+
+---
+
+## DEC-067: Scanner Collapsed View UX Redesign
+
+**Author:** Iceman (Product Owner) + Goose (Frontend Dev) | **Date:** 2026-03-27 | **Status:** Implemented
+
+**Summary:** Collapsed scanner headers now surface severity micro-counts, blocked/waiting attention badges, new-item indicators, severity-tinted left borders, and relative last-activity timestamps. Solves six identified problems: information-dead collapsed headers, no severity breakdown per scanner, no status/health signals, uniform visual weight regardless of urgency.
+
+**Key decisions:**
+- Computed inside `buildSectionHeader()` from the items array with zero extra DOM operations.
+- At-a-glance visibility into scanner state while keeping collapsed view compact (single row).
+- Preserves existing header layout (icon + name + count + action buttons) while adding diagnostic data.
+
+**Files:** `src/renderer/renderers/radar.js`, `src/styles/radar.css`
+
+**Source:** `.squad/decisions/inbox/iceman-scanner-ux.md`, `.squad/decisions/inbox/goose-scanner-headers.md`
+
+---
+
+## DEC-068: Interactive Scanner Header Pills
+
+**Author:** Iceman (Product Owner) + Goose (Frontend Dev) | **Date:** 2026-03-27 | **Status:** Implemented
+
+**Summary:** Per-scanner inline filtering via clickable header pills (severity dots, attention badges, "N new" indicator). Single-active toggle model — clicking a pill filters that scanner's items; clicking again clears.
+
+**Key decisions:**
+- `state.scannerFilters` is ephemeral (NOT persisted) — session-only.
+- Pills carry `data-scanner-filter` and `data-scanner-source-id` attributes — generic handler.
+- Pill click handler placed BEFORE header collapse handler with `stopPropagation()`.
+- Header pill counts always reflect full (unfiltered) item set.
+- Collapsing a scanner clears its inline filter. Global filter changes clear inline filters.
+- Active pill visual: solid fill + ring outline + slight scale + clear button (×).
+
+**Files:** `state.js`, `renderers/radar.js`, `events.js`, `styles/radar.css`. All 549 tests pass.
+
+**Source:** `.squad/decisions/inbox/iceman-interactive-pills.md`, `.squad/decisions/inbox/goose-interactive-pills.md`
+
+---
+
+## DEC-069: Add Task UX Options for Scanner-Grouped Radar
+
+**Author:** Iceman (Product Owner) + Goose (Frontend Dev) | **Date:** 2026-03-27 | **Status:** Proposal
+
+**Summary:** Product analysis and technical feasibility of 5 UX patterns for adding items in scanner-grouped Radar: (1) per-scanner "+" button, (2) inline quick-add row, (3) gear menu with "Add Item", (4) floating modal, (5) command bar. Per-scanner "+" button recommended as lowest effort (~15 lines template + ~10 lines event handler), still needs a form target (modal or inline).
+
+**Source:** `.squad/decisions/inbox/iceman-add-task-ux.md`, `.squad/decisions/inbox/goose-add-task-ux-patterns.md`
+
+---
+
+## DEC-070: Cross-Scanner Dedup Prompt Block
+
+**Author:** Charlie (Prompt Engineer) | **Date:** 2026-03-26 | **Status:** Proposed
+
+**Summary:** Add a cross-scanner topic block to `buildScannerPrompt()` telling the AI about other active scanners' focus areas to prevent duplicate cards when scanner domains overlap. Block appended to prompt: `Other active scanners (skip items that clearly belong to another scanner's focus area):` with per-scanner lines. Topic extraction via regex for "Focus specifically on: ..." or fallback to first meaningful line. Capped at 5 other scanners.
+
+**Source:** `.squad/decisions/inbox/charlie-cross-scanner-dedup.md`
+
+---
+
+## DEC-071: DEC-063 Phase 2 — Prompt & Scanner-Engine Unification
+
+**Author:** Charlie (Prompt Engineer) | **Date:** 2026-04-03 | **Status:** Implemented
+
+**Summary:** Removed all radar-specific prompt and execution paths. Every scanner — including the former "default radar" — now flows through `buildScannerPrompt()` and `runScanner()` with full post-processing.
+
+**Key decisions:**
+- Dedup-then-append over upsert for all scanners. Simpler, preserves user edits.
+- `promptCache.radarScan` eliminated — radar prompt lives as scanner's `.prompt` field.
+- Legacy prompt editor bindings removed (DOM already removed in prior PR).
+
+**Files:** `src/renderer/prompts.js`, `src/renderer/scanner-engine.js`
+
+**Source:** `.squad/decisions/inbox/charlie-prompt-unification.md`
+
+---
+
+## DEC-072: Radar Exclusions Bug Fix & New Badge on Completed Items
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-03-31 | **Status:** Implemented
+
+**Summary:** Two fixes: (1) `buildRadarScanPrompt()` used wrong item scope for exclusions — changed to use `getScannerExclusionLabels(scannerId)` consistently. Removed dead `getTrackedExclusionLabels()`. (2) "New" badge persisted on completed/archived items — `setItemLifecycleStatus()` now clears `hasNewUpdate`, `isNew`, and marks history as seen on completion/archival.
+
+**Files:** `src/renderer/prompts.js`, `src/renderer/scanner-engine.js`, `src/renderer/models/item.js`. All 549 tests pass.
+
+**Source:** `.squad/decisions/inbox/goose-radar-exclusions-and-new-badge.md`
+
+---
+
+## DEC-073: Tiered Hot/Cold Storage
+
+**Author:** Slider (Performance Engineer) | **Date:** 2026-03-30 | **Status:** Implemented | **Requested by:** Kyle
+
+**Summary:** Implemented tiered hot/cold storage to prevent OOM crash after 48h unattended operation. Hard caps: `MAX_EVIDENCE_LINKS_PER_ITEM = 20`, `MAX_ACTIVE_ITEMS = 500`. Cold storage via separate `electron-store` instance (`flightdeck-cold`). Eviction runs during save: archived/complete items 24+ hours old → cold storage. Cold items NOT loaded at startup.
+
+**Key decisions:**
+- `pruneHistory()` now runs on every `addHistory()` call (trims before insert).
+- New IPC channels: `STORE_GET_COLD_ITEMS`, `STORE_SET_COLD_ITEMS` with preload bridge.
+- Global cap overflow eviction sorts by lifecycle status then age.
+- Automatic migration on first load — zero data loss.
+
+**Files:** `constants.js`, `store.js`, `ipc-handlers.js`, `ipc-contract.js`, `preload.js`, `state.js`, `app.js`, `monitor-engine.js`, `models/item.js`. 549 tests pass.
+
+**Source:** `.squad/decisions/inbox/slider-tiered-storage.md`
+
+---
+
+## DEC-074: Cross-Platform Build & WorkIQ Resolution
+
+**Author:** Jester (DevOps) + Viper (Backend Dev) | **Date:** 2026-03-31 | **Status:** Implemented
+
+**Summary:** Added macOS (DMG + zip) and Linux (AppImage + deb) build targets. `pty-bridge.js` now supports macOS/Linux — workiq expected in PATH via `which workiq` + common path fallback. `workiqMode` gains `'system'` value. Windows behavior fully preserved.
+
+**Source:** `.squad/decisions/inbox/jester-cross-platform-build.md`, `.squad/decisions/inbox/viper-cross-platform-pty.md`
+
+---
+
+## DEC-075: Windows Taskbar Icon — Runtime Fix
+
+**Author:** Viper (Backend Dev) | **Date:** 2026-04-02 / 2026-04-07 | **Status:** Implemented
+
+**Summary:** Fixed Windows taskbar showing default Electron icon. All BrowserWindows (main, popout, markdown preview) now receive FlightDeck icon via shared helper in `utils.js`. Removed duplicate `app.setAppUserModelId('FlightDeck')` that overrode correct reverse-domain ID. Packaging fix (ICO asset) separated as Jester-owned.
+
+**Files:** `src/main/utils.js`, `src/main/index.js`, `src/main/ipc/tracker-popout.js`, `src/main/ipc-handlers.js`
+
+**Source:** `.squad/decisions/inbox/viper-taskbar-icon.md`, `.squad/decisions/inbox/viper-taskbar-icon-fix.md`
+
+---
+
+## DEC-076: Windows Icon Packaging — Build Resource
+
+**Author:** Jester (DevOps) + Viper (Backend Dev) | **Date:** 2026-04-07 | **Status:** Proposed
+
+**Summary:** Windows packaging must use `build/icon.ico` (real ICO container) instead of `src/icon.png`. `.gitignore` updated to allow `build/icon.ico`. `src/icon.ico` excluded (contains PNG data with ICO extension). PR scope: `.gitignore`, `package.json`, `build/icon.ico`, plus runtime files from DEC-075.
+
+**Source:** `.squad/decisions/inbox/jester-taskbar-icon.md`, `.squad/decisions/inbox/jester-icon-pr.md`, `.squad/decisions/inbox/viper-icon-file-set.md`
+
+---
+
+## DEC-077: Dev-Only Windows Taskbar Identity Restoration
+
+**Author:** Viper (Backend Dev) | **Date:** 2026-04-13 | **Status:** Implemented
+
+**Summary:** Restored legacy `FlightDeck` AppUserModelId only when `app.isPackaged === false` (dev mode), keeping packaged builds on `com.flightdeck.app`. Shared helper ensures `setAppUserModelId` and `win.setAppDetails` stay aligned.
+
+**Source:** `.squad/decisions/inbox/viper-dev-taskbar-identity.md`
+
+---
+
+## DEC-078: Version Check & Update Notification
+
+**Author:** Viper (Backend Dev) + Goose (Frontend Dev) | **Date:** 2026-04-13 | **Status:** Implemented
+
+**Summary:** Backend: `CHECK_FOR_UPDATES` IPC channel queries GitHub Releases API via `net.request` with 1-hour cache. Returns `{ available, currentVersion, latestVersion, releaseUrl, releaseNotes }`. Frontend: green dot beside version badge with hover tooltip (version, release link, dismiss). Dismiss stores version via `storeSet`. Skipped in demo mode.
+
+**Key decisions:**
+- `net.request` over `fetch` — respects Electron proxy, no external dep.
+- 1-hour cache prevents GitHub API rate-limiting.
+- Non-intrusive: dot + tooltip, no modal/banner.
+
+**Source:** `.squad/decisions/inbox/viper-version-check-backend.md`, `.squad/decisions/inbox/goose-update-notification-ui.md`
+
+---
+
+## DEC-079: Scanner Header New Count & Sort Fix
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-07 | **Status:** Implemented
+
+**Summary:** Fixed stale scanner-row "new" counts and sort order after incremental monitor updates. Added `patchSectionHeader(scannerId)` and `repositionItemInSection(itemId)` called after every `patchSingleItem()`. Added snoozed exclusion to new-count formula to match KPI bar.
+
+**Files:** `src/renderer/renderers/radar.js`
+
+**Source:** `.squad/decisions/inbox/goose-new-count-fix.md`
+
+---
+
+## DEC-080: Demo Mode — Full Isolation Guards
+
+**Author:** Goose (Frontend Dev) + Viper (Backend Dev) | **Date:** 2026-04-14 | **Status:** Implemented
+
+**Summary:** Three-point demo isolation: (1) `runWorkiqJson()` blocks all real WorkIQ/M365 calls with early-return throw. (2) `savePersistentState()`/`loadPersistentState()` skip cold-storage eviction/migration. (3) Popout windows inherit `?demo=1`. All functions calling WorkIQ have `IS_DEMO` guards with user-visible toast messages. Action buttons dimmed via `body.demo-mode` CSS. Fixture.json updated to unified store format.
+
+**Source:** `.squad/decisions/inbox/goose-demo-disable.md`, `.squad/decisions/inbox/viper-demo-guards.md`
+
+---
+
+## DEC-081: Release Plan & Scope Review
+
+**Author:** Jester (DevOps) + Maverick (Lead) | **Date:** 2026-04-13 | **Status:** Proposed
+
+**Summary:** Release branch `fix/windows-runtime-identity-startup-reconnect` blocked until diff scrubbed of company-identifying text. Releasable scope: `src/main/index.js`, `src/main/utils.js`, `test/main-utils.test.js`. Exclude: `src/renderer/app.js` (unrelated reconnect change with product-identifying text), `.squad/` artifacts.
+
+**Source:** `.squad/decisions/inbox/jester-release-plan.md`, `.squad/decisions/inbox/maverick-release-scope-review.md`
+
+---
+
+## DEC-082: Neutral Startup Fallback Copy
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-13 | **Status:** Implemented
+
+**Summary:** Changed non-reconnect status text in `src/renderer/app.js` from product-specific message to neutral `Service unavailable`. Keeps startup reconnect behavior while removing company-identifying language from outgoing changes.
+
+**Source:** `.squad/decisions/inbox/goose-startup-reconnect-copy.md`
+
+---
+
+## DEC-083: loadPersistentState Empty Store Fix
+
+**Author:** Coordinator | **Date:** 2026-04-14 | **Status:** Implemented
+
+**Summary:** Fixed `loadPersistentState()` in `state.js` where `if (!parsed) return;` returned early when the store was empty, skipping seed scanner creation and the `_loaded` flag. Replaced with `parsed = {}` fallback so seed scanner creation and `_loaded` always execute. Users upgrading from v1.0.4 to v1.1.0 saw no default scanner on initial load.
+
+**Files:** `src/renderer/state.js`, `test/renderer-state.test.js`. 589 tests pass (0 fail, 4 skipped).

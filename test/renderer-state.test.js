@@ -163,6 +163,16 @@ describe('loadPersistentState()', () => {
     assert.equal(ctx.state.connected, false);
   });
 
+  it('creates seed scanner and sets _loaded when store is empty', async () => {
+    // No data in the store at all — simulates fresh install
+    await ctx.loadPersistentState();
+
+    assert.equal(ctx.state._loaded, true, '_loaded should be true even with empty store');
+    assert.equal(ctx.state.scanners.length, 1, 'Should create seed Radar scanner');
+    assert.equal(ctx.state.scanners[0].name, 'Radar');
+    assert.equal(ctx.state.scanners[0].enabled, true);
+  });
+
   it('handles malformed JSON gracefully', async () => {
     // storeGet returns parsed objects directly; a non-object value exercises the guard
     mockStore[ctx.STORAGE_KEY] = 'not-valid-json}}}';

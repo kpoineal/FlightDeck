@@ -256,3 +256,8 @@
 - Main handler: `src/main/ipc-handlers.js`
 
 **Validation:** 592/592 tests pass.
+
+### 2026-04-14 — v1.1.0 Upgrade Bug Investigation: Data Migration
+- **Task**: Investigated whether radar/tracker items fail to migrate when upgrading from v1.0.4 to v1.1.0.
+- **Outcome**: Research completed (silent success — response lost). Findings contributed to overall root cause analysis. Root cause was in renderer state.js, not in backend data migration.
+- **Cross-ref**: Goose found the root cause (`loadPersistentState` early return), coordinator applied fix. See DEC-083.
