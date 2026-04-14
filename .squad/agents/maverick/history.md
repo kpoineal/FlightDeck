@@ -48,6 +48,31 @@
 - Implementation: 3 pieces — `src/demo/fixture.json` (static data), `src/renderer/demo.js` (interceptor), `--demo` CLI flag in `main/index.js`.
 - No production code paths modified; demo mode activates only with `?demo=1` query param.
 
+### 2026-04-14 — Architecture Docs Update (Post-Refactor)
+
+**What changed:**
+- Updated `docs/architecture.md` and `docs/architecture-diagrams.md` to accurately reflect the current modular codebase.
+
+**Key architectural facts documented:**
+- IPC surface expanded from 9 to 20 named channels, centralized in `shared/ipc-contract.js`
+- Preload exposes 20 methods (up from 8), including full electron-store CRUD (storeGet/Set/Delete/GetAll/GetSize), cold storage access, version check, EULA acceptance, and localStorage migration
+- Persistence moved from `localStorage` to `electron-store` (via `main/store.js`) with two stores: `flightdeck-data` (active) and `flightdeck-cold` (archived items)
+- Scanner system is a major new feature: `models/scanner.js`, `renderer/scanner-engine.js`, `renderers/scanner.js`, `prompts/scanner-template.md`
+- `models/item.js` is a unified item model consolidating radar + tracking into one shape
+- Pop-out IPC extracted to `main/ipc/tracker-popout.js`
+- Styles modularized into 9 CSS files in `src/styles/`
+- 18 test files covering both main and renderer modules via `node:test` runner
+- Demo mode (`renderer/demo.js`) with fixture data
+
+**Key file paths (current):**
+- IPC contract: `src/shared/ipc-contract.js`
+- Store: `src/main/store.js`
+- Scanner engine: `src/renderer/scanner-engine.js`
+- Scanner model: `src/renderer/models/scanner.js`
+- Unified item model: `src/renderer/models/item.js`
+- Pop-out IPC: `src/main/ipc/tracker-popout.js`
+- Scanner template: `src/prompts/scanner-template.md`
+
 **Key file paths:**
 - `runWorkiqJson`: `renderer/json-parser.js` line 222
 - WorkIQ call sites: `app.js` (4), `monitor-engine.js` (1), `models/briefing.js` (2), `renderers/actions.js` (2)
@@ -210,6 +235,12 @@
 - Dependencies with security surface: `node-pty` (native module, shell spawning), `electron` (filesystem/shell access), `@microsoft/workiq` (M365 data).
 - `preload.js` is well-locked: `contextIsolation: true`, `nodeIntegration: false`, explicit `contextBridge.exposeInMainWorld` with typed IPC channels.
 - CSP tightened (DEC-014): `'unsafe-inline'` removed, `default-src 'self'`.
+
+### 2026-04-14 — Architecture Docs Overhaul
+- Updated `docs/architecture.md` and `docs/architecture-diagrams.md` to reflect the current modular codebase.
+- Key additions: scanner system, electron-store persistence, shared IPC contract, unified item model, 20 IPC channels, demo mode, test architecture, styles breakdown, prompt templates catalog.
+- Goose simultaneously updated `docs/user-guide.md` and `README.md` for the user-facing perspective (DEC-065).
+- Recorded as DEC-064.
 
 **Key recommendations delivered:**
 1. **Immediate (Phase 1):** Enable GitHub branch protection on `main` (require PR, require CI pass, no force-push). Add `npm audit` to CI. Add SECURITY.md. These are zero-friction, high-value.

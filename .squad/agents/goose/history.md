@@ -423,6 +423,12 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Goal**: Surface key information in collapsed scanner headers so users can triage which scanners need attention without expanding.
 - **Changes to `buildSectionHeader()`** in `renderers/radar.js`:
   - Added `items` parameter to options object (default `[]`).
+
+### 2026-04-14 — User Guide & README Docs Refresh
+- Updated `docs/user-guide.md` and `README.md` to reflect current 3-tab layout (Radar/Briefings/History), scanner-grouped Radar view, lifecycle statuses, version notifications, inline filtering.
+- Removed stale references to old Tracking tab, donut chart KPIs, gear icon theme toggle.
+- Maverick simultaneously updated `docs/architecture.md` and `docs/architecture-diagrams.md` for the technical perspective (DEC-064).
+- Recorded as DEC-065.
   - Computes severity micro-counts (Critical/Elevated/Observe), blocked/waiting status counts, new/updated item count, highest severity for border tinting, and most recent `lastChangedAt` timestamp.
   - Renders: colored severity count pills (`.radar-sev-dot`), attention badges (`.radar-attn-badge`), pulsing new indicator (`.radar-new-indicator`), relative timestamp (`.radar-last-activity`), severity-tinted left border class (`sev-border-*`).
 - **Call site update**: `renderRadarList()` now passes `items: group.items` to `buildSectionHeader()`.
@@ -436,3 +442,27 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **All 549 tests pass** — no test changes needed (additive UI-only change).
 - **Key files**: `src/renderer/renderers/radar.js`, `src/styles/radar.css`.
 - **Pattern**: Computing summary stats from the items array inside the header builder (pure string concatenation) keeps it performant and avoids extra DOM operations. Using existing `relativeTime()` utility and `--color-*` CSS tokens ensures consistency with the rest of the UI.
+
+### 2026-04-14 — Documentation Overhaul (user-guide.md + README.md)
+- **Goal**: Update both docs to accurately reflect the current application flow and layout after the scanner unification.
+- **Key changes to user-guide.md**:
+  - Removed entire "Tracking View" section — Tracking is no longer a separate tab.
+  - Updated navigation from 4 tabs to 3 (Radar, Briefings, History).
+  - Added comprehensive Scanners section (adding, configuring, settings).
+  - Added Lifecycle Statuses section (in-progress, blocked, waiting, snoozed, complete, archived).
+  - Added Version Notifications section.
+  - Updated Radar View to reflect scanner-grouped layout with inline filters.
+  - Updated KPI section (removed donut chart references, simplified to severity counts + distribution bar).
+  - Updated theme toggle description (sun/moon icon, not gear icon).
+  - Updated Tips & Best Practices for scanner-based workflow.
+- **Key changes to README.md**:
+  - Updated Features table with Scanners, My Day, Version Notifications, Lifecycle Management.
+  - Updated Architecture diagram (added scanner-engine.js as separate engine).
+  - Updated Project Structure tree (added scanner.js, item.js, demo.js, scanner-engine.js, day-briefing.md, scanner-template.md, shared/, ipc/, store.js).
+  - Updated Configuration section (scanner prompt via ⚙️ settings, not inline editor).
+  - Updated "How It Works" with dual engine description (Scanner Engine + Monitor Engine).
+  - Updated "Creating a custom tracker" details section for scanner-based flow.
+  - Updated State Persistence table (added custom prompts, cold storage).
+  - Updated Quick Start sections to mention scanner setup.
+- **Key files**: `docs/user-guide.md`, `README.md`.
+- **Pattern**: When the UI architecture changes substantially (separate tabs → unified view), docs need a full rewrite of affected sections rather than incremental patches. Reading index.html + state.js + renderers/ gives the most accurate picture of current UI flow.

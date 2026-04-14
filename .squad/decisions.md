@@ -1225,3 +1225,27 @@
 **Risks:** Orphaned items (items whose `scannerId` points to deleted scanner) need a fallback strategy — either "Unassigned" section or re-assign on deletion confirmation.
 
 **Source:** `.squad/decisions/inbox/maverick-radar-unification.md`
+
+---
+
+## DEC-064: Architecture Docs Updated to Reflect Current Codebase
+
+**Author:** Maverick (Lead) | **Date:** 2026-04-14 | **Status:** Implemented
+
+**Summary:** Updated `docs/architecture.md` and `docs/architecture-diagrams.md` to accurately document the current modular structure. Key additions: scanner system, electron-store persistence, shared IPC contract, unified item model, expanded IPC channel table (20 channels), demo mode, test architecture, styles breakdown, prompt templates catalog.
+
+**Why:** Docs still described the pre-refactor monolithic structure (single renderer.js, localStorage, 9 IPC channels). Developers and agents reading these docs would get an inaccurate picture.
+
+**Source:** `.squad/decisions/inbox/maverick-docs-update.md`
+
+---
+
+## DEC-065: User Guide & README Updated to Scanner-Unified Architecture
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-14 | **Status:** Implemented
+
+**Summary:** Updated `docs/user-guide.md` and `README.md` to accurately reflect the current application: 3 tabs (Radar/Briefings/History), scanner-grouped Radar view, lifecycle statuses, version notifications, and inline filtering. Removed all references to the old separate Tracking tab, donut chart KPIs, and gear icon theme toggle.
+
+**Why:** Documentation was stale — still described 4 tabs, a separate Tracking view, and outdated UI elements. Users and contributors would be confused.
+
+**Source:** `.squad/decisions/inbox/goose-docs-update.md`
