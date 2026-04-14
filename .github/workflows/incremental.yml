@@ -53,7 +53,16 @@ jobs:
         run: |
           $pkg = Get-Content package.json | ConvertFrom-Json
           $parts = $pkg.version.Split('.')
-          $version = "$($parts[0]).$($parts[1]).${{ github.run_number }}"
+          $major = $parts[0]
+          $minor = $parts[1]
+          # Count existing incremental tags for this major.minor to determine next patch
+          $existing = git tag --list "v$major.$minor.*" --sort=-version:refname |
+            Where-Object { $_ -ne "v$major.$minor.0" } |
+            ForEach-Object { [int]($_ -replace "^v$major\.$minor\.","") } |
+            Sort-Object -Descending |
+            Select-Object -First 1
+          $patch = if ($existing) { $existing + 1 } else { 1 }
+          $version = "$major.$minor.$patch"
           npm version $version --no-git-tag-version
           "version=$version" | Out-File -Append $env:GITHUB_OUTPUT
           Write-Host "Incremental version: $version"
