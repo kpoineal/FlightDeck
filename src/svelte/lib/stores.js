@@ -34,10 +34,17 @@ export const kpis = derived(items, ($items) => {
   };
 });
 
+/** Cold storage items fetched async when viewing archived filter. */
+export const coldItems = writable([]);
+
 /** Filtered items based on current filter selection. */
-export const filteredItems = derived([items, filter], ([$items, $filter]) => {
+export const filteredItems = derived([items, coldItems, filter], ([$items, $coldItems, $filter]) => {
   if ($filter === 'archived') {
-    return $items.filter(i => i.lifecycleStatus === 'archived');
+    const hot = $items.filter(i => i.lifecycleStatus === 'complete' || i.lifecycleStatus === 'archived');
+    // Merge cold storage items (deduped by id)
+    const hotIds = new Set(hot.map(i => i.id));
+    const uniqueCold = $coldItems.filter(i => !hotIds.has(i.id));
+    return [...hot, ...uniqueCold];
   }
-  return $items.filter(i => i.lifecycleStatus !== 'archived');
+  return $items.filter(i => i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived');
 });

@@ -1,5 +1,5 @@
 <script>
-  import { filteredItems, scanners, items, density, filter } from '../lib/stores.js';
+  import { filteredItems, scanners, items, coldItems, density, filter } from '../lib/stores.js';
   import { setDensity, setFilter, addHistory } from '../lib/actions.js';
   import { sortBySeverity, groupItemsBySource } from '../lib/utils.js';
   import { savePersistentState } from '../lib/persistence.js';
@@ -139,7 +139,13 @@
   // Cold storage fetch for archived filter
   $effect(() => {
     if ($filter === 'archived' && window.workiq && typeof window.workiq.getColdItems === 'function') {
-      window.workiq.getColdItems().catch(() => {});
+      window.workiq.getColdItems().then((result) => {
+        if (Array.isArray(result) && result.length) {
+          coldItems.set(result);
+        }
+      }).catch(() => {});
+    } else {
+      coldItems.set([]);
     }
   });
 </script>
