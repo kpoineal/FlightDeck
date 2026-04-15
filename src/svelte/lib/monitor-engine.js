@@ -190,10 +190,14 @@ async function runItemCheck(item) {
         // Record in updateHistory
         const updateHistory = Array.isArray(updated.updateHistory) ? [...updated.updateHistory] : [];
         while (updateHistory.length >= 20) updateHistory.pop();
+        const changes = [];
+        if (i.status !== updated.status) changes.push(`Status: ${i.status} → ${updated.status}`);
+        if (i.severity !== updated.severity) changes.push(`Severity: ${i.severity} → ${updated.severity}`);
+        if (!changes.length) changes.push('Updated');
         updateHistory.unshift({
           timestamp: nowIso(),
-          changes: [`Status: ${i.status} → ${updated.status}`],
-          summary: i.summary || '',
+          changes,
+          summary: updated.summary || '',
           status: updated.status,
           severity: updated.severity,
           seen: false,
