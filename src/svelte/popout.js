@@ -2,6 +2,8 @@ import { mount } from 'svelte';
 import PopoutView from './components/PopoutView.svelte';
 import { loadPersistentState, savePersistentState } from './lib/persistence.js';
 import { items } from './lib/stores.js';
+import { runItemCheck } from './lib/monitor-engine.js';
+import { get } from 'svelte/store';
 
 const params = new URLSearchParams(window.location.search);
 const popoutItemId = params.get('popout');
@@ -14,58 +16,44 @@ async function init() {
     props: {
       itemId: popoutItemId,
       onseveritychange(data) {
-        const { itemId, value } = data;
-        items.update(($items) => {
-          const item = $items.find((i) => i.id === itemId);
-          if (item) item.severity = value;
-          return $items;
-        });
+        items.update(($items) => $items.map(i =>
+          i.id === data.itemId ? { ...i, severity: data.value } : i
+        ));
         savePersistentState();
       },
       onmarkseen(data) {
-        const { itemId } = data;
-        items.update(($items) => {
-          const item = $items.find((i) => i.id === itemId);
-          if (item) {
-            item.hasNewUpdate = false;
-            item.isNew = false;
-            if (Array.isArray(item.updateHistory)) {
-              item.updateHistory.forEach((entry) => { entry.seen = true; });
-            }
+        items.update(($items) => $items.map(i => {
+          if (i.id !== data.itemId) return i;
+          const updated = { ...i, hasNewUpdate: false, isNew: false };
+          if (Array.isArray(updated.updateHistory)) {
+            updated.updateHistory = updated.updateHistory.map(e => ({ ...e, seen: true }));
           }
-          return $items;
-        });
+          return updated;
+        }));
         savePersistentState();
       },
       ondelete(data) {
-        const { itemId } = data;
         if (confirm('Delete this item permanently?')) {
-          items.update(($items) => $items.filter((i) => i.id !== itemId));
+          items.update(($items) => $items.filter(i => i.id !== data.itemId));
           savePersistentState();
         }
       },
       onschedulechange(data) {
-        const { itemId, field, value } = data;
-        items.update(($items) => {
-          const item = $items.find((i) => i.id === itemId);
-          if (item) item[field] = value;
-          return $items;
-        });
+        items.update(($items) => $items.map(i =>
+          i.id === data.itemId ? { ...i, [data.field]: data.value } : i
+        ));
         savePersistentState();
       },
-      onrunnow(data) {
-        const { itemId } = data;
-        if (window.workiq && typeof window.workiq.runItemCheck === 'function') {
-          window.workiq.runItemCheck(itemId);
+      async onrunnow(data) {
+        const item = get(items).find(i => i.id === data.itemId);
+        if (item) {
+          try { await runItemCheck(item); savePersistentState(); } catch (_) {}
         }
       },
       onpromptchange(data) {
-        const { itemId, value } = data;
-        items.update(($items) => {
-          const item = $items.find((i) => i.id === itemId);
-          if (item) item.monitorPrompt = value;
-          return $items;
-        });
+        items.update(($items) => $items.map(i =>
+          i.id === data.itemId ? { ...i, monitorPrompt: data.value } : i
+        ));
         savePersistentState();
       },
     },
