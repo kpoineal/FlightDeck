@@ -1,4 +1,7 @@
 <script>
+  import { slide } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
+  import { tweened } from 'svelte/motion';
   import { kpis, mode, items, scanners, meetings, briefingsByMeetingId } from '../lib/stores.js';
   import { normalizeSeverity } from '../lib/utils.js';
 
@@ -25,6 +28,15 @@
   let criticalCount = $derived(isBriefings ? briefingCounts.unbriefed : $kpis.critical);
   let elevatedCount = $derived(isBriefings ? briefingCounts.briefed : $kpis.elevated);
   let observeCount = $derived(isBriefings ? 0 : $kpis.observe);
+
+  // Tweened KPI numbers
+  let criticalTween = tweened(0, { duration: 400, easing: quintOut });
+  let elevatedTween = tweened(0, { duration: 400, easing: quintOut });
+  let observeTween = tweened(0, { duration: 400, easing: quintOut });
+
+  $effect(() => { criticalTween.set(criticalCount); });
+  $effect(() => { elevatedTween.set(elevatedCount); });
+  $effect(() => { observeTween.set(observeCount); });
 
   // Bar percentages
   let barTotal = $derived(isBriefings
@@ -82,16 +94,16 @@
   <div class="summary-strip-left">
     <span class="summary-sev summary-sev--critical" title={isBriefings ? 'Unbriefed meetings' : 'Critical items'}>
       <i class="legend-dot {isBriefings ? 'unbriefed' : 'critical'}"></i>
-      <strong>{criticalCount}</strong> {isBriefings ? 'Unbriefed' : 'Critical'}
+      <strong>{Math.round($criticalTween)}</strong> {isBriefings ? 'Unbriefed' : 'Critical'}
     </span>
     <span class="summary-sev summary-sev--elevated" title={isBriefings ? 'Briefed meetings' : 'Elevated items'}>
       <i class="legend-dot {isBriefings ? 'briefed' : 'elevated'}"></i>
-      <strong>{elevatedCount}</strong> {isBriefings ? 'Briefed' : 'Elevated'}
+      <strong>{Math.round($elevatedTween)}</strong> {isBriefings ? 'Briefed' : 'Elevated'}
     </span>
     {#if !isBriefings}
       <span class="summary-sev summary-sev--observe" title="Observe items">
         <i class="legend-dot observe"></i>
-        <strong>{observeCount}</strong> Observe
+        <strong>{Math.round($observeTween)}</strong> Observe
       </span>
     {/if}
     <span class="summary-sep"></span>
@@ -135,29 +147,50 @@
     </div>
 
     {#if detailOpen}
-      <div class="greeting-detail">
+      <div class="greeting-detail" transition:slide={{ duration: 300, easing: quintOut }}>
         {#if bannerCriticalCount + bannerElevatedCount > 0}
-          <div class="greeting-detail-card"><strong>🔴 Attention</strong> {bannerCriticalCount} critical, {bannerElevatedCount} elevated items need review</div>
+          <div class="greeting-detail-card card-attention">
+            <div class="card-header">🔴 Attention</div>
+            <div class="card-body">{bannerCriticalCount} critical, {bannerElevatedCount} elevated items need review</div>
+          </div>
         {/if}
         {#if meetingCount > 0}
-          <div class="greeting-detail-card"><strong>📅 Meetings</strong> {meetingCount} today{unbriefedCount > 0 ? `, ${unbriefedCount} unbriefed` : ', all briefed'}</div>
+          <div class="greeting-detail-card card-meetings">
+            <div class="card-header">📅 Meetings</div>
+            <div class="card-body">{meetingCount} today{unbriefedCount > 0 ? `, ${unbriefedCount} unbriefed` : ', all briefed'}</div>
+          </div>
         {:else}
-          <div class="greeting-detail-card"><strong>📅 Meetings</strong> No meetings today</div>
+          <div class="greeting-detail-card card-meetings">
+            <div class="card-header">📅 Meetings</div>
+            <div class="card-body">No meetings today</div>
+          </div>
         {/if}
         {#if snoozedCount > 0}
-          <div class="greeting-detail-card"><strong>💤 Snoozed</strong> {snoozedCount} item{snoozedCount > 1 ? 's' : ''} snoozed</div>
+          <div class="greeting-detail-card card-snoozed">
+            <div class="card-header">💤 Snoozed</div>
+            <div class="card-body">{snoozedCount} item{snoozedCount > 1 ? 's' : ''} snoozed</div>
+          </div>
         {/if}
         {#if bannerNewCount > 0}
-          <div class="greeting-detail-card"><strong>🆕 Updates</strong> {bannerNewCount} item{bannerNewCount > 1 ? 's have' : ' has'} new activity</div>
+          <div class="greeting-detail-card card-updates">
+            <div class="card-header">🆕 Updates</div>
+            <div class="card-body">{bannerNewCount} item{bannerNewCount > 1 ? 's have' : ' has'} new activity</div>
+          </div>
         {:else}
-          <div class="greeting-detail-card"><strong>✅ Current</strong> No new updates since last check</div>
+          <div class="greeting-detail-card card-updates">
+            <div class="card-header">✅ Current</div>
+            <div class="card-body">No new updates since last check</div>
+          </div>
         {/if}
         {#if recentlyCompleted.length > 0}
-          <div class="greeting-detail-card">
-            <strong>✅ Completed</strong> {recentlyCompleted.length} item{recentlyCompleted.length > 1 ? 's' : ''} completed recently
-            {#each recentlyCompleted.slice(0, 3) as item}
-              <br><small>• {item.title || 'Untitled'}</small>
-            {/each}
+          <div class="greeting-detail-card card-completed">
+            <div class="card-header">✅ Completed</div>
+            <div class="card-body">
+              {recentlyCompleted.length} item{recentlyCompleted.length > 1 ? 's' : ''} completed recently
+              {#each recentlyCompleted.slice(0, 3) as item}
+                <br><small>• {item.title || 'Untitled'}</small>
+              {/each}
+            </div>
           </div>
         {/if}
       </div>
@@ -219,23 +252,52 @@
     transform: rotate(180deg);
   }
   .greeting-detail {
-    margin-top: 6px;
-    padding-top: 6px;
-    border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
     font-size: 0.78rem;
     color: var(--text-secondary);
   }
   .greeting-detail-card {
+    background: color-mix(in srgb, var(--bg-inset) 80%, transparent);
+    border-radius: 8px;
+    padding: 10px 12px;
+    border-left: 3px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
+    transition: background 0.2s ease, transform 0.15s ease;
   }
-  .greeting-detail-card strong {
+  .greeting-detail-card:hover {
+    background: color-mix(in srgb, var(--bg-inset) 100%, transparent);
+    transform: translateX(2px);
+  }
+  .card-header {
     font-weight: 600;
     color: var(--text);
     font-size: 0.75rem;
+  }
+  .card-body {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+  .card-attention {
+    border-left-color: var(--color-critical);
+  }
+  .card-meetings {
+    border-left-color: var(--accent, #0a84ff);
+  }
+  .card-updates {
+    border-left-color: var(--color-observe);
+  }
+  .card-completed {
+    border-left-color: #30d158;
+  }
+  .card-snoozed {
+    border-left-color: #bf5af2;
   }
 </style>
