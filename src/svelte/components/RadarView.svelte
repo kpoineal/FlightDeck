@@ -1,7 +1,8 @@
 <script>
-  import { filteredItems, scanners, density, filter } from '../lib/stores.js';
-  import { setDensity, setFilter } from '../lib/actions.js';
+  import { filteredItems, scanners, items, density, filter } from '../lib/stores.js';
+  import { setDensity, setFilter, addHistory } from '../lib/actions.js';
   import { sortBySeverity, groupItemsBySource } from '../lib/utils.js';
+  import { savePersistentState } from '../lib/persistence.js';
   import ScannerSection from './ScannerSection.svelte';
   import AddTaskModal from './AddTaskModal.svelte';
   import ScannerSettingsModal from './ScannerSettingsModal.svelte';
@@ -50,6 +51,99 @@
   function handleAddScanner() {
     settingsScanner = null;
     settingsOpen = true;
+  }
+
+  // ── Item interaction handlers ────────────────────────────────────
+  function handleSeverityChange(data) {
+    items.update(($items) => {
+      const item = $items.find(i => i.id === data.itemId);
+      if (item) item.severity = data.value;
+      return $items;
+    });
+    savePersistentState();
+  }
+
+  function handleStatusChange(data) {
+    items.update(($items) => {
+      const item = $items.find(i => i.id === data.itemId);
+      if (item) {
+        item.lifecycleStatus = data.value;
+        item.lastChangedAt = new Date().toISOString();
+        if (data.value === 'complete' && !item.completedAt) {
+          item.completedAt = new Date().toISOString();
+        }
+        if (data.value === 'complete' || data.value === 'archived') {
+          item.monitorEnabled = false;
+          item.nextRunAt = null;
+        }
+      }
+      return $items;
+    });
+    savePersistentState();
+  }
+
+  function handleMarkSeen(data) {
+    items.update(($items) => {
+      const item = $items.find(i => i.id === data.itemId);
+      if (item) {
+        item.hasNewUpdate = false;
+        item.isNew = false;
+        if (Array.isArray(item.updateHistory)) {
+          item.updateHistory.forEach(e => { e.seen = true; });
+        }
+      }
+      return $items;
+    });
+    savePersistentState();
+  }
+
+  function handleDelete(data) {
+    items.update(($items) => $items.filter(i => i.id !== data.itemId));
+    addHistory('action', 'Deleted item');
+    savePersistentState();
+  }
+
+  function handleDraftStep(data) {
+    // Draft action — call WorkIQ to generate a draft
+    if (window.workiq && typeof window.workiq.ask === 'function') {
+      window.workiq.ask(`Draft a response for: ${data.suggestion}`);
+    }
+  }
+
+  function handleScheduleChange(data) {
+    items.update(($items) => {
+      const item = $items.find(i => i.id === data.itemId);
+      if (item) item[data.field] = data.value;
+      return $items;
+    });
+    savePersistentState();
+  }
+
+  function handlePromptChange(data) {
+    items.update(($items) => {
+      const item = $items.find(i => i.id === data.itemId);
+      if (item) item.monitorPrompt = data.value;
+      return $items;
+    });
+    savePersistentState();
+  }
+
+  function handleMoveScanner(data) {
+    items.update(($items) => {
+      const item = $items.find(i => i.id === data.itemId);
+      if (item) item.scannerId = data.scannerId;
+      return $items;
+    });
+    savePersistentState();
+  }
+
+  function handleRunNow(data) {
+    if (window.workiq && typeof window.workiq.ask === 'function') {
+      const item = $items.find(i => i.id === data.itemId);
+      if (item && item.monitorPrompt) {
+        window.workiq.ask(item.monitorPrompt);
+      }
+    }
   }
 
   // Cold storage fetch for archived filter
@@ -103,7 +197,16 @@
               onscannerrun={handleScannerRun}
               onscannertoggle={handleScannerToggle}
               onscannersettings={handleScannerSettings}
-              onpopout={handlePopout} />
+              onpopout={handlePopout}
+              onseveritychange={handleSeverityChange}
+              onstatuschange={handleStatusChange}
+              onmarkseen={handleMarkSeen}
+              ondelete={handleDelete}
+              ondraftstep={handleDraftStep}
+              onschedulechange={handleScheduleChange}
+              onpromptchange={handlePromptChange}
+              onmovescanner={handleMoveScanner}
+              onrunnow={handleRunNow} />
           {/each}
         {/if}
       </div>
