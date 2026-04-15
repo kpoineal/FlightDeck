@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <title>FlightDeck</title>
+  <link rel="stylesheet" href="styles/tokens.css" />
+  <link rel="stylesheet" href="styles/layout.css" />
+  <link rel="stylesheet" href="styles/components.css" />
+  <link rel="stylesheet" href="styles/radar.css" />
+  <link rel="stylesheet" href="styles/tracking.css" />
+  <link rel="stylesheet" href="styles/scanner.css" />
+  <link rel="stylesheet" href="styles/briefing.css" />
+  <link rel="stylesheet" href="styles/search.css" />
+  <link rel="stylesheet" href="styles/modal.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="icon.png" alt="FlightDeck logo" />
+      <span class="brand-name">FLIGHT<span class="brand-accent">DECK</span></span>
+      <span id="versionBadge" class="version-badge"></span>
+      <span id="updateIndicator" class="update-indicator">
+        <span class="update-dot"></span>
+        <span class="update-tooltip">
+          <span id="updateText">Update available</span>
+          <span class="update-actions">
+            <a id="updateLink" class="update-link" href="#">View release ↗</a>
+            <button id="updateDismiss" class="update-dismiss" title="Dismiss">×</button>
+          </span>
+        </span>
+      </span>
+    </div>
+    <input id="commandInput" type="hidden" />
+    <div class="search-wrap">
+      <span class="search-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </span>
+      <input id="globalSearch" class="search-input" type="text" placeholder="Search items…" autocomplete="off" />
+      <span class="search-kbd">Ctrl+K</span>
+      <div id="searchResults" class="search-results"></div>
+    </div>
+    <div id="searchOverlay" class="search-overlay"></div>
+    <div class="topbar-tabs">
+      <button class="mode-btn active" data-mode="Radar">Radar</button>
+      <button class="mode-btn" data-mode="Briefings">Briefings</button>
+      <button class="mode-btn" data-mode="History">History</button>
+    </div>
+    <div class="topbar-controls">
+      <span class="status-pill" id="dashboardStatus">Ready</span>
+      <button id="themeToggle" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle theme">
+        <svg class="theme-icon sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg class="theme-icon moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <main class="main">
+      <div id="connectBanner" class="connect-banner">
+        <p><strong>Connect:</strong> Requires Node.js, Copilot license, and tenant admin consent for WorkIQ data access.</p>
+        <button id="enableBtn" class="btn">Enable WorkIQ</button>
+      </div>
+
+      <section class="summary-strip">
+        <div class="summary-strip-left">
+          <span class="summary-sev summary-sev--critical" id="summCritical" title="Critical items">
+            <i class="legend-dot critical"></i> <strong id="summCriticalCount">0</strong> Critical
+          </span>
+          <span class="summary-sev summary-sev--elevated" id="summElevated" title="Elevated items">
+            <i class="legend-dot elevated"></i> <strong id="summElevatedCount">0</strong> Elevated
+          </span>
+          <span class="summary-sev summary-sev--observe" id="summObserve" title="Observe items">
+            <i class="legend-dot observe"></i> <strong id="summObserveCount">0</strong> Observe
+          </span>
+          <span class="summary-sep"></span>
+          <div class="severity-stack summary-bar" aria-label="Severity distribution">
+            <span class="stack-segment critical" id="summBarCritical"></span>
+            <span class="stack-segment elevated" id="summBarElevated"></span>
+            <span class="stack-segment observe" id="summBarMonitor"></span>
+          </div>
+          <span class="summary-sep"></span>
+          <span class="summary-total" id="summTotal">0 items</span>
+          <span class="summary-attn" id="summBlocked"></span>
+          <span class="summary-attn" id="summNew"></span>
+          <span class="summary-attn" id="summComplete"></span>
+        </div>
+      </section>
+
+      <section id="viewRadar" class="mode-view active">
+        <div id="morningBanner" class="morning-banner d-none"></div>
+        <div class="cockpit-grid">
+          <article class="panel">
+            <div class="tracking-heading-row">
+              <h2>Radar</h2>
+              <button class="add-scanner-btn" id="addScannerBtn" title="Add scanner">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>
+                Scanner
+              </button>
+              <div class="tracking-header-controls">
+                <div class="filter-bar" id="filterBar">
+                  <button class="filter-btn active" data-filter="all">All</button>
+                  <button class="filter-btn" data-filter="archived">Archived</button>
+                </div>
+                <button class="density-toggle" id="densityToggleBtn" title="Switch view">
+                  <svg class="density-icon-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="3" x2="15" y2="3"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="1" y1="13" x2="15" y2="13"/></svg>
+                  <svg class="density-icon-grid" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="panel-sub">Prioritized signals from email, Teams, meetings, docs</div>
+            <div class="list" id="radarList"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="viewBriefings" class="mode-view">
+        <div class="panel panel--full">
+          <h2>Briefings</h2>
+          <div class="panel-sub">Upcoming meetings today; expand one and generate a focused briefing</div>
+          <button class="prompt-editor-toggle" id="briefingPromptEditorToggle">
+            <span class="chevron">&#9654;</span> Edit Briefing Prompt
+          </button>
+          <div class="prompt-editor-body" id="briefingPromptEditorBody">
+            <textarea id="briefingPromptEditor" spellcheck="false" placeholder="Loading prompt..."></textarea>
+            <div class="prompt-editor-actions">
+              <button class="small-btn primary" id="briefingPromptEditorApply">Apply</button>
+              <button class="small-btn" id="briefingPromptEditorReset">Reset to Default</button>
+              <span class="prompt-status" id="briefingPromptEditorStatus"></span>
+            </div>
+          </div>
+          <div id="briefingPane" class="empty">Run refresh to generate a briefing.</div>
+        </div>
+      </section>
+
+      <section id="viewHistory" class="mode-view">
+        <div class="panel panel--full">
+          <h2>History (Audit Trail)</h2>
+          <div class="panel-sub">Recommendations, confirmations, actions, and timestamps</div>
+          <div id="svelte-app"></div>
+          <div class="history-list" id="historyList" style="display:none"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="confirmModal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <h3>Confirm Action</h3>
+      <p id="confirmSummary" class="panel-sub">Bulk or high-risk action requires explicit confirmation.</p>
+      <div id="confirmTargets" class="empty"></div>
+      <div class="modal-actions">
+        <button id="confirmCancel" class="small-btn">Cancel</button>
+        <button id="confirmApply" class="small-btn warn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="scannerSettingsModal" class="modal" role="dialog" aria-modal="true"></div>
+  <div id="addTaskModal" class="modal" role="dialog" aria-modal="true"></div>
+  <div id="radarPromptModal" class="modal" role="dialog" aria-modal="true"></div>
+
+  <script type="module" src="svelte/main.js"></script>
+</body>
+</html>

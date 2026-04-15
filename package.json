@@ -7,6 +7,9 @@
     "start": "electron .",
     "demo": "electron . --demo",
     "test": "node --test test/main-utils.test.js test/main-window-state.test.js test/main-pty-bridge.test.js test/main-ipc-handlers.test.js test/main-ipc-tracker-popout.test.js test/renderer-utils.test.js test/renderer-json-parser.test.js test/renderer-models-tracking.test.js test/renderer-models-radar.test.js test/renderer-models-briefing.test.js test/renderer-day-briefing.test.js test/renderer-tracking-renderers.test.js test/renderer-popout.test.js test/renderer-state.test.js test/renderer-prompts.test.js test/renderer-move-item.test.js test/renderer-delete-scanner.test.js test/renderer-scanner-engine.test.js",
+    "dev": "vite src/",
+    "build:renderer": "vite build",
+    "start:svelte": "npm run build:renderer && electron .",
     "dist": "electron-builder --win msi",
     "dist:mac": "electron-builder --mac",
     "dist:linux": "electron-builder --linux",
@@ -54,8 +57,11 @@
     }
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "electron": "^41.0.3",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^26.8.1",
+    "svelte": "^5.55.4",
+    "vite": "^8.0.8"
   },
   "dependencies": {
     "@microsoft/workiq": "^0.4.0",

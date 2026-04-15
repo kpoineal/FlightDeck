@@ -13,6 +13,7 @@ const { registerIpcHandlers } = require('./ipc-handlers');
 
 const APP_ROOT = path.join(__dirname, '..');
 const IS_DEMO = process.argv.includes('--demo');
+const USE_SVELTE = process.env.SVELTE === '1';
 
 if (process.platform === 'win32') {
   app.setAppUserModelId(getWindowsAppUserModelId());
@@ -60,7 +61,10 @@ function createWindow() {
   attachExternalNavigationGuards(win);
 
   const loadOpts = IS_DEMO ? { query: { demo: '1' } } : {};
-  win.loadFile(path.join(APP_ROOT, 'index.html'), loadOpts);
+  const htmlFile = USE_SVELTE
+    ? path.join(APP_ROOT, '..', 'dist-renderer', 'app.html')
+    : path.join(APP_ROOT, 'index.html');
+  win.loadFile(htmlFile, loadOpts);
 
   win.on('resize', () => debouncedSaveWindowState(win, app));
   win.on('move', () => debouncedSaveWindowState(win, app));
