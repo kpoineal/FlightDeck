@@ -90,7 +90,12 @@
   });
 </script>
 
-<section class="summary-strip">
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<section class="summary-strip summary-strip--stacked"
+  on:click={isRadar ? () => { detailOpen = !detailOpen; } : undefined}
+  role={isRadar ? 'button' : undefined}
+  tabindex={isRadar ? 0 : undefined}
+  on:keydown={isRadar ? (e) => e.key === 'Enter' && (detailOpen = !detailOpen) : undefined}>
   <div class="summary-strip-left">
     <span class="summary-sev summary-sev--critical" title={isBriefings ? 'Unbriefed meetings' : 'Critical items'}>
       <i class="legend-dot {isBriefings ? 'unbriefed' : 'critical'}"></i>
@@ -129,11 +134,7 @@
   </div>
 
   {#if isRadar}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="greeting-row"
-      on:click={() => { detailOpen = !detailOpen; }}
-      role="button" tabindex="0"
-      on:keydown={(e) => e.key === 'Enter' && (detailOpen = !detailOpen)}>
+    <div class="greeting-row">
       <div class="greeting-row-left">
         <span class="greeting-icon">{icon}</span>
         <span class="greeting-text">
@@ -199,6 +200,11 @@
 </section>
 
 <style>
+  .summary-strip--stacked {
+    flex-direction: column;
+    align-items: stretch;
+    cursor: pointer;
+  }
   .greeting-row {
     display: flex;
     align-items: center;
@@ -260,6 +266,7 @@
     gap: 8px;
     font-size: 0.78rem;
     color: var(--text-secondary);
+    width: 100%;
   }
   .greeting-detail-card {
     background: color-mix(in srgb, var(--bg-inset) 80%, transparent);
