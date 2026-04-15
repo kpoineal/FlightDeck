@@ -83,21 +83,21 @@
           {#if critical > 0}
             <span class="radar-sev-dot sev-critical" class:active={isFilterActive('severity', 'Critical')}
               title="{critical} Critical — click to filter"
-              on:click={() => toggleFilter('severity', 'Critical')}
+              on:click|stopPropagation={() => toggleFilter('severity', 'Critical')}
               on:keydown={(e) => e.key === 'Enter' && toggleFilter('severity', 'Critical')}
               role="button" tabindex="0">{critical}</span>
           {/if}
           {#if elevated > 0}
             <span class="radar-sev-dot sev-elevated" class:active={isFilterActive('severity', 'Elevated')}
               title="{elevated} Elevated — click to filter"
-              on:click={() => toggleFilter('severity', 'Elevated')}
+              on:click|stopPropagation={() => toggleFilter('severity', 'Elevated')}
               on:keydown={(e) => e.key === 'Enter' && toggleFilter('severity', 'Elevated')}
               role="button" tabindex="0">{elevated}</span>
           {/if}
           {#if observe > 0}
             <span class="radar-sev-dot sev-observe" class:active={isFilterActive('severity', 'Observe')}
               title="{observe} Observe — click to filter"
-              on:click={() => toggleFilter('severity', 'Observe')}
+              on:click|stopPropagation={() => toggleFilter('severity', 'Observe')}
               on:keydown={(e) => e.key === 'Enter' && toggleFilter('severity', 'Observe')}
               role="button" tabindex="0">{observe}</span>
           {/if}
@@ -107,27 +107,27 @@
       {#if blocked > 0}
         <span class="radar-attn-badge attn-blocked" class:active={isFilterActive('status', 'blocked')}
           title="{blocked} blocked — click to filter"
-          on:click={() => toggleFilter('status', 'blocked')}
+          on:click|stopPropagation={() => toggleFilter('status', 'blocked')}
           on:keydown={(e) => e.key === 'Enter' && toggleFilter('status', 'blocked')}
           role="button" tabindex="0">{blocked} blocked</span>
       {/if}
       {#if waiting > 0}
         <span class="radar-attn-badge attn-waiting" class:active={isFilterActive('status', 'waiting')}
           title="{waiting} waiting — click to filter"
-          on:click={() => toggleFilter('status', 'waiting')}
+          on:click|stopPropagation={() => toggleFilter('status', 'waiting')}
           on:keydown={(e) => e.key === 'Enter' && toggleFilter('status', 'waiting')}
           role="button" tabindex="0">{waiting} waiting</span>
       {/if}
       {#if newCount > 0}
         <span class="radar-new-indicator" class:active={isFilterActive('new', 'new')}
           title="{newCount} new or updated — click to filter"
-          on:click={() => toggleFilter('new', 'new')}
+          on:click|stopPropagation={() => toggleFilter('new', 'new')}
           on:keydown={(e) => e.key === 'Enter' && toggleFilter('new', 'new')}
           role="button" tabindex="0">{newCount} new</span>
       {/if}
       {#if inlineFilter}
         <span class="scanner-filter-clear" title="Clear filter"
-          on:click={() => { inlineFilter = null; }}
+          on:click|stopPropagation={() => { inlineFilter = null; }}
           on:keydown={(e) => e.key === 'Enter' && (inlineFilter = null)}
           role="button" tabindex="0">&times;</span>
       {/if}
