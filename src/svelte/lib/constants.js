@@ -90,3 +90,138 @@ export const SIGNAL_TYPE_OPTIONS = [
   { value: 'meeting', label: 'Meetings', icon: '📅' },
   { value: 'doc', label: 'Documents', icon: '📄' },
 ];
+
+export const MAX_TRACKED_EXCLUSIONS = 12;
+
+export const PROMPT_STORAGE_PREFIX = 'flightdeck.prompt.';
+
+export const RADAR_SCAN_JSON_SCHEMA = `Return only valid JSON and nothing else using this schema:
+{
+  "generatedAt": "ISO-8601 timestamp",
+  "kpis": { "critical": number, "elevated": number, "observe": number },
+  "radarItems": [
+    {
+      "id": "string",
+      "title": "string",
+      "severity": "Critical|Elevated|Observe",
+      "sourceType": "string (e.g. Email, Chat, Meeting, Doc, DevOps, Planner — describe the signal source)",
+      "dueAt": "ISO-8601 or null",
+      "owner": "string",
+      "counterparties": ["string"],
+      "summary": "string",
+      "reason": "string",
+      "status": "Inbound",
+      "evidenceLinks": [
+        {
+          "label": "descriptive label for the source",
+          "type": "string (e.g. email, chat, meeting, doc, devops, planner — describe the signal source)",
+          "signalAt": "ISO-8601 timestamp when the signal was sent or updated, or null"
+        }
+      ],
+      "suggestedNextSteps": ["string"],
+      "doneCriteria": "string — one sentence describing what 'done' looks like for this item (e.g. 'Jordan confirms receipt of the budget spreadsheet'), or null if unclear"
+    }
+  ]
+}
+
+IMPORTANT:
+- Include your normal response markdown formatting for the summary.
+- Include your normal response in reason as well.
+
+Suggested next steps rules:
+- 0-2 specific, completable actions starting with a verb naming WHO and WHAT (e.g. 'Reply to Sarah with the revised Q3 timeline', 'Send Jordan the updated budget spreadsheet').
+- Only suggest actions when genuinely useful. Return an empty array if no action is needed.
+- Never use vague language: "consider", "think about", "follow up", "look into". Every action must be concrete and completable.`;
+
+export const BRIEFING_JSON_SCHEMA = `
+
+Return only valid JSON and nothing else:
+{
+  "generatedAt": "ISO-8601 timestamp",
+  "upcomingMeeting": {
+    "title": "string",
+    "startAt": "ISO-8601 timestamp or null",
+    "organizer": "string",
+    "joinUrl": "https URL or null"
+  },
+  "headline": "string",
+  "keyUpdates": ["string"],
+  "decisionsNeeded": ["string"],
+  "topRisks": ["string"],
+  "talkTrack": ["string"],
+  "todayFollowUps": ["string"],
+  "sources": [
+    {
+      "label": "string",
+      "type": "meeting|message|doc",
+      "url": "https URL"
+    }
+  ]
+}`;
+
+export const BRIEFING_MEETING_JSON_SCHEMA = `
+
+Use grounded Microsoft 365 context relevant to this meeting.
+
+Return only valid JSON and nothing else:
+{
+  "generatedAt": "ISO-8601 timestamp",
+  "headline": "string",
+  "upcomingMeeting": {
+    "id": "string",
+    "title": "string",
+    "startAt": "ISO-8601 timestamp or null",
+    "organizer": "string",
+    "joinUrl": "https URL or null"
+  },
+  "keyUpdates": ["string"],
+  "decisionsNeeded": ["string"],
+  "topRisks": ["string"],
+  "talkTrack": ["string"],
+  "todayFollowUps": ["string"],
+  "sources": [
+    {
+      "label": "string",
+      "type": "meeting|message|doc",
+      "url": "https URL"
+    }
+  ]
+}`;
+
+export const DAY_BRIEFING_JSON_SCHEMA = `
+
+Return only valid JSON and nothing else:
+{
+  "generatedAt": "ISO-8601 timestamp",
+  "headline": "string (e.g. 'Busy day ahead: 4 meetings, 2 Critical items')",
+  "topPriorities": ["string — the 3-5 most important things today"],
+  "meetingsRequiringPrep": [
+    {
+      "title": "string",
+      "startAt": "ISO-8601 timestamp or null",
+      "whyPrepNeeded": "string"
+    }
+  ],
+  "atRiskItems": [
+    {
+      "title": "string",
+      "severity": "Critical|Elevated|Observe",
+      "risk": "string"
+    }
+  ],
+  "suggestedTimeBlocks": [
+    {
+      "time": "string (e.g. '9:00 – 9:30 AM')",
+      "activity": "string",
+      "rationale": "string"
+    }
+  ],
+  "todayFollowUps": ["string — concrete follow-ups to handle today"],
+  "sources": [
+    {
+      "label": "string",
+      "type": "meeting|message|doc",
+      "url": "https URL"
+    }
+  ]
+}`;

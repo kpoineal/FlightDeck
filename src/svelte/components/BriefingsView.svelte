@@ -4,6 +4,8 @@
   import { addHistory } from '../lib/actions.js';
   import { savePersistentState } from '../lib/persistence.js';
   import { nowIso, safeDate, cleanDisplayText, normalizeExternalUrl } from '../lib/utils.js';
+  import { buildMeetingBriefingPrompt, buildDayBriefingPrompt } from '../lib/prompts.js';
+  import { runWorkiqJson } from '../lib/json-parser.js';
   import DayBriefingCard from './DayBriefingCard.svelte';
   import MeetingCard from './MeetingCard.svelte';
 
@@ -53,100 +55,12 @@
     return cleanDisplayText(value || '');
   }
 
-  function parseJsonFromResponse(answer) {
-    const jsonMatch = answer.match(/```json\s*([\s\S]*?)```/) || answer.match(/\{[\s\S]*\}/);
-    const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : answer;
-    return JSON.parse(jsonStr);
-  }
-
-  async function buildDayBriefingPrompt() {
-    // Read the day-briefing prompt template
-    let template = '';
+  async function loadPromptTemplate(name) {
     try {
-      const result = await window.workiq.readPromptFile('day-briefing.md');
-      if (result.success && result.content) template = result.content.trim();
+      const result = await window.workiq.readPromptFile(name);
+      if (result.success && result.content) return result.content.trim();
     } catch (_) {}
-
-    if (!template) {
-      template = 'You are preparing a "My Day" morning briefing that synthesizes my full workday from grounded Microsoft 365 context.';
-    }
-
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-    const mtgs = $meetings.map((m) => {
-      const startAt = m.startAt ? safeDate(m.startAt, m.startAt) : 'Unknown time';
-      return `- ${m.title || 'Untitled'} at ${startAt} (organizer: ${m.organizer || 'Unknown'})`;
-    });
-    const meetingsBlock = mtgs.length
-      ? `Today's meetings:\n${mtgs.join('\n')}`
-      : 'No meetings scheduled today — light day.';
-
-    const tracked = $items
-      .filter((i) => i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived')
-      .map((i) => {
-        const dueInfo = i.dueAt ? `due ${i.dueAt}` : 'no due date';
-        return `- ${i.title || 'Untitled'} [${i.severity || 'Observe'}] (${i.status || 'Unknown'}, ${dueInfo})`;
-      });
-    const trackedBlock = tracked.length
-      ? `Active tracked items:\n${tracked.join('\n')}`
-      : 'No active tracked items.';
-
-    const k = $kpis;
-    const kpiBlock = (k.critical != null || k.elevated != null || k.observe != null)
-      ? `Current radar KPIs: Critical=${k.critical ?? 0}, Elevated=${k.elevated ?? 0}, Observe=${k.observe ?? 0}`
-      : 'No radar KPIs available yet.';
-
-    const schema = `
-
-Return only valid JSON and nothing else:
-{
-  "generatedAt": "ISO-8601 timestamp",
-  "headline": "string",
-  "topPriorities": ["string"],
-  "meetingsRequiringPrep": [{ "title": "string", "startAt": "ISO-8601 or null", "whyPrepNeeded": "string" }],
-  "atRiskItems": [{ "title": "string", "severity": "Critical|Elevated|Observe", "risk": "string" }],
-  "suggestedTimeBlocks": [{ "time": "string", "activity": "string", "rationale": "string" }],
-  "todayFollowUps": ["string"],
-  "sources": [{ "label": "string", "type": "meeting|message|doc", "url": "https URL" }]
-}`;
-
-    return `${template}\n\nToday's date: ${today}\n\n${meetingsBlock}\n\n${trackedBlock}\n\n${kpiBlock}${schema}`;
-  }
-
-  async function buildMeetingBriefingPrompt(meeting) {
-    let template = '';
-    try {
-      const result = await window.workiq.readPromptFile('briefing.md');
-      if (result.success && result.content) template = result.content.trim();
-    } catch (_) {}
-
-    if (!template) {
-      template = 'You are preparing me for an upcoming meeting using grounded Microsoft 365 context.';
-    }
-
-    const startAt = meeting?.startAt ? safeDate(meeting.startAt, meeting.startAt) : 'Unknown time';
-    const joinUrl = meeting?.joinUrl || 'No link';
-
-    const meetingDetails = `\n\nMeeting details:\n- Title: ${meeting?.title || 'Untitled meeting'}\n- Start: ${startAt}\n- Organizer: ${meeting?.organizer || 'Unknown organizer'}\n- Join URL: ${joinUrl}`;
-
-    const schema = `
-
-Use grounded Microsoft 365 context relevant to this meeting.
-
-Return only valid JSON and nothing else:
-{
-  "generatedAt": "ISO-8601 timestamp",
-  "headline": "string",
-  "upcomingMeeting": { "id": "string", "title": "string", "startAt": "ISO-8601 or null", "organizer": "string", "joinUrl": "https URL or null" },
-  "keyUpdates": ["string"],
-  "decisionsNeeded": ["string"],
-  "topRisks": ["string"],
-  "talkTrack": ["string"],
-  "todayFollowUps": ["string"],
-  "sources": [{ "label": "string", "type": "meeting|message|doc", "url": "https URL" }]
-}`;
-
-    return `${template}${meetingDetails}${schema}`;
+    return '';
   }
 
   async function handleDayGenerate() {
@@ -157,12 +71,13 @@ Return only valid JSON and nothing else:
     addHistory('recommendation', 'Day briefing generation requested');
 
     try {
-      const prompt = await buildDayBriefingPrompt();
-      const result = await window.workiq.ask(prompt);
-      if (!result.success) throw new Error(result.error || 'Day briefing query failed');
-
-      const payload = parseJsonFromResponse(result.answer);
-      if (!payload || typeof payload.headline !== 'string') throw new Error('Invalid day briefing response');
+      const template = await loadPromptTemplate('day-briefing.md');
+      const prompt = buildDayBriefingPrompt($items, $meetings, $kpis, template);
+      const payload = await runWorkiqJson(
+        prompt,
+        (p) => p && typeof p.headline === 'string',
+        'day-briefing'
+      );
 
       const explicitSources = Array.isArray(payload.sources)
         ? payload.sources
@@ -224,12 +139,13 @@ Return only valid JSON and nothing else:
     addHistory('recommendation', `Briefing generation requested for: ${meeting.title}`, { meetingId });
 
     try {
-      const prompt = await buildMeetingBriefingPrompt(meeting);
-      const result = await window.workiq.ask(prompt);
-      if (!result.success) throw new Error(result.error || 'Meeting briefing query failed');
-
-      const payload = parseJsonFromResponse(result.answer);
-      if (!payload || typeof payload.headline !== 'string') throw new Error('Invalid meeting briefing response');
+      const template = await loadPromptTemplate('briefing.md');
+      const prompt = buildMeetingBriefingPrompt(meeting, template);
+      const payload = await runWorkiqJson(
+        prompt,
+        (p) => p && typeof p.headline === 'string',
+        'meeting-briefing'
+      );
 
       // Ensure upcomingMeeting is populated
       if (!payload.upcomingMeeting || typeof payload.upcomingMeeting !== 'object') {

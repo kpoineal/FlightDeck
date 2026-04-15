@@ -9,6 +9,8 @@ import { nowIso, cleanDisplayText, hashString, normalizeSeverity } from './utils
 import { ALL_SIGNAL_TYPES } from './constants.js';
 import { logInfo, logWarn, logError } from './logger.js';
 import { showToast } from '../components/Toast.svelte';
+import { buildScannerPrompt } from './prompts.js';
+import { runWorkiqJson } from './json-parser.js';
 
 const TICK_MS = 60_000; // 60s
 let intervalHandle = null;
@@ -85,78 +87,15 @@ async function checkDue() {
   }
 }
 
-function buildScannerPromptSimple(scanner) {
-  const userPrompt = scanner.prompt || '';
-  const lastRunAt = scanner.lastRunAt || new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-  const maxItems = scanner.maxItemsPerScan || 10;
 
-  const currentItems = get(items);
-  const dedupLines = [];
-  const seen = new Set();
-  for (const item of currentItems) {
-    if (item.scannerId !== scanner.id) continue;
-    if (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived') continue;
-    const title = cleanDisplayText(item.title || '');
-    if (!title || seen.has(title.toLowerCase())) continue;
-    seen.add(title.toLowerCase());
-    dedupLines.push(`- ${title}`);
-    if (dedupLines.length >= 20) break;
-  }
-  const dedupBlock = dedupLines.length
-    ? `\n\nItems already on my radar from this scanner (do NOT re-report these):\n${dedupLines.join('\n')}`
-    : '';
-
-  // Signal type filtering
-  const signalTypes = Array.isArray(scanner.signalTypes) && scanner.signalTypes.length
-    ? scanner.signalTypes
-    : ALL_SIGNAL_TYPES;
-  const isFiltered = signalTypes.length < ALL_SIGNAL_TYPES.length;
-  const signalFilterBlock = isFiltered
-    ? `\n\nSignal source filter (IMPORTANT):\n- ONLY search for and consider these signal types: ${signalTypes.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(', ')}.`
-    : '';
-
-  return `You are a work-signal scanner agent. Analyze recent Microsoft 365 signals and surface new items that need attention.
-
---- SCANNER MISSION ---
-${userPrompt.replace(/\{lastRunAt\}/g, lastRunAt)}
-
-Time window: Last scan was at ${lastRunAt}. Only return items with signals created or updated AFTER this time.${signalFilterBlock}
-
-Return at most ${maxItems} items. Return strict valid JSON only:
-{
-  "radarItems": [
-    {
-      "id": "string",
-      "title": "string",
-      "severity": "Critical|Elevated|Observe",
-      "sourceType": "string",
-      "dueAt": "ISO-8601 or null",
-      "owner": "string",
-      "counterparties": ["string"],
-      "summary": "string",
-      "reason": "string",
-      "status": "Inbound",
-      "evidenceLinks": [{ "label": "string", "type": "string", "signalAt": "ISO-8601 or null" }],
-      "suggestedNextSteps": ["string"],
-      "doneCriteria": "string or null"
-    }
-  ]
-}${dedupBlock}`;
-}
 
 async function runScanner(scanner) {
-  const prompt = buildScannerPromptSimple(scanner);
-  const result = await window.workiq.ask(prompt);
-  if (!result.success) throw new Error(result.error || 'Scanner query failed');
-
-  let payload;
-  try {
-    const jsonMatch = result.answer.match(/```json\s*([\s\S]*?)```/) || result.answer.match(/\{[\s\S]*\}/);
-    const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : result.answer;
-    payload = JSON.parse(jsonStr);
-  } catch {
-    throw new Error('Could not parse scanner response');
-  }
+  const prompt = buildScannerPrompt(scanner, get(items), get(scanners));
+  const payload = await runWorkiqJson(
+    prompt,
+    (p) => p && Array.isArray(p.radarItems),
+    'scanner'
+  );
 
   if (!payload || !Array.isArray(payload.radarItems)) return;
 

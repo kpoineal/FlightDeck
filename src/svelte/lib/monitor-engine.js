@@ -7,8 +7,8 @@ import { computeNextRunAt } from './models/item.js';
 import { nowIso, cleanDisplayText, normalizeSeverity } from './utils.js';
 import { ALL_SIGNAL_TYPES } from './constants.js';
 import { logInfo, logWarn, logError } from './logger.js';
-import { showToast } from '../components/Toast.svelte';
-
+import { showToast } from '../components/Toast.svelte';import { buildMonitorPrompt } from './prompts.js';
+import { runWorkiqJson } from './json-parser.js';
 const TICK_MS = 30_000; // 30s
 let intervalHandle = null;
 let cycleInProgress = false;
@@ -66,87 +66,15 @@ async function checkDueItems() {
   }
 }
 
-function buildMonitorPrompt(item) {
-  const title = item?.title || 'Tracked task';
-  const context = item?.monitorPrompt || item?.summary || item?.reason || 'No extra context provided';
-  const owner = item?.owner || 'Unknown';
-  const people = Array.isArray(item?.counterparties) && item.counterparties.length
-    ? item.counterparties.join(', ')
-    : 'None listed';
-  const dueInfo = item?.dueAt ? `Due: ${item.dueAt}` : 'No due date set';
-  const severity = item?.severity || 'Observe';
-  const lastStatus = item?.status || 'Unknown';
-  const lastSummary = item?.summary || '';
-  const lastCheckTime = item?.lastRunAt || item?.trackedAt || null;
-  const lastCheckInfo = lastCheckTime
-    ? `Last checked: ${lastCheckTime}`
-    : 'This is the first monitoring check';
 
-  const activeSignals = Array.isArray(item?.monitorSignals) && item.monitorSignals.length
-    ? item.monitorSignals
-    : ALL_SIGNAL_TYPES;
-  const isFiltered = activeSignals.length < ALL_SIGNAL_TYPES.length;
-  const signalFilterInstruction = isFiltered
-    ? `\n\nSignal source filter: ONLY consider these signal types: ${activeSignals.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(', ')}.`
-    : '';
-
-  // Previous summaries for de-dup
-  const history = Array.isArray(item?.updateHistory) ? item.updateHistory : [];
-  let previousSummaries = '';
-  if (history.length) {
-    const recent = history.slice(0, 2);
-    const lines = recent.map((entry, i) => {
-      const ts = entry.timestamp || 'Unknown time';
-      const summary = cleanDisplayText(entry.summary || '');
-      return `  ${i + 1}. [${ts}] ${summary}`;
-    });
-    previousSummaries = `\nPrevious update summaries (do NOT re-report the same information):\n${lines.join('\n')}\n`;
-  }
-
-  return `You are a work-tracking monitor agent. Review the latest Microsoft 365 signals and provide an updated status report for the task below.
-
-Task to monitor:
-- Title: ${title}
-- Severity: ${severity}
-- Status: ${lastStatus}
-- ${dueInfo}
-- Owner: ${owner}
-- People: ${people}
-- ${lastCheckInfo}
-
---- MONITORING CONTEXT ---
-${context}${lastSummary ? `\n\nPrevious summary: ${lastSummary}` : ''}${signalFilterInstruction}
-${previousSummaries}
-Return strict valid JSON only:
-{
-  "hasNewInfo": true | false,
-  "status": "In Progress|Blocked|Waiting|Complete|No Update",
-  "summary": "string",
-  "reason": "string",
-  "severity": "Critical|Elevated|Observe",
-  "dueAt": "ISO-8601 or null",
-  "owner": "string",
-  "counterparties": ["string"],
-  "evidenceLinks": [{ "label": "string", "type": "string", "signalAt": "ISO-8601 or null" }],
-  "suggestedNextSteps": ["string"],
-  "doneCriteria": "string or null",
-  "completionConfidence": "high|medium|low|null"
-}`;
-}
 
 async function runItemCheck(item) {
   const prompt = buildMonitorPrompt(item);
-  const result = await window.workiq.ask(prompt);
-  if (!result.success) throw new Error(result.error || 'Monitor query failed');
-
-  let payload;
-  try {
-    const jsonMatch = result.answer.match(/```json\s*([\s\S]*?)```/) || result.answer.match(/\{[\s\S]*\}/);
-    const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : result.answer;
-    payload = JSON.parse(jsonStr);
-  } catch {
-    throw new Error('Could not parse monitor response');
-  }
+  const payload = await runWorkiqJson(
+    prompt,
+    (candidate) => candidate && typeof candidate.summary === 'string' && typeof candidate.status === 'string',
+    'task-monitor'
+  );
 
   if (!payload || typeof payload.summary !== 'string') return;
 

@@ -9,6 +9,8 @@
   import { startMonitoringLoop, stopMonitoringLoop } from './lib/monitor-engine.js';
   import { cleanDisplayText, hashString, normalizeExternalUrl, nowIso } from './lib/utils.js';
   import { logInfo, persistLog, loadPersistedLog } from './lib/logger.js';
+  import { TODAY_MEETINGS_PROMPT } from './lib/prompts.js';
+  import { runWorkiqJson } from './lib/json-parser.js';
   import Topbar from './components/Topbar.svelte';
   import ConnectBanner from './components/ConnectBanner.svelte';
   import SummaryStrip from './components/SummaryStrip.svelte';
@@ -49,39 +51,11 @@
   async function fetchMeetings() {
     if (!window.workiq || typeof window.workiq.ask !== 'function') return;
     try {
-      const prompt = `List my upcoming meetings for today from Microsoft 365 context.
-
-Constraints:
-- Include only meetings starting later today in my local timezone.
-- Keep response focused and concise.
-- Return strict valid JSON only.
-
-Schema:
-{
-  "generatedAt": "ISO-8601 timestamp",
-  "meetings": [
-    {
-      "id": "string",
-      "title": "string",
-      "startAt": "ISO-8601 timestamp",
-      "endAt": "ISO-8601 timestamp or null",
-      "organizer": "string",
-      "joinUrl": "https URL or null"
-    }
-  ]
-}`;
-
-      const result = await window.workiq.ask(prompt);
-      if (!result.success) return;
-
-      let payload;
-      try {
-        const jsonMatch = result.answer.match(/```json\s*([\s\S]*?)```/) || result.answer.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : result.answer;
-        payload = JSON.parse(jsonStr);
-      } catch {
-        return;
-      }
+      const payload = await runWorkiqJson(
+        TODAY_MEETINGS_PROMPT,
+        (p) => p && Array.isArray(p.meetings),
+        'meetings'
+      );
 
       const raw = Array.isArray(payload?.meetings) ? payload.meetings : [];
       const now = Date.now();
