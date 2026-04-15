@@ -43,7 +43,7 @@ export function pruneHistory() {
       return Number.isFinite(entryTime) && entryTime > cutoff;
     });
     if (pruned.length > HISTORY_MAX_ENTRIES) {
-      pruned = pruned.slice(-HISTORY_MAX_ENTRIES);
+      pruned = pruned.slice(0, HISTORY_MAX_ENTRIES);
     }
     return pruned;
   });

@@ -4,6 +4,10 @@
   import { loadPersistentState, savePersistentState } from './lib/persistence.js';
   import { items, scanners, meetings, briefingsByMeetingId, briefingSeenAt,
     density, filter, collapsedSections } from './lib/stores.js';
+  import { addHistory } from './lib/actions.js';
+  import { startScannerEngine, stopScannerEngine } from './lib/scanner-engine.js';
+  import { startMonitoringLoop, stopMonitoringLoop } from './lib/monitor-engine.js';
+  import { cleanDisplayText, hashString, normalizeExternalUrl, nowIso } from './lib/utils.js';
   import Topbar from './components/Topbar.svelte';
   import ConnectBanner from './components/ConnectBanner.svelte';
   import SummaryStrip from './components/SummaryStrip.svelte';
@@ -41,6 +45,74 @@
     saveTimer = setTimeout(() => savePersistentState(), 500);
   }
 
+  async function fetchMeetings() {
+    if (!window.workiq || typeof window.workiq.ask !== 'function') return;
+    try {
+      const prompt = `List my upcoming meetings for today from Microsoft 365 context.
+
+Constraints:
+- Include only meetings starting later today in my local timezone.
+- Keep response focused and concise.
+- Return strict valid JSON only.
+
+Schema:
+{
+  "generatedAt": "ISO-8601 timestamp",
+  "meetings": [
+    {
+      "id": "string",
+      "title": "string",
+      "startAt": "ISO-8601 timestamp",
+      "endAt": "ISO-8601 timestamp or null",
+      "organizer": "string",
+      "joinUrl": "https URL or null"
+    }
+  ]
+}`;
+
+      const result = await window.workiq.ask(prompt);
+      if (!result.success) return;
+
+      let payload;
+      try {
+        const jsonMatch = result.answer.match(/```json\s*([\s\S]*?)```/) || result.answer.match(/\{[\s\S]*\}/);
+        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : result.answer;
+        payload = JSON.parse(jsonStr);
+      } catch {
+        return;
+      }
+
+      const raw = Array.isArray(payload?.meetings) ? payload.meetings : [];
+      const now = Date.now();
+      const processed = raw
+        .map((item) => {
+          const startAt = item.startAt || null;
+          const startTime = startAt ? new Date(startAt).getTime() : Number.NaN;
+          const title = cleanDisplayText(item.title || 'Untitled meeting');
+          const organizer = cleanDisplayText(item.organizer || 'Unknown organizer');
+          const seed = [title.toLowerCase(), organizer.toLowerCase(), String(startAt), String(item.endAt || '')].join('|');
+          const id = cleanDisplayText(item.id || '').trim() || `meeting_${hashString(seed)}`;
+          return {
+            id,
+            title,
+            startAt,
+            endAt: item.endAt || null,
+            organizer,
+            joinUrl: normalizeExternalUrl(item.joinUrl || ''),
+            startTime,
+          };
+        })
+        .filter((item) => Number.isFinite(item.startTime) && item.startTime >= now)
+        .sort((a, b) => a.startTime - b.startTime);
+
+      meetings.set(processed);
+      addHistory('scan', `Loaded ${processed.length} upcoming meeting(s)`);
+      savePersistentState();
+    } catch (err) {
+      console.warn('[flightdeck] meetings fetch failed', err.message);
+    }
+  }
+
   // Store subscriptions for auto-save
   const unsubscribers = [];
 
@@ -53,6 +125,16 @@
       try {
         version = await window.workiq.getAppVersion() || '';
       } catch (_) {}
+    }
+
+    // Start background engines and fetch meetings if connected
+    if (window.workiq && typeof window.workiq.ask === 'function') {
+      const isConnected = $connected;
+      if (isConnected) {
+        startScannerEngine();
+        startMonitoringLoop();
+        fetchMeetings();
+      }
     }
 
     // Auto-save on store changes
@@ -83,6 +165,8 @@
 
   onDestroy(() => {
     clearTimeout(saveTimer);
+    stopScannerEngine();
+    stopMonitoringLoop();
     unsubscribers.forEach((unsub) => unsub());
   });
 
@@ -91,6 +175,9 @@
       window.workiq.enable();
     }
     connected.set(true);
+    startScannerEngine();
+    startMonitoringLoop();
+    fetchMeetings();
   }
 </script>
 
