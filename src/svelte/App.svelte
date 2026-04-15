@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import { mode, connected, history as historyStore } from './lib/stores.js';
   import { loadPersistentState, savePersistentState } from './lib/persistence.js';
   import { items, scanners, meetings, briefingsByMeetingId, briefingSeenAt,
@@ -149,17 +150,38 @@
 
     // Listen for desktop notification clicks → navigate to item
     if (window.workiq && typeof window.workiq.onNotificationClicked === 'function') {
-      window.workiq.onNotificationClicked((payload) => {
+      const unsubNotification = window.workiq.onNotificationClicked((payload) => {
         const taskId = payload?.taskId;
         if (!taskId) return;
+
+        // Find which scanner section contains this item
+        const currentItems = get(items);
+        const targetItem = currentItems.find(i => i.id === taskId);
+
         // Reset filter so target item is visible
         filter.set('all');
         mode.set('Radar');
+
+        // Expand the scanner section containing this item (collapse others)
+        if (targetItem && targetItem.scannerId) {
+          const sectionId = `scanner-${targetItem.scannerId}`;
+          // Keep only other sections collapsed — expand the target
+          collapsedSections.update($cs => {
+            const withoutTarget = $cs.filter(id => id !== sectionId);
+            // Collapse all OTHER sections for accordion effect
+            const allSectionIds = get(scanners).map(s => `scanner-${s.id}`);
+            return allSectionIds.filter(id => id !== sectionId);
+          });
+        }
+
         // Highlight the target item (components react to this)
-        highlightedItemId.set(taskId);
-        // Clear highlight after animation completes
-        setTimeout(() => highlightedItemId.set(null), 4000);
+        // Use a small delay to let the DOM update after section expansion
+        setTimeout(() => {
+          highlightedItemId.set(taskId);
+          setTimeout(() => highlightedItemId.set(null), 4000);
+        }, 100);
       });
+      unsubscribers.push(unsubNotification);
     }
   });
 
