@@ -54,46 +54,43 @@
   }
 
   // ── Item interaction handlers ────────────────────────────────────
+  // NOTE: Svelte writable stores require a new array/object reference to
+  // trigger subscriber notifications. Returning the same array won't update
+  // derived stores or child component props. We use .map() to produce a
+  // new array with a cloned item when modifying item properties.
+
   function handleSeverityChange(data) {
-    items.update(($items) => {
-      const item = $items.find(i => i.id === data.itemId);
-      if (item) item.severity = data.value;
-      return $items;
-    });
+    items.update(($items) => $items.map(i =>
+      i.id === data.itemId ? { ...i, severity: data.value } : i
+    ));
     savePersistentState();
   }
 
   function handleStatusChange(data) {
-    items.update(($items) => {
-      const item = $items.find(i => i.id === data.itemId);
-      if (item) {
-        item.lifecycleStatus = data.value;
-        item.lastChangedAt = new Date().toISOString();
-        if (data.value === 'complete' && !item.completedAt) {
-          item.completedAt = new Date().toISOString();
-        }
-        if (data.value === 'complete' || data.value === 'archived') {
-          item.monitorEnabled = false;
-          item.nextRunAt = null;
-        }
+    items.update(($items) => $items.map(i => {
+      if (i.id !== data.itemId) return i;
+      const updated = { ...i, lifecycleStatus: data.value, lastChangedAt: new Date().toISOString() };
+      if (data.value === 'complete' && !updated.completedAt) {
+        updated.completedAt = new Date().toISOString();
       }
-      return $items;
-    });
+      if (data.value === 'complete' || data.value === 'archived') {
+        updated.monitorEnabled = false;
+        updated.nextRunAt = null;
+      }
+      return updated;
+    }));
     savePersistentState();
   }
 
   function handleMarkSeen(data) {
-    items.update(($items) => {
-      const item = $items.find(i => i.id === data.itemId);
-      if (item) {
-        item.hasNewUpdate = false;
-        item.isNew = false;
-        if (Array.isArray(item.updateHistory)) {
-          item.updateHistory.forEach(e => { e.seen = true; });
-        }
+    items.update(($items) => $items.map(i => {
+      if (i.id !== data.itemId) return i;
+      const updated = { ...i, hasNewUpdate: false, isNew: false };
+      if (Array.isArray(updated.updateHistory)) {
+        updated.updateHistory = updated.updateHistory.map(e => ({ ...e, seen: true }));
       }
-      return $items;
-    });
+      return updated;
+    }));
     savePersistentState();
   }
 
@@ -111,38 +108,31 @@
   }
 
   function handleScheduleChange(data) {
-    items.update(($items) => {
-      const item = $items.find(i => i.id === data.itemId);
-      if (item) item[data.field] = data.value;
-      return $items;
-    });
+    items.update(($items) => $items.map(i =>
+      i.id === data.itemId ? { ...i, [data.field]: data.value } : i
+    ));
     savePersistentState();
   }
 
   function handlePromptChange(data) {
-    items.update(($items) => {
-      const item = $items.find(i => i.id === data.itemId);
-      if (item) item.monitorPrompt = data.value;
-      return $items;
-    });
+    items.update(($items) => $items.map(i =>
+      i.id === data.itemId ? { ...i, monitorPrompt: data.value } : i
+    ));
     savePersistentState();
   }
 
   function handleMoveScanner(data) {
-    items.update(($items) => {
-      const item = $items.find(i => i.id === data.itemId);
-      if (item) item.scannerId = data.scannerId;
-      return $items;
-    });
+    items.update(($items) => $items.map(i =>
+      i.id === data.itemId ? { ...i, scannerId: data.scannerId } : i
+    ));
     savePersistentState();
   }
 
   function handleRunNow(data) {
-    if (window.workiq && typeof window.workiq.ask === 'function') {
-      const item = $items.find(i => i.id === data.itemId);
-      if (item && item.monitorPrompt) {
-        window.workiq.ask(item.monitorPrompt);
-      }
+    const currentItems = $items;
+    const item = currentItems.find(i => i.id === data.itemId);
+    if (item && item.monitorPrompt && window.workiq && typeof window.workiq.ask === 'function') {
+      window.workiq.ask(item.monitorPrompt);
     }
   }
 
