@@ -54,6 +54,13 @@
     return sorted;
   });
 
+  // Auto-clear filter when it produces zero results but items still exist
+  $effect(() => {
+    if (inlineFilter && filteredItems.length === 0 && sorted.length > 0) {
+      inlineFilter = null;
+    }
+  });
+
   function toggleFilter(type, value) {
     if (inlineFilter && inlineFilter.type === type && inlineFilter.value === value) {
       inlineFilter = null;
