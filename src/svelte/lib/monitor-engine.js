@@ -7,6 +7,7 @@ import { computeNextRunAt } from './models/item.js';
 import { nowIso, cleanDisplayText, normalizeSeverity } from './utils.js';
 import { ALL_SIGNAL_TYPES } from './constants.js';
 import { logInfo, logWarn, logError } from './logger.js';
+import { showToast } from '../components/Toast.svelte';
 
 const TICK_MS = 30_000; // 30s
 let intervalHandle = null;
@@ -209,6 +210,22 @@ async function runItemCheck(item) {
         updated.updateHistory = updateHistory;
 
         addHistory('scan', `Meaningful change detected: ${updated.title}`, { itemId: updated.id });
+
+        // In-app toast for meaningful changes
+        if (updated.notifyEnabled !== false) {
+          showToast(`Update: ${updated.title}`, { icon: '📋' });
+        }
+
+        // Desktop notification for critical/elevated changes
+        if (updated.notifyEnabled !== false
+          && (updated.severity === 'Critical' || updated.severity === 'Elevated')
+          && window.workiq && typeof window.workiq.showDesktopNotification === 'function') {
+          window.workiq.showDesktopNotification({
+            title: `${updated.severity}: ${updated.title}`,
+            body: updated.summary || 'New activity detected',
+            taskId: updated.id,
+          }).catch(() => {});
+        }
       }
 
       // Handle one-time monitors

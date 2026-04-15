@@ -8,6 +8,7 @@ import { computeScannerNextRunAt } from './models/scanner.js';
 import { nowIso, cleanDisplayText, hashString, normalizeSeverity } from './utils.js';
 import { ALL_SIGNAL_TYPES } from './constants.js';
 import { logInfo, logWarn, logError } from './logger.js';
+import { showToast } from '../components/Toast.svelte';
 
 const TICK_MS = 60_000; // 60s
 let intervalHandle = null;
@@ -236,5 +237,32 @@ async function runScanner(scanner) {
 
   if (unique.length) {
     addHistory('scan', `Scanner "${scanner.name}" found ${unique.length} new item(s)`, { scannerId: scanner.id });
+
+    // In-app toast
+    const notifMode = scanner.notificationMode || 'all';
+    if (notifMode !== 'silent') {
+      const shouldNotify = notifMode !== 'critical-only'
+        || unique.some((i) => normalizeSeverity(i.severity) === 'Critical');
+      if (shouldNotify) {
+        const label = unique.length === 1
+          ? unique[0].title
+          : `${unique.length} items from ${scanner.name}`;
+        showToast(label, { icon: '\uD83D\uDD0D' });
+      }
+    }
+
+    // Desktop notification
+    if (notifMode !== 'silent' && window.workiq && typeof window.workiq.showDesktopNotification === 'function') {
+      const notifyItems = notifMode === 'critical-only'
+        ? unique.filter((i) => normalizeSeverity(i.severity) === 'Critical')
+        : unique;
+      if (notifyItems.length) {
+        const title = `Scanner: ${scanner.name}`;
+        const body = notifyItems.length === 1
+          ? `New item: ${notifyItems[0].title}`
+          : `${notifyItems.length} new items found`;
+        window.workiq.showDesktopNotification({ title, body, taskId: notifyItems[0].id }).catch(() => {});
+      }
+    }
   }
 }
