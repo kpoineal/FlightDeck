@@ -4,7 +4,7 @@
   import SearchOverlay from './SearchOverlay.svelte';
   import iconUrl from '../../icon.png';
 
-  let { version = '', updateAvailable = false, updateText = 'Update available', updateUrl = '' } = $props();
+  let { version = '', updateAvailable = false, updateText = 'Update available', updateUrl = '', onupdatedismiss } = $props();
 
   let updateDismissed = $state(false);
 
@@ -21,6 +21,7 @@
 
   function dismissUpdate() {
     updateDismissed = true;
+    onupdatedismiss?.();
   }
 
   function handleSearchNavigate(data) {
@@ -41,7 +42,7 @@
     <img class="brand-logo" src={iconUrl} alt="FlightDeck logo" />
     <span class="brand-name">FLIGHT<span class="brand-accent">DECK</span></span>
     {#if version}
-      <span class="version-badge">{version}</span>
+      <span class="version-badge visible">v{version}</span>
     {/if}
     {#if updateAvailable && !updateDismissed}
       <span class="update-indicator">

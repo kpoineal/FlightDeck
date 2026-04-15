@@ -26,6 +26,7 @@
   let updateAvailable = $state(false);
   let updateText = $state('Update available');
   let updateUrl = $state('');
+  let updateVersion = $state('');
   let confirmOpen = false;
   let confirmSummary = '';
   let confirmTargets = '';
@@ -104,6 +105,22 @@
       } catch (_) {}
     }
 
+    // Check for updates
+    if (window.workiq && typeof window.workiq.checkForUpdates === 'function') {
+      try {
+        const update = await window.workiq.checkForUpdates();
+        if (update && update.available) {
+          const dismissed = await window.workiq.storeGet('dismissed-update-version');
+          if (dismissed !== update.latestVersion) {
+            updateAvailable = true;
+            updateText = `v${update.latestVersion} available`;
+            updateUrl = update.releaseUrl || '';
+            updateVersion = update.latestVersion;
+          }
+        }
+      } catch (_) {}
+    }
+
     // Start background engines and fetch meetings if connected
     if (window.workiq && typeof window.workiq.ask === 'function') {
       const isConnected = $connected;
@@ -129,15 +146,6 @@
         loadPersistentState();
       });
     }
-
-    // Listen for update notifications
-    if (window.workiq && typeof window.workiq.onUpdateAvailable === 'function') {
-      window.workiq.onUpdateAvailable((info) => {
-        updateAvailable = true;
-        if (info && info.text) updateText = info.text;
-        if (info && info.url) updateUrl = info.url;
-      });
-    }
   });
 
   onDestroy(() => {
@@ -159,7 +167,12 @@
   }
 </script>
 
-<Topbar {version} {updateAvailable} {updateText} {updateUrl} />
+<Topbar {version} {updateAvailable} {updateText} {updateUrl}
+  onupdatedismiss={() => {
+    if (updateVersion && window.workiq) {
+      window.workiq.storeSet('dismissed-update-version', updateVersion);
+    }
+  }} />
 
 <div class="app-shell">
   <main class="main">
