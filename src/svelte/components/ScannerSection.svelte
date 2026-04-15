@@ -15,6 +15,12 @@
 
   // Inline filter state
   let inlineFilter = $state(null);
+  // Accordion: track which row is expanded (only one at a time)
+  let expandedRowId = $state(null);
+
+  function handleRowExpand(data) {
+    expandedRowId = data.itemId;
+  }
 
   let critical = $derived(items.filter(i => i.severity === 'Critical').length);
   let elevated = $derived(items.filter(i => i.severity === 'Elevated').length);
@@ -173,6 +179,8 @@
       {#each filteredItems as item (item.id)}
         {#if isMinimal}
           <TrackerRow {item}
+            expanded={expandedRowId === item.id}
+            onrowexpand={handleRowExpand}
             onseveritychange={onseveritychange}
             onstatuschange={onstatuschange}
             onpopout={onpopout}

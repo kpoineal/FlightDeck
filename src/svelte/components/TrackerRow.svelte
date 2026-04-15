@@ -5,13 +5,29 @@
   import ActivityTimeline from './ActivityTimeline.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
 
-  let { item, expanded = false, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onrunnow } = $props();
+  let { item, expanded = false, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onrunnow, onrowexpand } = $props();
 
   let isExpanded = $state(expanded);
   let monitoringOpen = $state(false);
   let promptPanelOpen = $state(false);
   let peopleOpen = $state(true);
   let linksOpen = $state(true);
+
+  function handleRowClick(e) {
+    // Don't toggle if clicking interactive elements
+    if (e.target.closest('select') || e.target.closest('input') ||
+        e.target.closest('label') || e.target.closest('button')) return;
+    isExpanded = !isExpanded;
+    // Notify parent for accordion behavior
+    if (isExpanded) onrowexpand?.({ itemId: item.id });
+  }
+
+  // Accordion: collapse when another row expands
+  $effect(() => {
+    if (expanded === false && isExpanded) {
+      isExpanded = false;
+    }
+  });
 
   let isTerminalStatus = $derived(item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
   let hasNew = $derived(!isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true));
@@ -39,11 +55,11 @@
   data-item-status={item.lifecycleStatus || 'in-progress'}
   data-item-new={hasNew ? 'true' : 'false'}
 >
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="tracker-row" class:has-new-update={hasNew} class:expanded={isExpanded}
-    on:click={() => { isExpanded = !isExpanded; }}
+    on:click={handleRowClick}
     role="button" tabindex="0"
-    on:keydown={(e) => e.key === 'Enter' && (isExpanded = !isExpanded)}>
+    on:keydown={(e) => e.key === 'Enter' && handleRowClick(e)}>
     <select class="severity-select {sevClass}" value={item.severity}
       on:change={(e) => onseveritychange?.({ itemId: item.id, value: e.target.value })}
       on:click|stopPropagation>
