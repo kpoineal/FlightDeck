@@ -41,7 +41,9 @@
 >
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <div class="tracker-row" class:has-new-update={hasNew} class:expanded={isExpanded}
-    on:click|self={() => { isExpanded = !isExpanded; }}>
+    on:click={() => { isExpanded = !isExpanded; }}
+    role="button" tabindex="0"
+    on:keydown={(e) => e.key === 'Enter' && (isExpanded = !isExpanded)}>
     <select class="severity-select {sevClass}" value={item.severity}
       on:change={(e) => onseveritychange?.({ itemId: item.id, value: e.target.value })}
       on:click|stopPropagation>
