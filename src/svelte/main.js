@@ -1,16 +1,18 @@
 import App from './App.svelte';
-import { mode } from './lib/stores.js';
+
+// Theme init — runs early to avoid flash
+(function initTheme() {
+  const stored = localStorage.getItem('fd-theme');
+  if (stored === 'light' || stored === 'dark') {
+    document.documentElement.setAttribute('data-theme', stored);
+  } else {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+  }
+})();
 
 const app = new App({
   target: document.getElementById('svelte-app'),
-});
-
-// Bridge: sync vanilla JS mode tab clicks → Svelte mode store
-document.querySelectorAll('.mode-btn[data-mode]').forEach((button) => {
-  button.addEventListener('click', () => {
-    const newMode = button.dataset.mode;
-    if (newMode) mode.set(newMode === 'Tracking' ? 'Radar' : newMode);
-  });
 });
 
 export default app;

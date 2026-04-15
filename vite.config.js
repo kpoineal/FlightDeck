@@ -16,7 +16,10 @@ export default defineConfig({
     cssCodeSplit: false,
     target: 'esnext',
     rollupOptions: {
-      input: 'src/app.html',
+      input: {
+        main: 'src/app.html',
+        popout: 'src/popout.html',
+      },
     },
   },
 });
