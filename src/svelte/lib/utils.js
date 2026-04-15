@@ -401,6 +401,93 @@ export function adoptStructuredLabels(inlineLinks, structuredLinks) {
   return inlineLinks;
 }
 
+// ── Severity / sorting / grouping helpers ────────────────────────────
+
+export function severityClass(value) {
+  const sev = normalizeSeverity(value).toLowerCase();
+  if (sev === 'critical') return 'critical';
+  if (sev === 'elevated') return 'elevated';
+  return 'observe';
+}
+
+export function severityRankValue(value) {
+  const sev = normalizeSeverity(value).toLowerCase();
+  if (sev === 'critical') return 0;
+  if (sev === 'elevated') return 1;
+  return 2;
+}
+
+export function sortBySeverity(items, useHasNewUpdate = false) {
+  return [...items].sort((a, b) => {
+    const newA = useHasNewUpdate ? ((a.hasNewUpdate === true || a.isNew === true) ? 0 : 1) : 0;
+    const newB = useHasNewUpdate ? ((b.hasNewUpdate === true || b.isNew === true) ? 0 : 1) : 0;
+    if (newA !== newB) return newA - newB;
+    return severityRankValue(a.severity) - severityRankValue(b.severity);
+  });
+}
+
+export function relativeTime(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  const diffMs = Date.now() - parsed.getTime();
+  if (diffMs < 0) return 'just now';
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+export function signalRecencyLabel(value, referenceDate = new Date()) {
+  const iso = toIsoOrNull(value);
+  if (!iso) return null;
+  const parsed = new Date(iso);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  const now = new Date(referenceDate);
+  if (!Number.isFinite(now.getTime())) return null;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfSignalDay = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  const dayDelta = Math.floor((startOfToday.getTime() - startOfSignalDay.getTime()) / (24 * 60 * 60 * 1000));
+  if (dayDelta <= 0) return 'today';
+  if (dayDelta === 1) return 'yesterday';
+  const month = parsed.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+  const day = parsed.getUTCDate();
+  return parsed.getUTCFullYear() === now.getUTCFullYear()
+    ? `${month} ${day}`
+    : `${month} ${day}, ${parsed.getUTCFullYear()}`;
+}
+
+export function unseenHistoryCount(item) {
+  if (!Array.isArray(item?.updateHistory)) return 0;
+  return item.updateHistory.filter((e) => e.seen === false).length;
+}
+
+export function groupItemsBySource(filteredItems, scannerList) {
+  const scannerGroups = new Map();
+  const scanners = Array.isArray(scannerList) ? scannerList : [];
+  const sortedScanners = [...scanners].sort((a, b) => {
+    const aEnabled = a.enabled !== false;
+    const bEnabled = b.enabled !== false;
+    if (aEnabled !== bEnabled) return aEnabled ? -1 : 1;
+    return 0;
+  });
+  for (const scanner of sortedScanners) {
+    scannerGroups.set(scanner.id, { scanner, items: [] });
+  }
+  for (const item of filteredItems) {
+    if (item.scannerId && scannerGroups.has(item.scannerId)) {
+      scannerGroups.get(item.scannerId).items.push(item);
+    } else if (scannerGroups.size > 0) {
+      [...scannerGroups.values()][0].items.push(item);
+    }
+  }
+  return [...scannerGroups.values()];
+}
+
 /** Strip markdown, URLs, citation artifacts, and bold markers from briefing text. */
 export function sanitizeBriefingText(value) {
   return normalizeSpacingArtifacts(String(value || '')

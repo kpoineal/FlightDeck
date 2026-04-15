@@ -68,3 +68,25 @@ Rules:
 - Include any commitments made to me or made by me, inferred or otherwise.
 - Include inline citations for every referenced source.
 - Prioritize current, time-sensitive work.`;
+
+export const LIFECYCLE_LABELS = {
+  'in-progress': 'In Progress',
+  'blocked': 'Blocked',
+  'waiting': 'Waiting',
+  'snoozed': 'Snoozed',
+  'complete': 'Complete',
+  'archived': 'Archived',
+};
+
+export const NOTIFICATION_MODE_OPTIONS = [
+  { value: 'all', label: 'All items' },
+  { value: 'critical-only', label: 'Critical only' },
+  { value: 'silent', label: 'Silent' },
+];
+
+export const SIGNAL_TYPE_OPTIONS = [
+  { value: 'email', label: 'Email', icon: '\u2709\ufe0f' },
+  { value: 'chat', label: 'Chat', icon: '\uD83D\uDCAC' },
+  { value: 'meeting', label: 'Meetings', icon: '\uD83D\uDCC5' },
+  { value: 'doc', label: 'Documents', icon: '\uD83D\uDCC4' },
+];
