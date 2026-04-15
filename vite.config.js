@@ -20,6 +20,15 @@ export default defineConfig({
         main: 'src/app.html',
         popout: 'src/popout.html',
       },
+      output: {
+        manualChunks(id) {
+          // Force Svelte runtime into a single shared chunk so all
+          // components share the same reactive context variables.
+          if (id.includes('node_modules/svelte')) {
+            return 'svelte-runtime';
+          }
+        },
+      },
     },
   },
 });
