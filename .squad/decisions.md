@@ -1472,3 +1472,43 @@
 **Summary:** Fixed `loadPersistentState()` in `state.js` where `if (!parsed) return;` returned early when the store was empty, skipping seed scanner creation and the `_loaded` flag. Replaced with `parsed = {}` fallback so seed scanner creation and `_loaded` always execute. Users upgrading from v1.0.4 to v1.1.0 saw no default scanner on initial load.
 
 **Files:** `src/renderer/state.js`, `test/renderer-state.test.js`. 589 tests pass (0 fail, 4 skipped).
+
+---
+
+## DEC-084: Svelte Migration Assessment — Not Yet
+
+**Author:** Maverick (Lead) + Goose (Frontend Dev) | **Date:** 2026-04-15 | **Status:** Assessment | **Requested by:** Kyle
+
+**Summary:** Full architecture-level assessment of migrating FlightDeck from vanilla JS to Svelte. Recommendation: **do not migrate yet**. The post-refactoring modular architecture (25 focused files, clear separation) already delivers most maintainability benefits. The recommended next step is ES modules + Vite (vanilla mode) at ~20% of Svelte migration cost, which also makes a future Svelte migration easier.
+
+**Overall LOE:** XL (full renderer layer rewrite)
+
+**LOE breakdown:**
+- Build tooling (Vite + Svelte + Electron): S
+- Component conversion (renderers → .svelte): L (~2,800 lines of HTML-string renderers)
+- State management (mutable → Svelte stores): M-L (highest-risk area, touches every module)
+- Styling (CSS → scoped styles): S-M (3,600 lines, mostly mechanical)
+- IPC integration: S (`window.workiq` works as-is)
+- Event migration: M (events.js 1,113L eliminated, logic absorbed into components)
+- Models/logic (non-rendering): S (stay as-is)
+- Testing migration: L (5,350 lines rewritten for Vitest + @testing-library/svelte)
+
+**What stays unchanged:** `src/main/` (6 files), `src/preload.js`, `src/shared/ipc-contract.js`, `src/prompts/`, `src/demo/fixture.json`.
+
+**What changes completely:** All 7 renderer files (~2,800L), `events.js` (eliminated), `state.js` → Svelte stores, `app.js` → App.svelte, `popout.js` → Popout.svelte, `search.js` → SearchOverlay.svelte, `index.html` → Vite entry, all 9 CSS files → component `<style>` blocks, all 18 test files rewritten.
+
+**Key risks:**
+1. Electron + Vite CSP — Vite dev server injects inline scripts; needs CSP relaxation in dev or `electron-vite`.
+2. State migration — shared mutable `state` object referenced by every module; converting to Svelte stores is highest-risk.
+3. Testing cliff — `vm.runInContext` testing pattern is vanilla-JS-specific; all 5,350 test lines rewritten from scratch.
+4. innerHTML → `{@html}` — existing `escapeHtml()` discipline must be maintained.
+5. Demo mode interceptor — monkey-patching needs DI pattern in module system.
+6. Popout window — needs separate entry point or conditional root component.
+
+**Recommended next step:** ES modules + Vite (no framework) — convert 22 `<script>` tags to `import`/`export`, add Vite as dev server + bundler. Gains: HMR, tree-shaking, proper dependency graph. Cost: ~20% of full Svelte migration.
+
+**Revisit Svelte when:** (a) app adds significant new UI complexity, (b) manual DOM updates become dominant bug source, (c) team is ready for full testing rewrite.
+
+**Component inventory (Goose):** ~35-40 Svelte components needed. All 22 JS modules and 9 CSS files mapped. Svelte confirmed as strong architectural fit.
+
+**Source:** `.squad/decisions/inbox/maverick-svelte-assessment.md`

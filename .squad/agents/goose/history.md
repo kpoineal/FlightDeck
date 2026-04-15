@@ -472,3 +472,17 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Root cause found**: `loadPersistentState()` in `state.js` had `if (!parsed) return;` that returned early when store was empty, skipping seed scanner creation and `_loaded` flag.
 - **Fix applied by coordinator**: Replaced early return with `parsed = {}` fallback. Test added for empty store scenario. 589 tests pass.
 - **Pattern**: Early returns in state initialization functions can silently skip downstream setup logic. Always ensure fallback-to-empty-object instead of bail-out when a store read returns null/undefined.
+
+### 2026-04-15 — Svelte Migration Feasibility Analysis
+- **Research task**: Comprehensive analysis of migrating FlightDeck from vanilla JS to Svelte.
+- **Frontend scope**: ~8,800 lines renderer JS, ~3,600 lines CSS, ~200 lines HTML across 22 JS modules, 9 CSS files, and 1 HTML shell.
+- **Key architectural challenges identified**:
+  1. Global mutable `state` object + `elements` DOM cache pattern is deeply intertwined — every module reads/writes state directly and calls render functions imperatively. Svelte stores would require inverting this: state changes drive rendering reactively instead of explicit `renderXxxMode()` calls.
+  2. Script-tag loading with shared global scope means all ~60+ functions are globally available. Moving to Svelte components requires explicit imports and prop/store passing at every boundary.
+  3. Massive HTML string concatenation in renderers (tracking.js: 934 lines, radar.js: 922 lines, scanner.js: 251 lines) generates HTML via template literals with `innerHTML`. Each would become declarative Svelte markup — the biggest refactoring effort.
+  4. Events.js (1,113 lines) is a single event-delegation root using `closest()` traversals. Svelte's `on:click` per-component would distribute this across ~30+ components.
+  5. IPC bridge via `window.workiq` (preload.js) would need a thin Svelte-friendly wrapper (store or context) but the bridge itself is clean and unchanged.
+  6. CSS tokens/theming already uses CSS custom properties — maps well to Svelte's scoped styles. Light/dark defined 2× (explicit + media query) could stay as-is.
+  7. Monitor engine and scanner engine run background `setInterval` loops with direct state mutation — would need to dispatch to stores rather than mutate directly.
+- **Migration estimate**: M-L effort (~4-6 weeks for one developer), with the heaviest lift in renderers/tracking.js, renderers/radar.js, events.js, and state.js conversion.
+- **Key files analyzed**: All files in `src/renderer/`, `src/renderer/models/`, `src/renderer/renderers/`, `src/styles/`, `src/index.html`, `src/shared/ipc-contract.js`, `src/preload.js`.
