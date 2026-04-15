@@ -368,4 +368,24 @@
 
 **Recommendation:** The codebase is already well-modularized enough that the framework "escape velocity" benefit is reduced. Svelte would buy: reactive state, declarative templates, scoped styles, smaller bundles. But the cost is a full renderer rewrite (XL). Alternative: stay vanilla JS, add a bundler (Vite with vanilla mode), convert to ES modules. This gets 60% of the DX benefit at 20% of the cost.
 
+### 2026-04-15 — DEC-084 Revised: Svelte Migration — Go Now
+
+**Context:** Kyle pushed back on the "ES modules first" recommendation (DEC-084), arguing that the DOM update pattern is already the primary source of bugs TODAY, not a future risk. Re-examined the evidence and reversed my position.
+
+**Evidence that changed my mind:**
+- **29 of 188 commits (15.4%) are UI/render/state bug fixes.** This is not hypothetical — it's the dominant pain category in the entire project.
+- The `mutate → save → render` pattern requires three manual steps per state change. `events.js` calls `savePersistentState()` 17 times and `renderRadarMode()` 17 times — each pair manually wired.
+- `captureRadarUiState()` / `restoreRadarUiState()` (60+ lines) and `patchSingleItem()` (80+ lines) are band-aids for innerHTML destroying DOM state. These wouldn't exist with a reactive framework.
+- ES modules fix script loading but NOT the render problem. It's effort on the wrong problem.
+- Test suite must be rewritten for either path (vm.runInContext breaks with ES modules too) — no cost savings from the intermediate step.
+
+**Lesson learned:**
+- When a project owner says "this is already hurting us," believe them over your own risk-minimization instinct. Phased approaches that don't address the actual pain point are delay, not de-risking.
+- The fact that the codebase is already well-modularized (25 files, clean separation) means the Svelte migration is LESS risky than it looks — the hard decomposition work is done.
+- An intermediate step that gets thrown away when the real fix arrives wastes team effort and morale. Skip it when the final destination is clear.
+
+**Revised recommendation:** Proceed with incremental Svelte migration. Phase 0: History tab as proof of concept. If Electron+Svelte+CSP integrates cleanly, continue through Phases 1-5. Migration order: History → KPI/static views → Briefings → Radar cards → Modals/Popout → Cleanup.
+
+**Decision written to:** `.squad/decisions/inbox/maverick-svelte-revised.md`
+
 **Decision written to:** `.squad/decisions/inbox/maverick-svelte-assessment.md`

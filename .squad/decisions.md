@@ -1512,3 +1512,39 @@
 **Component inventory (Goose):** ~35-40 Svelte components needed. All 22 JS modules and 9 CSS files mapped. Svelte confirmed as strong architectural fit.
 
 **Source:** `.squad/decisions/inbox/maverick-svelte-assessment.md`
+
+---
+
+## DEC-085: Svelte Migration — Proceed Incrementally
+
+**Author:** Maverick (Lead) | **Date:** 2026-04-15 | **Status:** Revised Proposal — supersedes DEC-084 | **Requested by:** Kyle
+
+**Summary:** Reversed DEC-084's "not yet" recommendation. Manual DOM updates are already the #1 bug source (29/188 commits = 15.4% are DOM/render/state fixes). The intermediate ES modules + Vite step solves only 2 of 7 identified problems, costs meaningful effort, and is throwaway when Svelte arrives. Recommendation: proceed with incremental Svelte migration now.
+
+**Why DEC-084 was wrong:**
+- DOM update bugs are not a future risk — they are the present reality. 15.4% of all commits fix state→render sync issues.
+- `events.js` (1,113 lines) manually calls `savePersistentState()` 17 times and `renderRadarMode()` 17 times — miss one pairing and you get a bug.
+- `captureRadarUiState()`/`restoreRadarUiState()` (~60 lines) and `patchSingleItem()` (80+ lines) are band-aids for missing reactivity.
+- ESM+Vite fixes script-tag ordering and adds HMR but doesn't address state→render coupling, innerHTML rebuilds, manual UI state capture, or the 1,113-line event delegation file.
+- Both ESM+Vite and Svelte require test migration (vm.runInContext breaks either way), so the testing cost is the same.
+
+**Migration plan (6 phases, incremental):**
+
+| Phase | Scope | Risk |
+|-------|-------|------|
+| 0 — Proof of concept | History tab (read-only list) | Minimal |
+| 1 — Static views | KPI strip, morning banner, filter bar | Low |
+| 2 — Briefings | Meeting cards, day briefing, expand/collapse | Low-Medium |
+| 3 — Radar cards | Scanner sections, tracking cards, tabs, panels | Medium |
+| 4 — Modals + Popout | Scanner settings modal, search overlay, popout window | Medium |
+| 5 — Cleanup | Remove events.js, old renderers, vanilla state.js | Low |
+
+**Coexistence strategy:** Svelte components mount into existing DOM targets. Thin Svelte store wraps existing `state` object — both vanilla and Svelte code read/write the same reactive store during transition.
+
+**What stays unchanged:** `src/main/` (6 files), `src/preload.js`, `src/shared/ipc-contract.js`, `src/prompts/`, `src/demo/fixture.json`, `src/renderer/models/*.js` (pure logic), `src/renderer/utils.js`, `src/renderer/json-parser.js`, `src/renderer/constants.js`.
+
+**What gets eliminated:** `events.js` (1,113L), `renderers/radar.js` (922L), `renderers/tracking.js` (934L), `renderers/briefing.js` (247L), `renderers/history.js` (~30L), `renderers/kpi.js` (~100L), `state.js` DOM cache + render helpers (437L), `popout.js` (322L), `app.js` composition root (320L).
+
+**Minimum viable setup (Phase 0):** Install `vite` + `@sveltejs/vite-plugin-svelte` + `svelte` as dev deps. Create `vite.config.js` targeting renderer. Create single `HistoryView.svelte`. Mount into existing `#viewHistory` div. Validate: HMR, CSP, Electron IPC (`window.workiq`) from Svelte.
+
+**Source:** `.squad/decisions/inbox/maverick-svelte-revised.md`
