@@ -6,6 +6,7 @@
   import { computeScannerNextRunAt } from '../lib/models/scanner.js';
   import { savePersistentState } from '../lib/persistence.js';
   import { runScanner as runScannerEngine } from '../lib/scanner-engine.js';
+  import { runItemCheck } from '../lib/monitor-engine.js';
   import ScannerSection from './ScannerSection.svelte';
   import AddTaskModal from './AddTaskModal.svelte';
   import ScannerSettingsModal from './ScannerSettingsModal.svelte';
@@ -142,11 +143,14 @@
     savePersistentState();
   }
 
-  function handleRunNow(data) {
-    const currentItems = $items;
-    const item = currentItems.find(i => i.id === data.itemId);
-    if (item && item.monitorPrompt && window.workiq && typeof window.workiq.ask === 'function') {
-      window.workiq.ask(item.monitorPrompt);
+  async function handleRunNow(data) {
+    const item = $items.find(i => i.id === data.itemId);
+    if (!item) return;
+    try {
+      await runItemCheck(item);
+      savePersistentState();
+    } catch (err) {
+      addHistory('failure', `Monitor check failed for ${item.title}: ${err.message}`);
     }
   }
 

@@ -68,7 +68,7 @@ async function checkDueItems() {
 
 
 
-async function runItemCheck(item) {
+export async function runItemCheck(item) {
   const prompt = buildMonitorPrompt(item);
   const payload = await runWorkiqJson(
     prompt,
