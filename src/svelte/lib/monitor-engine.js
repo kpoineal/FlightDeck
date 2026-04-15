@@ -6,6 +6,7 @@ import { savePersistentState } from './persistence.js';
 import { computeNextRunAt } from './models/item.js';
 import { nowIso, cleanDisplayText, normalizeSeverity } from './utils.js';
 import { ALL_SIGNAL_TYPES } from './constants.js';
+import { logInfo, logWarn, logError } from './logger.js';
 
 const TICK_MS = 30_000; // 30s
 let intervalHandle = null;
@@ -13,6 +14,7 @@ let cycleInProgress = false;
 
 export function startMonitoringLoop() {
   if (intervalHandle) return;
+  logInfo('monitor', 'Monitoring loop started');
   intervalHandle = setInterval(checkDueItems, TICK_MS);
   checkDueItems(); // immediate first check
 }
@@ -42,8 +44,10 @@ async function checkDueItems() {
   try {
     for (const item of due) {
       try {
+        logInfo('monitor', `Checking "${item.title}"`, { itemId: item.id });
         await runItemCheck(item);
       } catch (err) {
+        logError('monitor', `Check failed for "${item.title}": ${err.message}`, { itemId: item.id });
         // Reschedule on failure
         items.update(($i) =>
           $i.map((i) =>

@@ -8,6 +8,7 @@
   import { startScannerEngine, stopScannerEngine } from './lib/scanner-engine.js';
   import { startMonitoringLoop, stopMonitoringLoop } from './lib/monitor-engine.js';
   import { cleanDisplayText, hashString, normalizeExternalUrl, nowIso } from './lib/utils.js';
+  import { logInfo, persistLog, loadPersistedLog } from './lib/logger.js';
   import Topbar from './components/Topbar.svelte';
   import ConnectBanner from './components/ConnectBanner.svelte';
   import SummaryStrip from './components/SummaryStrip.svelte';
@@ -119,6 +120,8 @@ Schema:
   onMount(async () => {
     initTheme();
     await loadPersistentState();
+    await loadPersistedLog();
+    logInfo('app', 'FlightDeck Svelte app initialized');
 
     // Read version from workiq bridge
     if (window.workiq && typeof window.workiq.getAppVersion === 'function') {
@@ -167,6 +170,7 @@ Schema:
     clearTimeout(saveTimer);
     stopScannerEngine();
     stopMonitoringLoop();
+    persistLog();
     unsubscribers.forEach((unsub) => unsub());
   });
 

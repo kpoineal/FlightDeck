@@ -7,6 +7,7 @@ import { normalizeItem, computeNextRunAt } from './models/item.js';
 import { computeScannerNextRunAt } from './models/scanner.js';
 import { nowIso, cleanDisplayText, hashString, normalizeSeverity } from './utils.js';
 import { ALL_SIGNAL_TYPES } from './constants.js';
+import { logInfo, logWarn, logError } from './logger.js';
 
 const TICK_MS = 60_000; // 60s
 let intervalHandle = null;
@@ -14,6 +15,7 @@ let cycleInProgress = false;
 
 export function startScannerEngine() {
   if (intervalHandle) return;
+  logInfo('scanner', 'Engine started');
   rescheduleOverdueScanners();
   intervalHandle = setInterval(checkDue, TICK_MS);
 }
@@ -61,8 +63,10 @@ async function checkDue() {
   try {
     for (const scanner of due) {
       try {
+        logInfo('scanner', `Running "${scanner.name}"...`, { scannerId: scanner.id });
         await runScanner(scanner);
       } catch (err) {
+        logError('scanner', `Scanner "${scanner.name}" failed: ${err.message}`, { scannerId: scanner.id });
         // Update scanner timestamps on failure and log
         scanners.update(($s) =>
           $s.map((s) =>
