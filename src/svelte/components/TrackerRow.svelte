@@ -4,8 +4,9 @@
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
+  import EditableField from './EditableField.svelte';
 
-  let { item, expanded = false, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onrunnow, onrowexpand } = $props();
+  let { item, expanded = false, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onrunnow, onrowexpand, onfieldedit } = $props();
 
   let isExpanded = $state(expanded);
   let rowEl = $state(null);
@@ -103,7 +104,7 @@
     {/if}
     <span class="tracker-row-title">{item.title || 'Untitled item'}</span>
     <span class="tracker-row-summary">{summaryTruncated}{summaryEllipsis ? '\u2026' : ''}</span>
-    <span class="tracker-row-due">{item.dueAt ? safeDate(item.dueAt) : 'Set due'}</span>
+    <span class="tracker-row-due"><EditableField field="dueAt" value={item.dueAt} itemId={item.id} placeholder="Set due" onchange={onfieldedit} /></span>
     <span class="row-expand-chevron" class:open={isExpanded}>&#9660;</span>
   </div>
 
@@ -127,9 +128,9 @@
 
       <div class="tracker-meta">
         <span>Source: {item.sourceType || 'Signal'}</span>
-        <span>Due: {item.dueAt ? safeDate(item.dueAt) : 'Set due date'}</span>
-        <span>Owner: {item.owner || 'Set owner'}</span>
-        <span>Done when: {item.doneCriteria || 'Set done criteria'}</span>
+        <span>Due: <EditableField field="dueAt" value={item.dueAt} itemId={item.id} placeholder="Set due date" onchange={onfieldedit} /></span>
+        <span>Owner: <EditableField field="owner" value={item.owner} itemId={item.id} placeholder="Set owner" onchange={onfieldedit} /></span>
+        <span>Done when: <EditableField field="doneCriteria" value={item.doneCriteria} itemId={item.id} placeholder="Set done criteria" onchange={onfieldedit} /></span>
       </div>
       <div class="tracker-timestamp">
         Tracked: {safeDate(item.trackedAt, 'Unknown')} &middot; Last checked: {safeDate(item.lastRunAt, 'Never')}

@@ -4,8 +4,9 @@
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
+  import EditableField from './EditableField.svelte';
 
-  let { item, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow } = $props();
+  let { item, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow, onfieldedit } = $props();
 
   let activeTab = $state('summary');
   let cardEl = $state(null);
@@ -137,9 +138,9 @@
         {/if}
         <div class="tracker-meta">
           <span>Source: {item.sourceType || 'Signal'}</span>
-          <span>Due: {item.dueAt ? safeDate(item.dueAt) : 'Set due date'}</span>
-          <span>Owner: {item.owner || 'Set owner'}</span>
-          <span>Done when: {item.doneCriteria || 'Set done criteria'}</span>
+          <span>Due: <EditableField field="dueAt" value={item.dueAt} itemId={item.id} placeholder="Set due date" onchange={onfieldedit} /></span>
+          <span>Owner: <EditableField field="owner" value={item.owner} itemId={item.id} placeholder="Set owner" onchange={onfieldedit} /></span>
+          <span>Done when: <EditableField field="doneCriteria" value={item.doneCriteria} itemId={item.id} placeholder="Set done criteria" onchange={onfieldedit} /></span>
         </div>
         <div class="tracker-timestamp">
           Tracked: {safeDate(item.trackedAt, 'Unknown')} &middot; Last checked: {safeDate(item.lastRunAt, 'Never')}

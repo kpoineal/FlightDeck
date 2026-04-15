@@ -3,7 +3,7 @@
   import { setDensity, setFilter, addHistory } from '../lib/actions.js';
   import { sortBySeverity, groupItemsBySource, normalizeExternalUrl, cleanDisplayText, hashString, nowIso, normalizeSeverity } from '../lib/utils.js';
   import { normalizeItem, computeNextRunAt } from '../lib/models/item.js';
-  import { computeScannerNextRunAt } from '../lib/models/scanner.js';
+  import { normalizeScannerDefinition, computeScannerNextRunAt } from '../lib/models/scanner.js';
   import { savePersistentState } from '../lib/persistence.js';
   import { runScanner as runScannerEngine } from '../lib/scanner-engine.js';
   import { runItemCheck } from '../lib/monitor-engine.js';
@@ -154,6 +154,64 @@
     }
   }
 
+  function handleFieldEdit(data) {
+    items.update(($items) => $items.map(i => {
+      if (i.id !== data.itemId) return i;
+      if (data.field === 'dueAt') {
+        return { ...i, dueAt: data.value || null };
+      }
+      return { ...i, [data.field]: data.value };
+    }));
+    savePersistentState();
+  }
+
+  function handleScannerSave(data) {
+    if (settingsScanner) {
+      scanners.update(($s) => $s.map(s => {
+        if (s.id !== settingsScanner.id) return s;
+        const updated = normalizeScannerDefinition({ ...s, ...data });
+        updated.nextRunAt = updated.enabled ? computeScannerNextRunAt(updated) : null;
+        return updated;
+      }));
+      addHistory('action', `Updated scanner: ${data.name || settingsScanner.name}`);
+    } else {
+      const newScanner = normalizeScannerDefinition({
+        ...data,
+        id: `scanner_${hashString(Date.now() + '_' + Math.random())}`,
+        enabled: true,
+      });
+      newScanner.nextRunAt = computeScannerNextRunAt(newScanner);
+      scanners.update(($s) => [...$s, newScanner]);
+      addHistory('action', `Created scanner: ${data.name || 'Unnamed'}`);
+    }
+    savePersistentState();
+    settingsOpen = false;
+  }
+
+  function handleScannerDelete(data) {
+    const name = settingsScanner?.name || 'Scanner';
+    scanners.update(($s) => $s.filter(s => s.id !== (data?.scannerId || settingsScanner?.id)));
+    addHistory('action', `Deleted scanner: ${name}`);
+    savePersistentState();
+    settingsOpen = false;
+  }
+
+  function handleCreateTask(data) {
+    const newItem = normalizeItem({
+      ...data,
+      id: `custom_${hashString(Date.now() + '_' + Math.random())}`,
+      trackedAt: nowIso(),
+      origin: 'custom',
+      isNew: true,
+      monitorEnabled: true,
+    });
+    newItem.nextRunAt = computeNextRunAt(newItem);
+    items.update(($i) => [newItem, ...$i]);
+    addHistory('action', `Added custom task: ${newItem.title}`);
+    savePersistentState();
+    addTaskOpen = false;
+  }
+
   // Cold storage fetch for archived filter
   $effect(() => {
     if ($filter === 'archived' && window.workiq && typeof window.workiq.getColdItems === 'function') {
@@ -220,7 +278,8 @@
               onschedulechange={handleScheduleChange}
               onpromptchange={handlePromptChange}
               onmovescanner={handleMoveScanner}
-              onrunnow={handleRunNow} />
+              onrunnow={handleRunNow}
+              onfieldedit={handleFieldEdit} />
           {/each}
         {/if}
       </div>
@@ -229,11 +288,11 @@
 </section>
 
 <AddTaskModal open={addTaskOpen} scannerId={addTaskScannerId}
-  oncreate={(data) => { addTaskOpen = false; }}
+  oncreate={handleCreateTask}
   oncancel={() => { addTaskOpen = false; }} />
 
 <ScannerSettingsModal open={settingsOpen} scanner={settingsScanner}
-  onsave={(data) => { settingsOpen = false; }}
+  onsave={handleScannerSave}
   onrunnow={() => { if (settingsScanner) handleScannerRun({ scannerId: settingsScanner.id }); }}
-  ondelete={(data) => { settingsOpen = false; }}
+  ondelete={handleScannerDelete}
   onclose={() => { settingsOpen = false; }} />

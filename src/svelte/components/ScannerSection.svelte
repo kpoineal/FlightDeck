@@ -5,7 +5,7 @@
   import TrackerCard from './TrackerCard.svelte';
   import TrackerRow from './TrackerRow.svelte';
 
-  let { scanner, items = [], onadditem, onscannerrun, onscannertoggle, onscannersettings, onpopout, onseveritychange, onstatuschange, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow } = $props();
+  let { scanner, items = [], onadditem, onscannerrun, onscannertoggle, onscannersettings, onpopout, onseveritychange, onstatuschange, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow, onfieldedit } = $props();
 
   let sourceId = $derived(`scanner-${scanner.id}`);
   let collapsed = $derived($collapsedSections.includes(sourceId));
@@ -189,7 +189,8 @@
             ondraftstep={ondraftstep}
             onschedulechange={onschedulechange}
             onpromptchange={onpromptchange}
-            onrunnow={onrunnow} />
+            onrunnow={onrunnow}
+            onfieldedit={onfieldedit} />
         {:else}
           <TrackerCard {item}
             onseveritychange={onseveritychange}
@@ -201,7 +202,8 @@
             onschedulechange={onschedulechange}
             onpromptchange={onpromptchange}
             onmovescanner={onmovescanner}
-            onrunnow={onrunnow} />
+            onrunnow={onrunnow}
+            onfieldedit={onfieldedit} />
         {/if}
       {/each}
     {:else if inlineFilter && items.length > 0}
