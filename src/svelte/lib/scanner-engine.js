@@ -89,7 +89,7 @@ async function checkDue() {
 
 
 
-async function runScanner(scanner) {
+export async function runScanner(scanner) {
   const prompt = buildScannerPrompt(scanner, get(items), get(scanners));
   const payload = await runWorkiqJson(
     prompt,

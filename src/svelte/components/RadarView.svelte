@@ -5,6 +5,7 @@
   import { normalizeItem, computeNextRunAt } from '../lib/models/item.js';
   import { computeScannerNextRunAt } from '../lib/models/scanner.js';
   import { savePersistentState } from '../lib/persistence.js';
+  import { runScanner as runScannerEngine } from '../lib/scanner-engine.js';
   import ScannerSection from './ScannerSection.svelte';
   import AddTaskModal from './AddTaskModal.svelte';
   import ScannerSettingsModal from './ScannerSettingsModal.svelte';
@@ -35,52 +36,10 @@
   async function handleScannerRun(data) {
     const scanner = $scanners.find(s => s.id === data.scannerId);
     if (!scanner) return;
-    if (!window.workiq || typeof window.workiq.ask !== 'function') return;
 
     loading.set(true);
-    addHistory('scan', `Running scanner: ${scanner.name}`);
-
     try {
-      const prompt = scanner.prompt || 'Scan for new work items';
-      const raw = await window.workiq.ask(prompt);
-      // Try to parse JSON from the response
-      let payload;
-      try {
-        const jsonMatch = raw.match(/```json\s*([\s\S]*?)```/) || raw.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : raw;
-        payload = JSON.parse(jsonStr);
-      } catch (_) {
-        addHistory('failure', `Scanner ${scanner.name}: could not parse response`);
-        return;
-      }
-
-      if (payload && Array.isArray(payload.radarItems)) {
-        const newItems = payload.radarItems.map(item => normalizeItem({
-          ...item,
-          id: item.id || `radar_${hashString(cleanDisplayText(item.title || '') + nowIso())}`,
-          status: item.status || 'Inbound',
-          scannerId: scanner.id,
-          isNew: true,
-        }));
-
-        // Dedup against existing items
-        const currentItems = $items;
-        const existingIds = new Set(currentItems.map(i => i.id));
-        const existingTitles = new Set(currentItems.filter(i => i.scannerId === scanner.id).map(i => cleanDisplayText(i.title || '').toLowerCase()));
-        const unique = newItems.filter(i => !existingIds.has(i.id) && !existingTitles.has(cleanDisplayText(i.title || '').toLowerCase()));
-
-        if (unique.length) {
-          items.update($i => [...unique, ...$i]);
-        }
-
-        // Update scanner lastRunAt and nextRunAt
-        scanners.update($s => $s.map(s =>
-          s.id === scanner.id ? { ...s, lastRunAt: nowIso(), nextRunAt: computeScannerNextRunAt({ ...s, lastRunAt: nowIso() }) } : s
-        ));
-
-        addHistory('scan', `Scanner ${scanner.name}: found ${unique.length} new item(s)`);
-      }
-      savePersistentState();
+      await runScannerEngine(scanner);
     } catch (err) {
       addHistory('failure', `Scanner ${scanner.name} failed: ${err.message}`);
     } finally {
