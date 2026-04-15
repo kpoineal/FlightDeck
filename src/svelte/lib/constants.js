@@ -85,8 +85,8 @@ export const NOTIFICATION_MODE_OPTIONS = [
 ];
 
 export const SIGNAL_TYPE_OPTIONS = [
-  { value: 'email', label: 'Email', icon: '\u2709\ufe0f' },
-  { value: 'chat', label: 'Chat', icon: '\uD83D\uDCAC' },
-  { value: 'meeting', label: 'Meetings', icon: '\uD83D\uDCC5' },
-  { value: 'doc', label: 'Documents', icon: '\uD83D\uDCC4' },
+  { value: 'email', label: 'Email', icon: '✉️' },
+  { value: 'chat', label: 'Chat', icon: '💬' },
+  { value: 'meeting', label: 'Meetings', icon: '📅' },
+  { value: 'doc', label: 'Documents', icon: '📄' },
 ];

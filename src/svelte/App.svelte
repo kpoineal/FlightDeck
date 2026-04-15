@@ -49,9 +49,9 @@
     await loadPersistentState();
 
     // Read version from workiq bridge
-    if (window.workiq && typeof window.workiq.getVersion === 'function') {
+    if (window.workiq && typeof window.workiq.getAppVersion === 'function') {
       try {
-        version = await window.workiq.getVersion() || '';
+        version = await window.workiq.getAppVersion() || '';
       } catch (_) {}
     }
 

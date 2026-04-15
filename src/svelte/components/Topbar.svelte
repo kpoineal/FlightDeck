@@ -2,6 +2,7 @@
   import { mode, connected, loading } from '../lib/stores.js';
   import { setMode } from '../lib/actions.js';
   import SearchOverlay from './SearchOverlay.svelte';
+  import iconUrl from '../../icon.png';
 
   let { version = '', updateAvailable = false, updateText = 'Update available', updateUrl = '' } = $props();
 
@@ -37,7 +38,7 @@
 
 <header class="topbar">
   <div class="brand">
-    <img class="brand-logo" src="icon.png" alt="FlightDeck logo" />
+    <img class="brand-logo" src={iconUrl} alt="FlightDeck logo" />
     <span class="brand-name">FLIGHT<span class="brand-accent">DECK</span></span>
     {#if version}
       <span class="version-badge">{version}</span>

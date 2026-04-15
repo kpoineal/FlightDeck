@@ -61,7 +61,7 @@
       </select>
       {#if item.lifecycleStatus === 'snoozed'}
         <span class="snooze-until-label" title="Snoozed until {item.snoozeUntil ? safeDate(item.snoozeUntil) : 'next scan'}">
-          \uD83D\uDCA4 {item.snoozeUntil ? (relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}
+          💤 {item.snoozeUntil ? (relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}
         </span>
       {/if}
     </div>
@@ -75,7 +75,7 @@
         <span class="pill last-updated-pill" title="Last update: {safeDate(lastUpdate)}">{rt}</span>
       {/if}
       <button class="popout-icon-btn" title="Pop Out" aria-label="Pop out"
-        on:click={() => onpopout?.({ itemId: item.id })}>&nearr;</button>
+        on:click={() => onpopout?.({ itemId: item.id })}>↗</button>
     </div>
   </div>
 
@@ -91,16 +91,16 @@
       <div class="card-tab-bar">
         <button class="card-tab" class:active={activeTab === 'summary'} title="Activity Timeline"
           on:click={() => setTab('summary')}>
-          <span class="card-tab-icon">\u23f1\ufe0f</span><span class="card-tab-label">Activity</span>
+          <span class="card-tab-icon">⏱️</span><span class="card-tab-label">Activity</span>
           {#if unseenCount > 0}<span class="card-tab-badge {historyBadgeClass}">{unseenCount}</span>{/if}
         </button>
         <button class="card-tab" class:active={activeTab === 'overview'} title="Overview"
           on:click={() => setTab('overview')}>
-          <span class="card-tab-icon">\uD83D\uDCCB</span><span class="card-tab-label">Overview</span>
+          <span class="card-tab-icon">📋</span><span class="card-tab-label">Overview</span>
         </button>
         <button class="card-tab" class:active={activeTab === 'monitor'} title="Monitoring"
           on:click={() => setTab('monitor')}>
-          <span class="card-tab-icon">\u2699\ufe0f</span><span class="card-tab-label">Monitor</span>
+          <span class="card-tab-icon">⚙️</span><span class="card-tab-label">Monitor</span>
         </button>
       </div>
 

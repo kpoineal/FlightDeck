@@ -58,7 +58,7 @@
     </select>
     {#if item.lifecycleStatus === 'snoozed'}
       <span class="snooze-until-label" title="Snoozed until {item.snoozeUntil ? safeDate(item.snoozeUntil) : 'next scan'}">
-        \uD83D\uDCA4 {item.snoozeUntil ? (relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}
+        💤 {item.snoozeUntil ? (relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}
       </span>
     {/if}
     {#if item.monitorEnabled === false && !isTerminalStatus}

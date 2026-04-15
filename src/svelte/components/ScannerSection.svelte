@@ -71,7 +71,7 @@
   <!-- Section header -->
   <div class="radar-section-header {sevBorderClass}" class:disabled={!enabled}>
     <div class="radar-section-header-left">
-      <span class="radar-section-icon">\uD83D\uDD0D</span>
+      <span class="radar-section-icon">🔍</span>
       <span class="radar-section-name">{scanner.name || 'Unnamed Scanner'}</span>
       <span class="radar-section-count">({items.length})</span>
 
@@ -143,16 +143,16 @@
         </svg>
       </button>
       <button class="icon-btn scanner-run-now-btn" title="Run scan now"
-        on:click={() => onscannerrun?.({ scannerId: scanner.id })}>&zap;</button>
+        on:click={() => onscannerrun?.({ scannerId: scanner.id })}>⚡</button>
       <button class="icon-btn" title="{enabled ? 'Pause scanner' : 'Resume scanner'}"
         on:click={() => onscannertoggle?.({ scannerId: scanner.id })}>
-        {enabled ? '\u23f8' : '\u25b6'}
+        {enabled ? '⏸' : '▶'}
       </button>
       <button class="icon-btn" title="Scanner settings"
-        on:click={() => onscannersettings?.({ scannerId: scanner.id })}>\u2699\ufe0f</button>
+        on:click={() => onscannersettings?.({ scannerId: scanner.id })}>⚙️</button>
       <button class="icon-btn radar-section-collapse" class:collapsed
         title="{collapsed ? 'Expand' : 'Collapse'}"
-        on:click={() => toggleSection(sourceId)}>\u25be</button>
+        on:click={() => toggleSection(sourceId)}>▾</button>
     </div>
   </div>
 

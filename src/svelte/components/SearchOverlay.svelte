@@ -162,7 +162,7 @@
     bind:value={query}
     class="search-input"
     type="text"
-    placeholder="Search items\u2026"
+    placeholder="Search items…"
     autocomplete="off"
     on:input={handleInput}
     on:keydown={handleKeydown}
