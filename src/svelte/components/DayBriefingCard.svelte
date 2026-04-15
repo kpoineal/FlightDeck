@@ -1,23 +1,19 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import { safeDate, sanitizeBriefingText } from '../lib/utils.js';
 
-  export let briefing = null;
-  export let unseen = false;
+  let { briefing = null, unseen = false, ongenerate } = $props();
 
-  const dispatch = createEventDispatcher();
+  let hasBriefing = $derived(!!briefing);
 
-  $: hasBriefing = !!briefing;
-
-  $: priorities = briefing?.topPriorities?.length ? briefing.topPriorities : [];
-  $: prepMeetings = briefing?.meetingsRequiringPrep?.length ? briefing.meetingsRequiringPrep : [];
-  $: riskItems = briefing?.atRiskItems?.length ? briefing.atRiskItems : [];
-  $: timeBlocks = briefing?.suggestedTimeBlocks?.length ? briefing.suggestedTimeBlocks : [];
-  $: followUps = briefing?.todayFollowUps?.length ? briefing.todayFollowUps : [];
-  $: sources = briefing?.sources?.length ? briefing.sources : [];
+  let priorities = $derived(briefing?.topPriorities?.length ? briefing.topPriorities : []);
+  let prepMeetings = $derived(briefing?.meetingsRequiringPrep?.length ? briefing.meetingsRequiringPrep : []);
+  let riskItems = $derived(briefing?.atRiskItems?.length ? briefing.atRiskItems : []);
+  let timeBlocks = $derived(briefing?.suggestedTimeBlocks?.length ? briefing.suggestedTimeBlocks : []);
+  let followUps = $derived(briefing?.todayFollowUps?.length ? briefing.todayFollowUps : []);
+  let sources = $derived(briefing?.sources?.length ? briefing.sources : []);
 
   function handleGenerate() {
-    dispatch('generate');
+    ongenerate?.();
   }
 </script>
 

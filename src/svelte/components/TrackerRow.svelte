@@ -1,37 +1,33 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import { scanners } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
 
-  export let item;
-  export let expanded = false;
+  let { item, expanded = false, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onrunnow } = $props();
 
-  const dispatch = createEventDispatcher();
+  let isExpanded = $state(expanded);
+  let monitoringOpen = $state(false);
+  let promptPanelOpen = $state(false);
+  let peopleOpen = $state(true);
+  let linksOpen = $state(true);
 
-  let isExpanded = expanded;
-  let monitoringOpen = false;
-  let promptPanelOpen = false;
-  let peopleOpen = true;
-  let linksOpen = true;
-
-  $: isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
-  $: hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
-  $: unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
-  $: people = Array.isArray(item.counterparties) && item.counterparties.length
+  let isTerminalStatus = $derived(item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
+  let hasNew = $derived(!isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true));
+  let unseenCount = $derived(isTerminalStatus ? 0 : unseenHistoryCount(item));
+  let people = $derived(Array.isArray(item.counterparties) && item.counterparties.length
     ? item.counterparties.join(', ')
-    : 'No counterparties listed';
-  $: links = Array.isArray(item.evidenceLinks) ? item.evidenceLinks.filter((e) => e && e.url) : [];
-  $: lastUpdate = item.lastChangedAt || item.lastRunAt || null;
-  $: lastUpdateTime = lastUpdate ? new Date(lastUpdate) : null;
-  $: lastUpdateStr = lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null;
-  $: rt = relativeTime(lastUpdate);
-  $: steps = Array.isArray(item.suggestedNextSteps) ? item.suggestedNextSteps : [];
-  $: sevClass = severityClass(item.severity);
-  $: summaryTruncated = (item.summary || '').replace(/\n/g, ' ').slice(0, 140);
-  $: summaryEllipsis = (item.summary || '').length > 140;
+    : 'No counterparties listed');
+  let links = $derived(Array.isArray(item.evidenceLinks) ? item.evidenceLinks.filter((e) => e && e.url) : []);
+  let lastUpdate = $derived(item.lastChangedAt || item.lastRunAt || null);
+  let lastUpdateTime = $derived(lastUpdate ? new Date(lastUpdate) : null);
+  let lastUpdateStr = $derived(lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null);
+  let rt = $derived(relativeTime(lastUpdate));
+  let steps = $derived(Array.isArray(item.suggestedNextSteps) ? item.suggestedNextSteps : []);
+  let sevClass = $derived(severityClass(item.severity));
+  let summaryTruncated = $derived((item.summary || '').replace(/\n/g, ' ').slice(0, 140));
+  let summaryEllipsis = $derived((item.summary || '').length > 140);
 </script>
 
 <div
@@ -47,14 +43,14 @@
   <div class="tracker-row" class:has-new-update={hasNew} class:expanded={isExpanded}
     on:click|self={() => { isExpanded = !isExpanded; }}>
     <select class="severity-select {sevClass}" value={item.severity}
-      on:change={(e) => dispatch('severitychange', { itemId: item.id, value: e.target.value })}
+      on:change={(e) => onseveritychange?.({ itemId: item.id, value: e.target.value })}
       on:click|stopPropagation>
       <option value="Critical">Critical</option>
       <option value="Elevated">Elevated</option>
       <option value="Observe">Observe</option>
     </select>
     <select class="status-select status-{item.lifecycleStatus || 'in-progress'}" value={item.lifecycleStatus}
-      on:change={(e) => dispatch('statuschange', { itemId: item.id, value: e.target.value })}
+      on:change={(e) => onstatuschange?.({ itemId: item.id, value: e.target.value })}
       on:click|stopPropagation>
       {#each LIFECYCLE_STATUSES as s}
         <option value={s}>{LIFECYCLE_LABELS[s]}</option>
@@ -91,7 +87,7 @@
         <div class="next-step-hints">
           {#each steps as s}
             <button class="next-step-hint"
-              on:click={() => dispatch('draftstep', { suggestion: s, itemId: item.id })}>
+              on:click={() => ondraftstep?.({ suggestion: s, itemId: item.id })}>
               &rarr; {s} <span class="draft-cta">Draft &nearr;</span>
             </button>
           {/each}
@@ -146,8 +142,8 @@
         <div class="tracker-section-panel show">
           <div class="tracker-schedule-bar">
             <ScheduleControls {item}
-              on:change={(e) => dispatch('schedulechange', e.detail)}
-              on:runnow={(e) => dispatch('runnow', e.detail)} />
+              onchange={(data) => onschedulechange?.(data)}
+              onrunnow={(data) => onrunnow?.(data)} />
             <p class="task-next-run">Next run: {safeDate(item.nextRunAt, 'Not scheduled')}</p>
             <button class="tracker-prompt-toggle" on:click={() => { promptPanelOpen = !promptPanelOpen; }}>
               <span class="chevron" class:chevron--expanded={promptPanelOpen}>&#9654;</span> Edit monitoring prompt
@@ -156,7 +152,7 @@
               <div class="tracker-prompt-panel show">
                 <textarea class="tracking-textarea" placeholder="Monitoring context for WorkIQ"
                   value={item.monitorPrompt || ''}
-                  on:change={(e) => dispatch('promptchange', { itemId: item.id, value: e.target.value })}></textarea>
+                  on:change={(e) => onpromptchange?.({ itemId: item.id, value: e.target.value })}></textarea>
               </div>
             {/if}
           </div>
@@ -165,10 +161,10 @@
 
       <div class="action-row">
         {#if hasNew || unseenCount > 0}
-          <button class="small-btn primary" on:click={() => dispatch('markseen', { itemId: item.id })}>Mark as Seen</button>
+          <button class="small-btn primary" on:click={() => onmarkseen?.({ itemId: item.id })}>Mark as Seen</button>
         {/if}
-        <button class="small-btn popout" on:click={() => dispatch('popout', { itemId: item.id })}>&nearr; Pop Out</button>
-        <button class="small-btn warn" on:click={() => dispatch('delete', { itemId: item.id })}>Delete</button>
+        <button class="small-btn popout" on:click={() => onpopout?.({ itemId: item.id })}>&nearr; Pop Out</button>
+        <button class="small-btn warn" on:click={() => ondelete?.({ itemId: item.id })}>Delete</button>
       </div>
     </div>
   {/if}

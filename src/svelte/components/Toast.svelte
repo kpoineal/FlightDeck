@@ -1,7 +1,7 @@
-<script>
+<script module>
   import { writable } from 'svelte/store';
 
-  let toasts = writable([]);
+  export const toasts = writable([]);
   let nextId = 0;
 
   export function showToast(message, { icon = '\u2713', durationMs = 3500 } = {}) {

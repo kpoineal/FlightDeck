@@ -1,43 +1,39 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import { density, collapsedSections } from '../lib/stores.js';
   import { relativeTime, sortBySeverity } from '../lib/utils.js';
   import { toggleSection } from '../lib/actions.js';
   import TrackerCard from './TrackerCard.svelte';
   import TrackerRow from './TrackerRow.svelte';
 
-  export let scanner;
-  export let items = [];
+  let { scanner, items = [], onadditem, onscannerrun, onscannertoggle, onscannersettings, onpopout, onseveritychange, onstatuschange, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow } = $props();
 
-  const dispatch = createEventDispatcher();
-
-  $: sourceId = `scanner-${scanner.id}`;
-  $: collapsed = $collapsedSections.includes(sourceId);
-  $: enabled = scanner.enabled !== false;
-  $: isMinimal = $density === 'minimal';
-  $: sorted = sortBySeverity(items, true);
+  let sourceId = $derived(`scanner-${scanner.id}`);
+  let collapsed = $derived($collapsedSections.includes(sourceId));
+  let enabled = $derived(scanner.enabled !== false);
+  let isMinimal = $derived($density === 'minimal');
+  let sorted = $derived(sortBySeverity(items, true));
 
   // Inline filter state
-  let inlineFilter = null;
+  let inlineFilter = $state(null);
 
-  $: critical = items.filter(i => i.severity === 'Critical').length;
-  $: elevated = items.filter(i => i.severity === 'Elevated').length;
-  $: observe = items.filter(i => i.severity !== 'Critical' && i.severity !== 'Elevated').length;
-  $: blocked = items.filter(i => i.lifecycleStatus === 'blocked').length;
-  $: waiting = items.filter(i => i.lifecycleStatus === 'waiting').length;
-  $: newCount = items.filter(i =>
+  let critical = $derived(items.filter(i => i.severity === 'Critical').length);
+  let elevated = $derived(items.filter(i => i.severity === 'Elevated').length);
+  let observe = $derived(items.filter(i => i.severity !== 'Critical' && i.severity !== 'Elevated').length);
+  let blocked = $derived(items.filter(i => i.lifecycleStatus === 'blocked').length);
+  let waiting = $derived(items.filter(i => i.lifecycleStatus === 'waiting').length);
+  let newCount = $derived(items.filter(i =>
     (i.isNew || i.hasNewUpdate) &&
     i.lifecycleStatus !== 'complete' &&
     i.lifecycleStatus !== 'archived' &&
     i.lifecycleStatus !== 'snoozed'
-  ).length;
+  ).length);
 
-  $: latestActivity = items.reduce((max, i) => {
+  let latestActivity = $derived(items.reduce((max, i) => {
     const ts = new Date(i.lastChangedAt || i.lastRunAt || 0).getTime();
     return ts > max ? ts : max;
-  }, 0);
+  }, 0));
 
-  $: nextRunLabel = (() => {
+  let nextRunLabel = $derived.by(() => {
     if (!scanner || !scanner.nextRunAt || !enabled) return '';
     const ms = new Date(scanner.nextRunAt).getTime() - Date.now();
     if (ms <= 0) return '\u23f1 due';
@@ -45,18 +41,18 @@
     if (mins < 60) return `\u23f1 ${mins}m`;
     const hrs = Math.floor(mins / 60);
     return `\u23f1 ${hrs}h ${mins % 60}m`;
-  })();
+  });
 
-  $: highestSev = critical > 0 ? 'critical' : elevated > 0 ? 'elevated' : items.length > 0 ? 'observe' : '';
-  $: sevBorderClass = highestSev ? `sev-border-${highestSev}` : '';
+  let highestSev = $derived(critical > 0 ? 'critical' : elevated > 0 ? 'elevated' : items.length > 0 ? 'observe' : '');
+  let sevBorderClass = $derived(highestSev ? `sev-border-${highestSev}` : '');
 
-  $: filteredItems = (() => {
+  let filteredItems = $derived.by(() => {
     if (!inlineFilter) return sorted;
     if (inlineFilter.type === 'severity') return sorted.filter(i => i.severity === inlineFilter.value);
     if (inlineFilter.type === 'status') return sorted.filter(i => i.lifecycleStatus === inlineFilter.value);
     if (inlineFilter.type === 'new') return sorted.filter(i => i.isNew === true || i.hasNewUpdate === true);
     return sorted;
-  })();
+  });
 
   function toggleFilter(type, value) {
     if (inlineFilter && inlineFilter.type === type && inlineFilter.value === value) {
@@ -68,10 +64,6 @@
 
   function isFilterActive(type, value) {
     return inlineFilter && inlineFilter.type === type && inlineFilter.value === value;
-  }
-
-  function forwardEvent(event) {
-    dispatch(event.type, event.detail);
   }
 </script>
 
@@ -145,19 +137,19 @@
     </div>
     <div class="radar-section-header-actions">
       <button class="icon-btn" title="Add item to this scanner"
-        on:click={() => dispatch('additem', { scannerId: scanner.id })}>
+        on:click={() => onadditem?.({ scannerId: scanner.id })}>
         <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/>
         </svg>
       </button>
       <button class="icon-btn scanner-run-now-btn" title="Run scan now"
-        on:click={() => dispatch('scannerrun', { scannerId: scanner.id })}>&zap;</button>
+        on:click={() => onscannerrun?.({ scannerId: scanner.id })}>&zap;</button>
       <button class="icon-btn" title="{enabled ? 'Pause scanner' : 'Resume scanner'}"
-        on:click={() => dispatch('scannertoggle', { scannerId: scanner.id })}>
+        on:click={() => onscannertoggle?.({ scannerId: scanner.id })}>
         {enabled ? '\u23f8' : '\u25b6'}
       </button>
       <button class="icon-btn" title="Scanner settings"
-        on:click={() => dispatch('scannersettings', { scannerId: scanner.id })}>\u2699\ufe0f</button>
+        on:click={() => onscannersettings?.({ scannerId: scanner.id })}>\u2699\ufe0f</button>
       <button class="icon-btn radar-section-collapse" class:collapsed
         title="{collapsed ? 'Expand' : 'Collapse'}"
         on:click={() => toggleSection(sourceId)}>\u25be</button>
@@ -170,27 +162,27 @@
       {#each filteredItems as item (item.id)}
         {#if isMinimal}
           <TrackerRow {item}
-            on:severitychange={forwardEvent}
-            on:statuschange={forwardEvent}
-            on:popout={forwardEvent}
-            on:markseen={forwardEvent}
-            on:delete={forwardEvent}
-            on:draftstep={forwardEvent}
-            on:schedulechange={forwardEvent}
-            on:promptchange={forwardEvent}
-            on:runnow={forwardEvent} />
+            onseveritychange={onseveritychange}
+            onstatuschange={onstatuschange}
+            onpopout={onpopout}
+            onmarkseen={onmarkseen}
+            ondelete={ondelete}
+            ondraftstep={ondraftstep}
+            onschedulechange={onschedulechange}
+            onpromptchange={onpromptchange}
+            onrunnow={onrunnow} />
         {:else}
           <TrackerCard {item}
-            on:severitychange={forwardEvent}
-            on:statuschange={forwardEvent}
-            on:popout={forwardEvent}
-            on:markseen={forwardEvent}
-            on:delete={forwardEvent}
-            on:draftstep={forwardEvent}
-            on:schedulechange={forwardEvent}
-            on:promptchange={forwardEvent}
-            on:movescanner={forwardEvent}
-            on:runnow={forwardEvent} />
+            onseveritychange={onseveritychange}
+            onstatuschange={onstatuschange}
+            onpopout={onpopout}
+            onmarkseen={onmarkseen}
+            ondelete={ondelete}
+            ondraftstep={ondraftstep}
+            onschedulechange={onschedulechange}
+            onpromptchange={onpromptchange}
+            onmovescanner={onmovescanner}
+            onrunnow={onrunnow} />
         {/if}
       {/each}
     {:else if inlineFilter && items.length > 0}

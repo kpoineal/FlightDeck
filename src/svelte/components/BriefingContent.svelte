@@ -1,21 +1,21 @@
 <script>
   import { safeDate, sanitizeBriefingText } from '../lib/utils.js';
 
-  export let briefing;
+  let { briefing } = $props();
 
-  $: headline = briefing.headline || 'Meeting Briefing';
-  $: generatedAt = safeDate(briefing.generatedAt, 'Unknown');
+  let headline = $derived(briefing.headline || 'Meeting Briefing');
+  let generatedAt = $derived(safeDate(briefing.generatedAt, 'Unknown'));
 
-  $: keyUpdates = briefing.keyUpdates?.length ? briefing.keyUpdates : [];
-  $: decisionsNeeded = briefing.decisionsNeeded?.length ? briefing.decisionsNeeded : [];
-  $: topRisks = briefing.topRisks?.length ? briefing.topRisks : [];
-  $: talkTrack = briefing.talkTrack?.length ? briefing.talkTrack : [];
-  $: followUps = briefing.todayFollowUps?.length
+  let keyUpdates = $derived(briefing.keyUpdates?.length ? briefing.keyUpdates : []);
+  let decisionsNeeded = $derived(briefing.decisionsNeeded?.length ? briefing.decisionsNeeded : []);
+  let topRisks = $derived(briefing.topRisks?.length ? briefing.topRisks : []);
+  let talkTrack = $derived(briefing.talkTrack?.length ? briefing.talkTrack : []);
+  let followUps = $derived(briefing.todayFollowUps?.length
     ? briefing.todayFollowUps
     : briefing.todayPlan?.length
       ? briefing.todayPlan
-      : [];
-  $: sources = briefing.sources?.length ? briefing.sources : [];
+      : []);
+  let sources = $derived(briefing.sources?.length ? briefing.sources : []);
 </script>
 
 <div class="evidence-box">

@@ -1,22 +1,17 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  let { prompt = '', title = 'Edit Prompt', onapply, onreset } = $props();
 
-  export let prompt = '';
-  export let title = 'Edit Prompt';
+  let open = $state(false);
+  let editedPrompt = $state(prompt);
 
-  const dispatch = createEventDispatcher();
-
-  let open = false;
-  let editedPrompt = prompt;
-
-  $: editedPrompt = prompt;
+  $effect(() => { editedPrompt = prompt; });
 
   function handleApply() {
-    dispatch('apply', { prompt: editedPrompt });
+    onapply?.({ prompt: editedPrompt });
   }
 
   function handleReset() {
-    dispatch('reset');
+    onreset?.();
   }
 </script>
 

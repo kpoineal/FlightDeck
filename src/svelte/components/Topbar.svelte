@@ -3,12 +3,9 @@
   import { setMode } from '../lib/actions.js';
   import SearchOverlay from './SearchOverlay.svelte';
 
-  export let version = '';
-  export let updateAvailable = false;
-  export let updateText = 'Update available';
-  export let updateUrl = '';
+  let { version = '', updateAvailable = false, updateText = 'Update available', updateUrl = '' } = $props();
 
-  let updateDismissed = false;
+  let updateDismissed = $state(false);
 
   function handleModeClick(m) {
     setMode(m);
@@ -25,8 +22,8 @@
     updateDismissed = true;
   }
 
-  function handleSearchNavigate(e) {
-    const { type, id } = e.detail;
+  function handleSearchNavigate(data) {
+    const { type, id } = data;
     if (type === 'briefing') {
       setMode('Briefings');
     } else {
@@ -34,8 +31,8 @@
     }
   }
 
-  $: statusLabel = $loading ? 'Loading\u2026' : ($connected ? 'Connected' : 'Ready');
-  $: statusClass = $loading ? 'loading' : ($connected ? 'connected' : '');
+  let statusLabel = $derived($loading ? 'Loading\u2026' : ($connected ? 'Connected' : 'Ready'));
+  let statusClass = $derived($loading ? 'loading' : ($connected ? 'connected' : ''));
 </script>
 
 <header class="topbar">
@@ -61,7 +58,7 @@
     {/if}
   </div>
 
-  <SearchOverlay on:navigate={handleSearchNavigate} />
+  <SearchOverlay onnavigate={handleSearchNavigate} />
 
   <div class="topbar-tabs">
     <button class="mode-btn" class:active={$mode === 'Radar'}

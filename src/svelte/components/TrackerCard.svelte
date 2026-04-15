@@ -1,40 +1,36 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import { scanners } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
 
-  export let item;
+  let { item, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow } = $props();
 
-  const dispatch = createEventDispatcher();
+  let activeTab = $state('summary');
+  let promptPanelOpen = $state(false);
 
-  let activeTab = 'summary';
-  let promptPanelOpen = false;
-
-  $: isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
-  $: hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
-  $: unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
-  $: historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
-  $: people = Array.isArray(item.counterparties) && item.counterparties.length
+  let isTerminalStatus = $derived(item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
+  let hasNew = $derived(!isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true));
+  let unseenCount = $derived(isTerminalStatus ? 0 : unseenHistoryCount(item));
+  let historyEntries = $derived(Array.isArray(item.updateHistory) ? item.updateHistory : []);
+  let people = $derived(Array.isArray(item.counterparties) && item.counterparties.length
     ? item.counterparties.join(', ')
-    : 'No counterparties listed';
-  $: links = Array.isArray(item.evidenceLinks) ? item.evidenceLinks.filter((e) => e && e.url) : [];
-  $: lastUpdate = item.lastChangedAt || item.lastRunAt || null;
-  $: lastUpdateTime = lastUpdate ? new Date(lastUpdate) : null;
-  $: lastUpdateStr = lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null;
-  $: rt = relativeTime(lastUpdate);
-  $: steps = Array.isArray(item.suggestedNextSteps) ? item.suggestedNextSteps : [];
-  $: sevClass = severityClass(item.severity);
+    : 'No counterparties listed');
+  let links = $derived(Array.isArray(item.evidenceLinks) ? item.evidenceLinks.filter((e) => e && e.url) : []);
+  let lastUpdate = $derived(item.lastChangedAt || item.lastRunAt || null);
+  let lastUpdateTime = $derived(lastUpdate ? new Date(lastUpdate) : null);
+  let lastUpdateStr = $derived(lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null);
+  let rt = $derived(relativeTime(lastUpdate));
+  let steps = $derived(Array.isArray(item.suggestedNextSteps) ? item.suggestedNextSteps : []);
+  let sevClass = $derived(severityClass(item.severity));
 
-  let historyBadgeClass = '';
-  $: {
-    if (unseenCount >= 6) historyBadgeClass = 'history-badge--critical';
-    else if (unseenCount >= 3) historyBadgeClass = 'history-badge--elevated';
-    else if (unseenCount >= 1) historyBadgeClass = 'history-badge--observe';
-    else historyBadgeClass = '';
-  }
+  let historyBadgeClass = $derived(
+    unseenCount >= 6 ? 'history-badge--critical'
+    : unseenCount >= 3 ? 'history-badge--elevated'
+    : unseenCount >= 1 ? 'history-badge--observe'
+    : ''
+  );
 
   function setTab(tab) { activeTab = tab; }
 </script>
@@ -52,13 +48,13 @@
   <div class="tracker-head">
     <div class="tracker-head-left">
       <select class="severity-select {sevClass}" value={item.severity}
-        on:change={(e) => dispatch('severitychange', { itemId: item.id, value: e.target.value })}>
+        on:change={(e) => onseveritychange?.({ itemId: item.id, value: e.target.value })}>
         <option value="Critical">Critical</option>
         <option value="Elevated">Elevated</option>
         <option value="Observe">Observe</option>
       </select>
       <select class="status-select status-{item.lifecycleStatus || 'in-progress'}" value={item.lifecycleStatus}
-        on:change={(e) => dispatch('statuschange', { itemId: item.id, value: e.target.value })}>
+        on:change={(e) => onstatuschange?.({ itemId: item.id, value: e.target.value })}>
         {#each LIFECYCLE_STATUSES as s}
           <option value={s}>{LIFECYCLE_LABELS[s]}</option>
         {/each}
@@ -79,7 +75,7 @@
         <span class="pill last-updated-pill" title="Last update: {safeDate(lastUpdate)}">{rt}</span>
       {/if}
       <button class="popout-icon-btn" title="Pop Out" aria-label="Pop out"
-        on:click={() => dispatch('popout', { itemId: item.id })}>&nearr;</button>
+        on:click={() => onpopout?.({ itemId: item.id })}>&nearr;</button>
     </div>
   </div>
 
@@ -122,7 +118,7 @@
           <div class="next-step-hints">
             {#each steps as s}
               <button class="next-step-hint"
-                on:click={() => dispatch('draftstep', { suggestion: s, itemId: item.id })}>
+                on:click={() => ondraftstep?.({ suggestion: s, itemId: item.id })}>
                 &rarr; {s} <span class="draft-cta">Draft &nearr;</span>
               </button>
             {/each}
@@ -164,7 +160,7 @@
         <div class="monitor-source-section">
           <label class="monitor-source-label">Source</label>
           <select class="monitor-source-select" value={item.scannerId || ''}
-            on:change={(e) => dispatch('movescanner', { itemId: item.id, scannerId: e.target.value })}>
+            on:change={(e) => onmovescanner?.({ itemId: item.id, scannerId: e.target.value })}>
             {#each $scanners as s}
               <option value={s.id}>{s.name}</option>
             {/each}
@@ -172,8 +168,8 @@
         </div>
         <div class="tracker-schedule-bar">
           <ScheduleControls {item}
-            on:change={(e) => dispatch('schedulechange', e.detail)}
-            on:runnow={(e) => dispatch('runnow', e.detail)} />
+            onchange={(data) => onschedulechange?.(data)}
+            onrunnow={(data) => onrunnow?.(data)} />
           <p class="task-next-run">Next run: {safeDate(item.nextRunAt, 'Not scheduled')}</p>
           <button class="tracker-prompt-toggle" on:click={() => { promptPanelOpen = !promptPanelOpen; }}>
             <span class="chevron" class:chevron--expanded={promptPanelOpen}>&#9654;</span> Edit monitoring prompt
@@ -182,11 +178,11 @@
             <div class="tracker-prompt-panel show">
               <textarea class="tracking-textarea" placeholder="Monitoring context for WorkIQ"
                 value={item.monitorPrompt || ''}
-                on:change={(e) => dispatch('promptchange', { itemId: item.id, value: e.target.value })}></textarea>
+                on:change={(e) => onpromptchange?.({ itemId: item.id, value: e.target.value })}></textarea>
             </div>
           {/if}
           <div class="monitor-danger-zone">
-            <button class="small-btn warn" on:click={() => dispatch('delete', { itemId: item.id })}>Delete this item</button>
+            <button class="small-btn warn" on:click={() => ondelete?.({ itemId: item.id })}>Delete this item</button>
           </div>
         </div>
       </div>
@@ -194,7 +190,7 @@
 
     <div class="action-row">
       {#if hasNew || unseenCount > 0}
-        <button class="small-btn primary" on:click={() => dispatch('markseen', { itemId: item.id })}>Mark as Seen</button>
+        <button class="small-btn primary" on:click={() => onmarkseen?.({ itemId: item.id })}>Mark as Seen</button>
       {/if}
     </div>
   </div>

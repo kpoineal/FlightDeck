@@ -1,7 +1,7 @@
 <script>
   import HistoryItem from './HistoryItem.svelte';
 
-  export let history = [];
+  let { history = [] } = $props();
 </script>
 
 {#if history.length === 0}

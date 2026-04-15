@@ -1,11 +1,11 @@
 <script>
   import { safeDate } from '../lib/utils.js';
 
-  export let entry;
+  let { entry } = $props();
 
-  $: time = safeDate(entry.at, 'Unknown');
-  $: links = Array.isArray(entry.payload?.newLinks) ? entry.payload.newLinks : [];
-  $: hasLinks = links.length > 0;
+  let time = $derived(safeDate(entry.at, 'Unknown'));
+  let links = $derived(Array.isArray(entry.payload?.newLinks) ? entry.payload.newLinks : []);
+  let hasLinks = $derived(links.length > 0);
 </script>
 
 <article class="history-item">

@@ -1,5 +1,4 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import { scanners } from '../lib/stores.js';
   import {
     SCHEDULE_INTERVAL_OPTIONS,
@@ -10,30 +9,27 @@
     SIGNAL_TYPE_OPTIONS,
   } from '../lib/constants.js';
 
-  export let open = false;
-  export let scannerId = null;
+  let { open = false, scannerId = null, oncreate, oncancel } = $props();
 
-  const dispatch = createEventDispatcher();
+  let title = $state('');
+  let context = $state('');
+  let severity = $state('Observe');
+  let scheduleType = $state('interval');
+  let scheduleValue = $state('30m');
+  let oneTimeAt = $state('');
+  let weeklyDays = $state([...DEFAULT_WEEKLY_DAYS]);
+  let weeklyTimes = $state([...DEFAULT_WEEKLY_TIMES]);
+  let selectedSignals = $state([...ALL_SIGNAL_TYPES]);
+  let selectedScannerId = $state(scannerId);
 
-  let title = '';
-  let context = '';
-  let severity = 'Observe';
-  let scheduleType = 'interval';
-  let scheduleValue = '30m';
-  let oneTimeAt = '';
-  let weeklyDays = [...DEFAULT_WEEKLY_DAYS];
-  let weeklyTimes = [...DEFAULT_WEEKLY_TIMES];
-  let selectedSignals = [...ALL_SIGNAL_TYPES];
-  let selectedScannerId = scannerId;
-
-  $: if (scannerId !== selectedScannerId) selectedScannerId = scannerId;
+  $effect(() => { if (scannerId !== selectedScannerId) selectedScannerId = scannerId; });
 
   function handleBackdrop(e) {
-    if (e.target === e.currentTarget) dispatch('cancel');
+    if (e.target === e.currentTarget) oncancel?.();
   }
 
   function handleCreate() {
-    dispatch('create', {
+    oncreate?.({
       title,
       context,
       severity,
@@ -194,7 +190,7 @@
 
         <div class="modal-actions">
           <button class="small-btn primary" on:click={handleCreate}>Create Task</button>
-          <button class="small-btn" on:click={() => dispatch('cancel')}>Cancel</button>
+          <button class="small-btn" on:click={() => oncancel?.()}>Cancel</button>
         </div>
       </div>
     </div>

@@ -4,8 +4,8 @@
   import DayBriefingCard from './DayBriefingCard.svelte';
   import MeetingCard from './MeetingCard.svelte';
 
-  $: dayBriefing = $briefingsByMeetingId[DAY_BRIEFING_KEY] || null;
-  $: dayBriefingUnseen = isDayBriefingUnseen(dayBriefing, $briefingSeenAt);
+  let dayBriefing = $derived($briefingsByMeetingId[DAY_BRIEFING_KEY] || null);
+  let dayBriefingUnseen = $derived(isDayBriefingUnseen(dayBriefing, $briefingSeenAt));
 
   function isDayBriefingUnseen(briefing, seenAt) {
     if (!briefing) return false;
@@ -25,7 +25,7 @@
     return $briefingsByMeetingId[meetingId] || null;
   }
 
-  $: sortedMeetings = sortMeetings($meetings, $briefingsByMeetingId, $briefingSeenAt);
+  let sortedMeetings = $derived(sortMeetings($meetings, $briefingsByMeetingId, $briefingSeenAt));
 
   function sortMeetings(mtgs, briefings, seenAt) {
     return [...mtgs].sort((a, b) => {
@@ -44,17 +44,16 @@
   }
 
   function handleDayGenerate() {
-    // Dispatch to vanilla JS layer via CustomEvent on window
     window.dispatchEvent(new CustomEvent('flightdeck:generate-day-briefing'));
   }
 
-  function handleMeetingGenerate(event) {
-    const { meetingId } = event.detail;
+  function handleMeetingGenerate(data) {
+    const { meetingId } = data;
     window.dispatchEvent(new CustomEvent('flightdeck:generate-briefing', { detail: { meetingId } }));
   }
 
-  function handleMeetingToggle(event) {
-    const { meetingId, open } = event.detail;
+  function handleMeetingToggle(data) {
+    const { meetingId, open } = data;
     expandedBriefingMeetingIds.update((ids) => {
       if (open && !ids.includes(meetingId)) return [...ids, meetingId];
       if (!open && ids.includes(meetingId)) return ids.filter((id) => id !== meetingId);
@@ -70,7 +69,7 @@
   <DayBriefingCard
     briefing={dayBriefing}
     unseen={dayBriefingUnseen}
-    on:generate={handleDayGenerate}
+    ongenerate={handleDayGenerate}
   />
 
   {#if sortedMeetings.length}
@@ -80,8 +79,8 @@
         briefing={getBriefing(meeting.id)}
         unseen={isMeetingBriefingUnseen(meeting.id, getBriefing(meeting.id), $briefingSeenAt)}
         expanded={$expandedBriefingMeetingIds.includes(meeting.id)}
-        on:generate={handleMeetingGenerate}
-        on:toggle={handleMeetingToggle}
+        ongenerate={handleMeetingGenerate}
+        ontoggle={handleMeetingToggle}
       />
     {/each}
   {:else}

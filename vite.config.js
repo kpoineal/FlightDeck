@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     svelte({
       configFile: false,
-      compilerOptions: { css: 'external', runes: false },
+      compilerOptions: { css: 'external' },
     }),
   ],
   build: {

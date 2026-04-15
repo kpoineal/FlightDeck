@@ -1,16 +1,14 @@
 <script>
-  export let entries = [];
-  export let item = null;
-  export let maxVisible = 3;
-
   import { normalizeSeverity } from '../lib/utils.js';
 
-  let showingAll = false;
+  let { entries = [], item = null, maxVisible = 3 } = $props();
 
-  $: slicedEntries = maxVisible && !showingAll && entries.length > maxVisible
+  let showingAll = $state(false);
+
+  let slicedEntries = $derived(maxVisible && !showingAll && entries.length > maxVisible
     ? entries.slice(0, maxVisible)
-    : entries;
-  $: hiddenCount = entries.length - (maxVisible || entries.length);
+    : entries);
+  let hiddenCount = $derived(entries.length - (maxVisible || entries.length));
 
   function severityLabel(sev) {
     const s = (sev || '').toLowerCase();
@@ -48,7 +46,7 @@
     return { isStatus: false, text: c };
   }
 
-  $: isTerminal = item && (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
+  let isTerminal = $derived(item && (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived'));
 </script>
 
 {#if entries.length > 0}

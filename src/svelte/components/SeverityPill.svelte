@@ -1,13 +1,13 @@
 <script>
-  export let severity = 'Observe';
+  let { severity = 'Observe' } = $props();
 
-  $: normalized = (severity || 'Observe').toLowerCase().includes('critical') ? 'critical'
+  let normalized = $derived((severity || 'Observe').toLowerCase().includes('critical') ? 'critical'
     : (severity || '').toLowerCase().includes('elevated') ? 'elevated'
-    : 'observe';
+    : 'observe');
 
-  $: label = normalized === 'critical' ? 'Critical'
+  let label = $derived(normalized === 'critical' ? 'Critical'
     : normalized === 'elevated' ? 'Elevated'
-    : 'Observe';
+    : 'Observe');
 </script>
 
 <span class="pill severity-{normalized}">{label}</span>

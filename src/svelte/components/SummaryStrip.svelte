@@ -1,10 +1,10 @@
 <script>
   import { kpis, mode, items, meetings, briefingsByMeetingId } from '../lib/stores.js';
 
-  $: isBriefings = $mode === 'Briefings';
+  let isBriefings = $derived($mode === 'Briefings');
 
   // Briefing counts
-  $: briefingCounts = (() => {
+  let briefingCounts = $derived.by(() => {
     if (!isBriefings) return { briefed: 0, unbriefed: 0 };
     let briefed = 0;
     let unbriefed = 0;
@@ -17,30 +17,30 @@
       }
     }
     return { briefed, unbriefed };
-  })();
+  });
 
   // Severity counts
-  $: criticalCount = isBriefings ? briefingCounts.unbriefed : $kpis.critical;
-  $: elevatedCount = isBriefings ? briefingCounts.briefed : $kpis.elevated;
-  $: observeCount = isBriefings ? 0 : $kpis.observe;
+  let criticalCount = $derived(isBriefings ? briefingCounts.unbriefed : $kpis.critical);
+  let elevatedCount = $derived(isBriefings ? briefingCounts.briefed : $kpis.elevated);
+  let observeCount = $derived(isBriefings ? 0 : $kpis.observe);
 
   // Bar percentages
-  $: barTotal = isBriefings
+  let barTotal = $derived(isBriefings
     ? (briefingCounts.unbriefed + briefingCounts.briefed)
-    : ($kpis.critical + $kpis.elevated + $kpis.observe);
-  $: criticalPct = barTotal ? (criticalCount / barTotal * 100) : 0;
-  $: elevatedPct = barTotal ? (elevatedCount / barTotal * 100) : 0;
-  $: observePct = barTotal ? (observeCount / barTotal * 100) : 0;
+    : ($kpis.critical + $kpis.elevated + $kpis.observe));
+  let criticalPct = $derived(barTotal ? (criticalCount / barTotal * 100) : 0);
+  let elevatedPct = $derived(barTotal ? (elevatedCount / barTotal * 100) : 0);
+  let observePct = $derived(barTotal ? (observeCount / barTotal * 100) : 0);
 
   // Total label
-  $: totalLabel = isBriefings
+  let totalLabel = $derived(isBriefings
     ? `${briefingCounts.unbriefed + briefingCounts.briefed} meeting${(briefingCounts.unbriefed + briefingCounts.briefed) === 1 ? '' : 's'}`
-    : `${$kpis.total} item${$kpis.total === 1 ? '' : 's'}`;
+    : `${$kpis.total} item${$kpis.total === 1 ? '' : 's'}`);
 
   // Blocked / new / complete
-  $: blockedCount = $kpis.blocked || 0;
-  $: newItemCount = $kpis.new || 0;
-  $: completeCount = $kpis.complete || 0;
+  let blockedCount = $derived($kpis.blocked || 0);
+  let newItemCount = $derived($kpis.new || 0);
+  let completeCount = $derived($kpis.complete || 0);
 </script>
 
 <section class="summary-strip">

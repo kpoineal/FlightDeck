@@ -1,13 +1,8 @@
 <script>
-  export let open = false;
-  export let summary = '';
-  export let targets = '';
-
-  import { createEventDispatcher } from 'svelte';
-  const dispatch = createEventDispatcher();
+  let { open = false, summary = '', targets = '', onconfirm, oncancel } = $props();
 
   function handleBackdrop(e) {
-    if (e.target === e.currentTarget) dispatch('cancel');
+    if (e.target === e.currentTarget) oncancel?.();
   }
 </script>
 
@@ -19,8 +14,8 @@
       <p class="panel-sub">{summary}</p>
       <div class="confirm-targets">{targets}</div>
       <div class="modal-actions">
-        <button class="small-btn" on:click={() => dispatch('cancel')}>Cancel</button>
-        <button class="small-btn warn" on:click={() => dispatch('confirm')}>Confirm</button>
+        <button class="small-btn" on:click={() => oncancel?.()}>Cancel</button>
+        <button class="small-btn warn" on:click={() => onconfirm?.()}>Confirm</button>
       </div>
     </div>
   </div>

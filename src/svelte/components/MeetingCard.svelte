@@ -1,27 +1,21 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import { safeDate } from '../lib/utils.js';
   import BriefingContent from './BriefingContent.svelte';
 
-  export let meeting;
-  export let briefing = null;
-  export let unseen = false;
-  export let expanded = false;
+  let { meeting, briefing = null, unseen = false, expanded = false, ontoggle, ongenerate } = $props();
 
-  const dispatch = createEventDispatcher();
-
-  $: hasBriefing = !!briefing;
-  $: severityClass = hasBriefing ? 'briefed' : 'unbriefed';
-  $: statusLabel = hasBriefing ? 'Briefed' : 'Unbriefed';
-  $: buttonLabel = hasBriefing ? 'Regenerate Briefing' : 'Generate Briefing';
-  $: when = safeDate(meeting.startAt, 'Unknown');
+  let hasBriefing = $derived(!!briefing);
+  let severityClass = $derived(hasBriefing ? 'briefed' : 'unbriefed');
+  let statusLabel = $derived(hasBriefing ? 'Briefed' : 'Unbriefed');
+  let buttonLabel = $derived(hasBriefing ? 'Regenerate Briefing' : 'Generate Briefing');
+  let when = $derived(safeDate(meeting.startAt, 'Unknown'));
 
   function handleToggle(event) {
-    dispatch('toggle', { meetingId: meeting.id, open: event.target.open });
+    ontoggle?.({ meetingId: meeting.id, open: event.target.open });
   }
 
   function handleGenerate() {
-    dispatch('generate', { meetingId: meeting.id });
+    ongenerate?.({ meetingId: meeting.id });
   }
 </script>
 

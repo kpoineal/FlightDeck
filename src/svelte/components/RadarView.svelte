@@ -6,44 +6,44 @@
   import AddTaskModal from './AddTaskModal.svelte';
   import ScannerSettingsModal from './ScannerSettingsModal.svelte';
 
-  $: sorted = sortBySeverity($filteredItems, true);
-  $: groups = groupItemsBySource(sorted, $scanners);
-  $: isMinimal = $density === 'minimal';
-  $: emptyMsg = $filter === 'all'
+  let sorted = $derived(sortBySeverity($filteredItems, true));
+  let groups = $derived(groupItemsBySource(sorted, $scanners));
+  let isMinimal = $derived($density === 'minimal');
+  let emptyMsg = $derived($filter === 'all'
     ? 'No items yet. Click Refresh to scan or add a custom monitored task above.'
-    : 'No items matching the current filter.';
+    : 'No items matching the current filter.');
 
-  let addTaskOpen = false;
-  let addTaskScannerId = null;
-  let settingsOpen = false;
-  let settingsScanner = null;
+  let addTaskOpen = $state(false);
+  let addTaskScannerId = $state(null);
+  let settingsOpen = $state(false);
+  let settingsScanner = $state(null);
 
-  function handleAddItem(e) {
-    addTaskScannerId = e.detail.scannerId;
+  function handleAddItem(data) {
+    addTaskScannerId = data.scannerId;
     addTaskOpen = true;
   }
 
-  function handleScannerSettings(e) {
-    const s = $scanners.find(sc => sc.id === e.detail.scannerId) || null;
+  function handleScannerSettings(data) {
+    const s = $scanners.find(sc => sc.id === data.scannerId) || null;
     settingsScanner = s;
     settingsOpen = true;
   }
 
-  function handleScannerRun(e) {
+  function handleScannerRun(data) {
     if (window.workiq && typeof window.workiq.runScanner === 'function') {
-      window.workiq.runScanner(e.detail.scannerId);
+      window.workiq.runScanner(data.scannerId);
     }
   }
 
-  function handleScannerToggle(e) {
+  function handleScannerToggle(data) {
     if (window.workiq && typeof window.workiq.toggleScanner === 'function') {
-      window.workiq.toggleScanner(e.detail.scannerId);
+      window.workiq.toggleScanner(data.scannerId);
     }
   }
 
-  function handlePopout(e) {
+  function handlePopout(data) {
     if (window.workiq && typeof window.workiq.openTrackerPopout === 'function') {
-      window.workiq.openTrackerPopout(e.detail.itemId);
+      window.workiq.openTrackerPopout(data.itemId);
     }
   }
 
@@ -53,10 +53,11 @@
   }
 
   // Cold storage fetch for archived filter
-  $: if ($filter === 'archived' && window.workiq && typeof window.workiq.getColdItems === 'function') {
-    // Trigger cold storage fetch — items store will be updated by the main app bridge
-    window.workiq.getColdItems().catch(() => {});
-  }
+  $effect(() => {
+    if ($filter === 'archived' && window.workiq && typeof window.workiq.getColdItems === 'function') {
+      window.workiq.getColdItems().catch(() => {});
+    }
+  });
 </script>
 
 <section class="mode-view active">
@@ -98,20 +99,11 @@
         {:else}
           {#each groups as group (group.scanner.id)}
             <ScannerSection scanner={group.scanner} items={group.items}
-              on:additem={handleAddItem}
-              on:scannerrun={handleScannerRun}
-              on:scannertoggle={handleScannerToggle}
-              on:scannersettings={handleScannerSettings}
-              on:popout={handlePopout}
-              on:severitychange
-              on:statuschange
-              on:markseen
-              on:delete
-              on:draftstep
-              on:schedulechange
-              on:promptchange
-              on:movescanner
-              on:runnow />
+              onadditem={handleAddItem}
+              onscannerrun={handleScannerRun}
+              onscannertoggle={handleScannerToggle}
+              onscannersettings={handleScannerSettings}
+              onpopout={handlePopout} />
           {/each}
         {/if}
       </div>
@@ -120,11 +112,11 @@
 </section>
 
 <AddTaskModal open={addTaskOpen} scannerId={addTaskScannerId}
-  on:create={(e) => { addTaskOpen = false; /* bridge to vanilla JS or dispatch */ }}
-  on:cancel={() => { addTaskOpen = false; }} />
+  oncreate={(data) => { addTaskOpen = false; }}
+  oncancel={() => { addTaskOpen = false; }} />
 
 <ScannerSettingsModal open={settingsOpen} scanner={settingsScanner}
-  on:save={(e) => { settingsOpen = false; }}
-  on:runnow={() => { if (settingsScanner) handleScannerRun({ detail: { scannerId: settingsScanner.id } }); }}
-  on:delete={(e) => { settingsOpen = false; }}
-  on:close={() => { settingsOpen = false; }} />
+  onsave={(data) => { settingsOpen = false; }}
+  onrunnow={() => { if (settingsScanner) handleScannerRun({ scannerId: settingsScanner.id }); }}
+  ondelete={(data) => { settingsOpen = false; }}
+  onclose={() => { settingsOpen = false; }} />

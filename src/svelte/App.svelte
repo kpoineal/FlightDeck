@@ -99,7 +99,7 @@
 <div class="app-shell">
   <main class="main">
     {#if !$connected}
-      <ConnectBanner on:enable={handleEnable} />
+      <ConnectBanner onenable={handleEnable} />
     {/if}
 
     <SummaryStrip />
@@ -115,7 +115,7 @@
 </div>
 
 <ConfirmModal open={confirmOpen} summary={confirmSummary} targets={confirmTargets}
-  on:confirm={() => { if (pendingConfirmAction) pendingConfirmAction(); confirmOpen = false; }}
-  on:cancel={() => { confirmOpen = false; }} />
+  onconfirm={() => { if (pendingConfirmAction) pendingConfirmAction(); confirmOpen = false; }}
+  oncancel={() => { confirmOpen = false; }} />
 
 <Toast />

@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { items } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
@@ -7,35 +7,34 @@
   import ScheduleControls from './ScheduleControls.svelte';
   import SeverityPill from './SeverityPill.svelte';
 
-  export let itemId;
-
-  const dispatch = createEventDispatcher();
+  let { itemId, onseveritychange, onmarkseen, ondelete, onschedulechange, onrunnow, onpromptchange } = $props();
 
   const RESIZE_STORAGE_KEY = 'flightdeck_popout_panel_ratio';
   const MIN_PANEL_PX = 250;
 
-  $: item = $items.find((entry) => entry.id === itemId) || null;
-  $: if (item) document.title = item.title || 'Tracked Item';
+  let item = $derived($items.find((entry) => entry.id === itemId) || null);
 
-  $: isTerminalStatus = item && (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
-  $: hasNew = item && !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
-  $: unseenCount = item ? (isTerminalStatus ? 0 : unseenHistoryCount(item)) : 0;
-  $: historyEntries = item && Array.isArray(item.updateHistory) ? item.updateHistory : [];
-  $: links = item && Array.isArray(item.evidenceLinks) ? item.evidenceLinks.filter((e) => e && e.url) : [];
-  $: lastUpdate = item ? (item.lastChangedAt || item.lastRunAt || null) : null;
-  $: lastUpdateTime = lastUpdate ? new Date(lastUpdate) : null;
-  $: lastUpdateStr = lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null;
-  $: rt = relativeTime(lastUpdate);
-  $: sevClass = item ? severityClass(item.severity) : '';
+  $effect(() => { if (item) document.title = item.title || 'Tracked Item'; });
 
-  let peoplePanelOpen = true;
-  let linksPanelOpen = true;
-  let monitoringPanelOpen = false;
-  let promptPanelOpen = false;
+  let isTerminalStatus = $derived(item && (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived'));
+  let hasNew = $derived(item && !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true));
+  let unseenCount = $derived(item ? (isTerminalStatus ? 0 : unseenHistoryCount(item)) : 0);
+  let historyEntries = $derived(item && Array.isArray(item.updateHistory) ? item.updateHistory : []);
+  let links = $derived(item && Array.isArray(item.evidenceLinks) ? item.evidenceLinks.filter((e) => e && e.url) : []);
+  let lastUpdate = $derived(item ? (item.lastChangedAt || item.lastRunAt || null) : null);
+  let lastUpdateTime = $derived(lastUpdate ? new Date(lastUpdate) : null);
+  let lastUpdateStr = $derived(lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null);
+  let rt = $derived(relativeTime(lastUpdate));
+  let sevClass = $derived(item ? severityClass(item.severity) : '');
+
+  let peoplePanelOpen = $state(true);
+  let linksPanelOpen = $state(true);
+  let monitoringPanelOpen = $state(false);
+  let promptPanelOpen = $state(false);
 
   // Resizable panels
   let panelsEl;
-  let dragging = false;
+  let dragging = $state(false);
 
   function initResize() {
     if (!panelsEl) return;
@@ -90,27 +89,27 @@
   });
 
   function handleSeverityChange(e) {
-    dispatch('severitychange', { itemId: item.id, value: e.target.value });
+    onseveritychange?.({ itemId: item.id, value: e.target.value });
   }
 
   function handleMarkSeen() {
-    dispatch('markseen', { itemId: item.id });
+    onmarkseen?.({ itemId: item.id });
   }
 
   function handleDelete() {
-    dispatch('delete', { itemId: item.id });
+    ondelete?.({ itemId: item.id });
   }
 
-  function handleScheduleChange(e) {
-    dispatch('schedulechange', e.detail);
+  function handleScheduleChange(data) {
+    onschedulechange?.(data);
   }
 
-  function handleRunNow(e) {
-    dispatch('runnow', e.detail);
+  function handleRunNow(data) {
+    onrunnow?.(data);
   }
 
   function handlePromptChange(e) {
-    dispatch('promptchange', { itemId: item.id, value: e.target.value });
+    onpromptchange?.({ itemId: item.id, value: e.target.value });
   }
 </script>
 
@@ -220,8 +219,8 @@
             <div class="tracker-section-panel show">
               <div class="tracker-schedule-bar">
                 <ScheduleControls {item}
-                  on:change={handleScheduleChange}
-                  on:runnow={handleRunNow} />
+                  onchange={handleScheduleChange}
+                  onrunnow={handleRunNow} />
                 <p class="task-next-run">Next run: {safeDate(item.nextRunAt, 'Not scheduled')}</p>
                 <button class="tracker-prompt-toggle" on:click={() => { promptPanelOpen = !promptPanelOpen; }}>
                   <span class="chevron" class:chevron--expanded={promptPanelOpen}>&#9654;</span> Edit monitoring prompt

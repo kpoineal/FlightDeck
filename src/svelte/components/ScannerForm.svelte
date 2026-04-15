@@ -1,5 +1,4 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import {
     SCHEDULE_INTERVAL_OPTIONS,
     WEEKLY_DAY_OPTIONS,
@@ -14,41 +13,39 @@
     DEFAULT_SCANNER_PROMPT,
   } from '../lib/constants.js';
 
-  export let scanner = null;
+  let { scanner = null, onsave, onrunnow, oncancel } = $props();
 
-  const dispatch = createEventDispatcher();
+  let isEdit = $derived(scanner != null);
 
-  $: isEdit = scanner != null;
+  let name = $state(isEdit ? (scanner.name || '') : '');
+  let prompt = $state(isEdit ? (scanner.prompt || '') : '');
+  let scheduleType = $state((isEdit && scanner.scheduleType) || 'interval');
+  let scheduleValue = $state((isEdit && scanner.scheduleValue) || '30m');
+  let workHoursOnly = $state(isEdit ? scanner.workHoursOnly === true : false);
+  let autoMonitorNewItems = $state(isEdit ? scanner.autoMonitorNewItems === true : false);
+  let notificationMode = $state((isEdit && scanner.notificationMode) || 'all');
+  let signalTypes = $state(isEdit && Array.isArray(scanner.signalTypes) ? [...scanner.signalTypes] : [...ALL_SIGNAL_TYPES]);
+  let crossScannerDedup = $state(isEdit ? scanner.crossScannerDedup !== false : true);
+  let autoMonitorSeverityThreshold = $state((isEdit && scanner.autoMonitorSeverityThreshold) || 'all');
+  let maxItemsPerScan = $state(isEdit ? (scanner.maxItemsPerScan || 10) : 10);
+  let runOnStartup = $state(isEdit ? scanner.runOnStartup === true : false);
+  let missedRunPolicy = $state((isEdit && scanner.missedRunPolicy) || 'run-once');
+  let dedupStrategy = $state((isEdit && scanner.dedupStrategy) || 'evidence-url');
+  let excludeKeywords = $state(isEdit && Array.isArray(scanner.excludeKeywords) ? scanner.excludeKeywords.join(', ') : '');
+  let defaultMonitorSchedule = $state((isEdit && scanner.defaultMonitorSchedule) || '30m');
+  let defaultMonitorScheduleType = $state((isEdit && scanner.defaultMonitorScheduleType) || 'interval');
+  let defaultMonitorWorkHoursOnly = $state(isEdit ? scanner.defaultMonitorWorkHoursOnly === true : false);
+  let defaultMonitorNotifyEnabled = $state(isEdit ? scanner.defaultMonitorNotifyEnabled !== false : true);
+  let defaultMonitorSignals = $state(isEdit && Array.isArray(scanner.defaultMonitorSignals) ? [...scanner.defaultMonitorSignals] : [...ALL_SIGNAL_TYPES]);
+  let autoArchiveAfterDays = $state(isEdit ? (scanner.autoArchiveAfterDays || 0) : 0);
+  let retentionDays = $state(isEdit ? (scanner.retentionDays || 365) : 365);
+  let webhookUrl = $state(isEdit ? (scanner.webhookUrl || '') : '');
+  let scannerGroupId = $state(isEdit ? (scanner.scannerGroupId || '') : '');
 
-  let name = isEdit ? (scanner.name || '') : '';
-  let prompt = isEdit ? (scanner.prompt || '') : '';
-  let scheduleType = (isEdit && scanner.scheduleType) || 'interval';
-  let scheduleValue = (isEdit && scanner.scheduleValue) || '30m';
-  let workHoursOnly = isEdit ? scanner.workHoursOnly === true : false;
-  let autoMonitorNewItems = isEdit ? scanner.autoMonitorNewItems === true : false;
-  let notificationMode = (isEdit && scanner.notificationMode) || 'all';
-  let signalTypes = isEdit && Array.isArray(scanner.signalTypes) ? [...scanner.signalTypes] : [...ALL_SIGNAL_TYPES];
-  let crossScannerDedup = isEdit ? scanner.crossScannerDedup !== false : true;
-  let autoMonitorSeverityThreshold = (isEdit && scanner.autoMonitorSeverityThreshold) || 'all';
-  let maxItemsPerScan = isEdit ? (scanner.maxItemsPerScan || 10) : 10;
-  let runOnStartup = isEdit ? scanner.runOnStartup === true : false;
-  let missedRunPolicy = (isEdit && scanner.missedRunPolicy) || 'run-once';
-  let dedupStrategy = (isEdit && scanner.dedupStrategy) || 'evidence-url';
-  let excludeKeywords = isEdit && Array.isArray(scanner.excludeKeywords) ? scanner.excludeKeywords.join(', ') : '';
-  let defaultMonitorSchedule = (isEdit && scanner.defaultMonitorSchedule) || '30m';
-  let defaultMonitorScheduleType = (isEdit && scanner.defaultMonitorScheduleType) || 'interval';
-  let defaultMonitorWorkHoursOnly = isEdit ? scanner.defaultMonitorWorkHoursOnly === true : false;
-  let defaultMonitorNotifyEnabled = isEdit ? scanner.defaultMonitorNotifyEnabled !== false : true;
-  let defaultMonitorSignals = isEdit && Array.isArray(scanner.defaultMonitorSignals) ? [...scanner.defaultMonitorSignals] : [...ALL_SIGNAL_TYPES];
-  let autoArchiveAfterDays = isEdit ? (scanner.autoArchiveAfterDays || 0) : 0;
-  let retentionDays = isEdit ? (scanner.retentionDays || 365) : 365;
-  let webhookUrl = isEdit ? (scanner.webhookUrl || '') : '';
-  let scannerGroupId = isEdit ? (scanner.scannerGroupId || '') : '';
-
-  let weeklyDays = isEdit && Array.isArray(scanner.weeklyDays) ? [...scanner.weeklyDays] : [...DEFAULT_WEEKLY_DAYS];
-  let weeklyTimes = isEdit && Array.isArray(scanner.weeklyTimes) ? [...scanner.weeklyTimes] : [...DEFAULT_WEEKLY_TIMES];
-  let defaultMonitorWeeklyDays = isEdit && Array.isArray(scanner.defaultMonitorWeeklyDays) ? [...scanner.defaultMonitorWeeklyDays] : [...DEFAULT_WEEKLY_DAYS];
-  let defaultMonitorWeeklyTimes = isEdit && Array.isArray(scanner.defaultMonitorWeeklyTimes) ? [...scanner.defaultMonitorWeeklyTimes] : [...DEFAULT_WEEKLY_TIMES];
+  let weeklyDays = $state(isEdit && Array.isArray(scanner.weeklyDays) ? [...scanner.weeklyDays] : [...DEFAULT_WEEKLY_DAYS]);
+  let weeklyTimes = $state(isEdit && Array.isArray(scanner.weeklyTimes) ? [...scanner.weeklyTimes] : [...DEFAULT_WEEKLY_TIMES]);
+  let defaultMonitorWeeklyDays = $state(isEdit && Array.isArray(scanner.defaultMonitorWeeklyDays) ? [...scanner.defaultMonitorWeeklyDays] : [...DEFAULT_WEEKLY_DAYS]);
+  let defaultMonitorWeeklyTimes = $state(isEdit && Array.isArray(scanner.defaultMonitorWeeklyTimes) ? [...scanner.defaultMonitorWeeklyTimes] : [...DEFAULT_WEEKLY_TIMES]);
 
   function collectValues() {
     return {
@@ -339,12 +336,12 @@
   </div>
 
   <div class="scanner-form-actions">
-    <button class="small-btn primary" on:click={() => dispatch('save', collectValues())}>
+    <button class="small-btn primary" on:click={() => onsave?.(collectValues())}>
       {isEdit ? 'Update Scanner' : 'Create Scanner'}
     </button>
     {#if isEdit}
-      <button class="small-btn" on:click={() => dispatch('runnow')}>Run Now</button>
+      <button class="small-btn" on:click={() => onrunnow?.()}>Run Now</button>
     {/if}
-    <button class="small-btn" on:click={() => dispatch('cancel')}>Cancel</button>
+    <button class="small-btn" on:click={() => oncancel?.()}>Cancel</button>
   </div>
 </div>

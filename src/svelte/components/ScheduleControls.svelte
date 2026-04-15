@@ -1,5 +1,4 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import {
     SCHEDULE_INTERVAL_OPTIONS,
     WEEKLY_DAY_OPTIONS,
@@ -9,25 +8,23 @@
     SIGNAL_TYPE_OPTIONS,
   } from '../lib/constants.js';
 
-  export let item;
+  let { item, onchange, onrunnow } = $props();
 
-  const dispatch = createEventDispatcher();
-
-  $: scheduleType = item.scheduleType === 'one-time' ? 'one-time'
+  let scheduleType = $derived(item.scheduleType === 'one-time' ? 'one-time'
     : item.scheduleType === 'weekly' ? 'weekly'
-    : 'interval';
-  $: scheduleValue = item.scheduleValue || '30m';
-  $: monitorEnabled = item.monitorEnabled !== false;
-  $: notifyEnabled = item.notifyEnabled !== false;
-  $: workHoursOnly = item.workHoursOnly === true;
-  $: oneTimeAt = item.oneTimeAt ? item.oneTimeAt.slice(0, 16) : '';
-  $: weeklyDays = Array.isArray(item.weeklyDays) ? item.weeklyDays : [...DEFAULT_WEEKLY_DAYS];
-  $: weeklyTimes = Array.isArray(item.weeklyTimes) ? item.weeklyTimes : [...DEFAULT_WEEKLY_TIMES];
-  $: activeSignals = Array.isArray(item.monitorSignals) ? item.monitorSignals : [...ALL_SIGNAL_TYPES];
-  $: isInterval = scheduleType !== 'one-time' && scheduleType !== 'weekly';
+    : 'interval');
+  let scheduleValue = $derived(item.scheduleValue || '30m');
+  let monitorEnabled = $derived(item.monitorEnabled !== false);
+  let notifyEnabled = $derived(item.notifyEnabled !== false);
+  let workHoursOnly = $derived(item.workHoursOnly === true);
+  let oneTimeAt = $derived(item.oneTimeAt ? item.oneTimeAt.slice(0, 16) : '');
+  let weeklyDays = $derived(Array.isArray(item.weeklyDays) ? item.weeklyDays : [...DEFAULT_WEEKLY_DAYS]);
+  let weeklyTimes = $derived(Array.isArray(item.weeklyTimes) ? item.weeklyTimes : [...DEFAULT_WEEKLY_TIMES]);
+  let activeSignals = $derived(Array.isArray(item.monitorSignals) ? item.monitorSignals : [...ALL_SIGNAL_TYPES]);
+  let isInterval = $derived(scheduleType !== 'one-time' && scheduleType !== 'weekly');
 
   function emitChange(field, value) {
-    dispatch('change', { itemId: item.id, field, value });
+    onchange?.({ itemId: item.id, field, value });
   }
 </script>
 
@@ -68,7 +65,7 @@
       on:change={(e) => emitChange('oneTimeAt', e.target.value)} />
   {/if}
 
-  <button class="small-btn" on:click={() => dispatch('runnow', { itemId: item.id })}>Run check now</button>
+  <button class="small-btn" on:click={() => onrunnow?.({ itemId: item.id })}>Run check now</button>
 </div>
 
 {#if scheduleType === 'weekly'}

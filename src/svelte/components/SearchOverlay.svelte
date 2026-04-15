@@ -1,14 +1,14 @@
 <script>
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { items, meetings, briefingsByMeetingId } from '../lib/stores.js';
   import { escapeHtml } from '../lib/utils.js';
 
-  const dispatch = createEventDispatcher();
+  let { onnavigate } = $props();
 
-  let query = '';
-  let results = [];
-  let activeIndex = -1;
-  let showResults = false;
+  let query = $state('');
+  let results = $state([]);
+  let activeIndex = $state(-1);
+  let showResults = $state(false);
   let inputEl;
   let resultsEl;
   let debounceTimer = null;
@@ -96,7 +96,7 @@
 
   function navigateResult(result) {
     if (!result) return;
-    dispatch('navigate', { type: result.type, id: result.id });
+    onnavigate?.({ type: result.type, id: result.id });
     closeSearch();
   }
 
@@ -139,7 +139,7 @@
     if (items[activeIndex]) items[activeIndex].scrollIntoView({ block: 'nearest' });
   }
 
-  $: if (activeIndex >= 0) scrollActiveIntoView();
+  $effect(() => { if (activeIndex >= 0) scrollActiveIntoView(); });
 
   onMount(() => {
     document.addEventListener('keydown', handleGlobalKeydown);
