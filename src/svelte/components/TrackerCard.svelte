@@ -1,5 +1,5 @@
 <script>
-  import { scanners } from '../lib/stores.js';
+  import { scanners, highlightedItemId } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
@@ -8,6 +8,15 @@
   let { item, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow } = $props();
 
   let activeTab = $state('summary');
+  let cardEl = $state(null);
+  let isHighlighted = $derived($highlightedItemId === item.id);
+
+  // Scroll into view and animate when this card is highlighted
+  $effect(() => {
+    if (isHighlighted && cardEl) {
+      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
   let promptPanelOpen = $state(false);
 
   let isTerminalStatus = $derived(item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
@@ -36,9 +45,11 @@
 </script>
 
 <article
+  bind:this={cardEl}
   class="tracker-card"
   class:has-new-update={hasNew}
   class:is-new={hasNew}
+  class:highlighted={isHighlighted}
   class:snoozed-card={item.lifecycleStatus === 'snoozed'}
   data-tracker-id={item.id}
   data-item-severity={item.severity || 'Observe'}
@@ -195,3 +206,29 @@
     </div>
   </div>
 </article>
+
+<style>
+  .highlighted {
+    animation: highlight-pulse 2s ease-out;
+    position: relative;
+  }
+  .highlighted::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 12px;
+    border: 2px solid var(--accent, #0a84ff);
+    animation: ring-fade 2.5s ease-out forwards;
+    pointer-events: none;
+  }
+  @keyframes highlight-pulse {
+    0% { transform: scale(1.02); box-shadow: 0 0 20px rgba(10, 132, 255, 0.5); }
+    50% { transform: scale(1); box-shadow: 0 0 10px rgba(10, 132, 255, 0.25); }
+    100% { transform: scale(1); box-shadow: none; }
+  }
+  @keyframes ring-fade {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+</style>

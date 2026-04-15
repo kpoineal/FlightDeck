@@ -18,6 +18,10 @@ export const filter = writable('all');
 export const collapsedSections = writable([]);
 export const expandedBriefingMeetingIds = writable([]);
 
+// ── Navigation / highlight stores ────────────────────────────────────
+/** Item ID to scroll to and highlight (set by notification click, search, etc.) */
+export const highlightedItemId = writable(null);
+
 // ── Derived stores ───────────────────────────────────────────────────
 
 /** KPI counts derived from items. */

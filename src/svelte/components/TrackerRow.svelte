@@ -1,5 +1,5 @@
 <script>
-  import { scanners } from '../lib/stores.js';
+  import { scanners, highlightedItemId } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
@@ -8,6 +8,17 @@
   let { item, expanded = false, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onrunnow, onrowexpand } = $props();
 
   let isExpanded = $state(expanded);
+  let rowEl = $state(null);
+  let isHighlighted = $derived($highlightedItemId === item.id);
+
+  // Scroll into view and expand when highlighted
+  $effect(() => {
+    if (isHighlighted && rowEl) {
+      isExpanded = true;
+      onrowexpand?.({ itemId: item.id });
+      rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
   let monitoringOpen = $state(false);
   let promptPanelOpen = $state(false);
   let peopleOpen = $state(true);
@@ -47,8 +58,10 @@
 </script>
 
 <div
+  bind:this={rowEl}
   class="tracker-row-wrapper"
   class:is-new={hasNew}
+  class:highlighted={isHighlighted}
   class:snoozed-card={item.lifecycleStatus === 'snoozed'}
   data-tracker-id={item.id}
   data-item-severity={item.severity || 'Observe'}
@@ -181,9 +194,35 @@
         {#if hasNew || unseenCount > 0}
           <button class="small-btn primary" on:click={() => onmarkseen?.({ itemId: item.id })}>Mark as Seen</button>
         {/if}
-        <button class="small-btn popout" on:click={() => onpopout?.({ itemId: item.id })}>&nearr; Pop Out</button>
+        <button class="small-btn popout" on:click={() => onpopout?.({ itemId: item.id })}>↗ Pop Out</button>
         <button class="small-btn warn" on:click={() => ondelete?.({ itemId: item.id })}>Delete</button>
       </div>
     </div>
   {/if}
 </div>
+
+<style>
+  .highlighted {
+    animation: highlight-pulse 2s ease-out;
+    position: relative;
+  }
+  .highlighted::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 10px;
+    border: 2px solid var(--accent, #0a84ff);
+    animation: ring-fade 2.5s ease-out forwards;
+    pointer-events: none;
+  }
+  @keyframes highlight-pulse {
+    0% { transform: scale(1.01); box-shadow: 0 0 16px rgba(10, 132, 255, 0.4); }
+    50% { transform: scale(1); box-shadow: 0 0 8px rgba(10, 132, 255, 0.2); }
+    100% { transform: scale(1); box-shadow: none; }
+  }
+  @keyframes ring-fade {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+</style>

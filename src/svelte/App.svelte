@@ -3,7 +3,7 @@
   import { mode, connected, history as historyStore } from './lib/stores.js';
   import { loadPersistentState, savePersistentState } from './lib/persistence.js';
   import { items, scanners, meetings, briefingsByMeetingId, briefingSeenAt,
-    density, filter, collapsedSections } from './lib/stores.js';
+    density, filter, collapsedSections, highlightedItemId } from './lib/stores.js';
   import { addHistory } from './lib/actions.js';
   import { startScannerEngine, stopScannerEngine } from './lib/scanner-engine.js';
   import { startMonitoringLoop, stopMonitoringLoop } from './lib/monitor-engine.js';
@@ -144,6 +144,21 @@
     if (window.workiq && typeof window.workiq.onStateChanged === 'function') {
       window.workiq.onStateChanged(() => {
         loadPersistentState();
+      });
+    }
+
+    // Listen for desktop notification clicks → navigate to item
+    if (window.workiq && typeof window.workiq.onNotificationClicked === 'function') {
+      window.workiq.onNotificationClicked((payload) => {
+        const taskId = payload?.taskId;
+        if (!taskId) return;
+        // Reset filter so target item is visible
+        filter.set('all');
+        mode.set('Radar');
+        // Highlight the target item (components react to this)
+        highlightedItemId.set(taskId);
+        // Clear highlight after animation completes
+        setTimeout(() => highlightedItemId.set(null), 4000);
       });
     }
   });
