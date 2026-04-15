@@ -1,5 +1,7 @@
 <script>
+  import { mode } from './lib/stores.js';
   import HistoryView from './components/HistoryView.svelte';
+  import BriefingsView from './components/BriefingsView.svelte';
 
   const demoHistory = [
     {
@@ -39,5 +41,9 @@
 </script>
 
 <div class="svelte-root">
-  <HistoryView history={demoHistory} />
+  {#if $mode === 'Briefings'}
+    <BriefingsView />
+  {:else if $mode === 'History'}
+    <HistoryView history={demoHistory} />
+  {/if}
 </div>

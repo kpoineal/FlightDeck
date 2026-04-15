@@ -126,8 +126,10 @@
         </div>
       </section>
 
+      <div id="svelte-app"></div>
+
       <section id="viewBriefings" class="mode-view">
-        <div class="panel panel--full">
+        <div class="panel panel--full" style="display:none">
           <h2>Briefings</h2>
           <div class="panel-sub">Upcoming meetings today; expand one and generate a focused briefing</div>
           <button class="prompt-editor-toggle" id="briefingPromptEditorToggle">
@@ -149,7 +151,6 @@
         <div class="panel panel--full">
           <h2>History (Audit Trail)</h2>
           <div class="panel-sub">Recommendations, confirmations, actions, and timestamps</div>
-          <div id="svelte-app"></div>
           <div class="history-list" id="historyList" style="display:none"></div>
         </div>
       </section>
