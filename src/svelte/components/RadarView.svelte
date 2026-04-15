@@ -8,7 +8,6 @@
   import { runScanner as runScannerEngine } from '../lib/scanner-engine.js';
   import { runItemCheck } from '../lib/monitor-engine.js';
   import ScannerSection from './ScannerSection.svelte';
-  import MorningBanner from './MorningBanner.svelte';
   import AddTaskModal from './AddTaskModal.svelte';
   import ScannerSettingsModal from './ScannerSettingsModal.svelte';
 
@@ -201,8 +200,6 @@
         </div>
       </div>
       <div class="panel-sub">Prioritized signals from email, Teams, meetings, docs</div>
-
-      <MorningBanner />
 
       <div class="list">
         {#if groups.length === 0 && sorted.length === 0}
