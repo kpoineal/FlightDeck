@@ -15,10 +15,10 @@
   import ScannerSettingsModal from './components/ScannerSettingsModal.svelte';
   import AddTaskModal from './components/AddTaskModal.svelte';
 
-  let version = '';
-  let updateAvailable = false;
-  let updateText = 'Update available';
-  let updateUrl = '';
+  let version = $state('');
+  let updateAvailable = $state(false);
+  let updateText = $state('Update available');
+  let updateUrl = $state('');
   let confirmOpen = false;
   let confirmSummary = '';
   let confirmTargets = '';

@@ -69,7 +69,10 @@
 
 <div class="radar-section" class:disabled={!enabled}>
   <!-- Section header -->
-  <div class="radar-section-header {sevBorderClass}" class:disabled={!enabled}>
+  <div class="radar-section-header {sevBorderClass}" class:disabled={!enabled}
+    on:click={() => toggleSection(sourceId)}
+    on:keydown={(e) => e.key === 'Enter' && toggleSection(sourceId)}
+    role="button" tabindex="0">
     <div class="radar-section-header-left">
       <span class="radar-section-icon">🔍</span>
       <span class="radar-section-name">{scanner.name || 'Unnamed Scanner'}</span>
@@ -135,7 +138,8 @@
         <span class="radar-next-run">{nextRunLabel}</span>
       {/if}
     </div>
-    <div class="radar-section-header-actions">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="radar-section-header-actions" on:click|stopPropagation>
       <button class="icon-btn" title="Add item to this scanner"
         on:click={() => onadditem?.({ scannerId: scanner.id })}>
         <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
