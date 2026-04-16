@@ -61,28 +61,28 @@
       const time = new Date(h.at).getTime();
       if (time < recentCutoff) continue;
 
-      // Skip noise
-      if (h.kind === 'startup') continue;
-      if (h.kind === 'action') continue;
-      if (h.kind === 'intent') continue;
-      if (h.kind === 'selection') continue;
-      // Skip "Meaningful change detected" — the item updateHistory already covers this
-      if (h.summary?.startsWith('Meaningful change')) continue;
-      // Skip "Loaded N meetings" — noise
-      if (h.summary?.startsWith('Loaded')) continue;
-      // Skip entries for items we already have stories for
-      if (h.payload?.itemId && seenItemIds.has(h.payload.itemId)) continue;
+      // Skip all history entries — we build stories from items directly
+      // History is too noisy and doesn't have item references for navigation
+      continue;
+    }
 
-      // Only keep: scanner results (not failures — those go to toasts)
-      if (h.kind === 'scan' && h.summary?.includes('found')) {
-        s.push({
-          id: h.id,
-          itemId: null,
-          time,
-          severity: 'Elevated',
-          text: h.summary.slice(0, 80),
-        });
-      }
+    // New/recently discovered items (isNew flag or discovered in last 24h)
+    for (const item of ($items || [])) {
+      if (seenItemIds.has(item.id)) continue; // already have an update story for this
+      const isNew = item.isNew === true;
+      const discoveredTime = new Date(item.discoveredAt || item.trackedAt || 0).getTime();
+      if (!isNew && discoveredTime < recentCutoff) continue;
+
+      const time = discoveredTime || now;
+      seenItemIds.add(item.id);
+      s.push({
+        id: `new_${item.id}`,
+        itemId: item.id,
+        time,
+        severity: normalizeSeverity(item.severity),
+        text: `🆕 ${item.title}`,
+        isNew: true,
+      });
     }
 
     // Upcoming meetings (within 60 minutes)
@@ -164,9 +164,11 @@
           <button
             class="ticker-story"
             class:ticker-story--clickable={!!story.itemId}
+            class:ticker-story--new={story.isNew}
             onclick={() => clickStory(story)}
           >
             <span class="ticker-dot" style="background: {dotColor(story.severity)}"></span>
+            {#if story.isNew}<span class="ticker-new-badge">NEW</span>{/if}
             <span class="ticker-text">{story.text}</span>
             <span class="ticker-time">{relativeTime(story.time)}</span>
           </button>
@@ -176,10 +178,12 @@
           <button
             class="ticker-story"
             class:ticker-story--clickable={!!story.itemId}
+            class:ticker-story--new={story.isNew}
             onclick={() => clickStory(story)}
             aria-hidden="true"
           >
             <span class="ticker-dot" style="background: {dotColor(story.severity)}"></span>
+            {#if story.isNew}<span class="ticker-new-badge">NEW</span>{/if}
             <span class="ticker-text">{story.text}</span>
             <span class="ticker-time">{relativeTime(story.time)}</span>
           </button>
@@ -256,5 +260,24 @@
     color: var(--text-muted);
     font-size: 0.62rem;
     flex-shrink: 0;
+  }
+  .ticker-new-badge {
+    background: var(--accent, #0a84ff);
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    animation: new-pulse 2s ease-in-out infinite;
+  }
+  .ticker-story--new .ticker-text {
+    color: var(--text);
+    font-weight: 500;
+  }
+  @keyframes new-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
   }
 </style>
