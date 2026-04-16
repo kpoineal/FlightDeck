@@ -204,26 +204,14 @@
 
 <style>
   .highlighted {
-    animation: highlight-pulse 2s ease-out;
-    position: relative;
-  }
-  .highlighted::after {
-    content: '';
-    position: absolute;
-    inset: -3px;
-    border-radius: 10px;
-    border: 2px solid var(--accent, #0a84ff);
-    animation: ring-fade 2.5s ease-out forwards;
-    pointer-events: none;
+    animation: highlight-pulse 2.5s ease-out;
+    outline: 2px solid var(--accent, #0a84ff);
+    outline-offset: 2px;
+    z-index: 10;
   }
   @keyframes highlight-pulse {
-    0% { transform: scale(1.01); box-shadow: 0 0 16px rgba(10, 132, 255, 0.4); }
-    50% { transform: scale(1); box-shadow: 0 0 8px rgba(10, 132, 255, 0.2); }
-    100% { transform: scale(1); box-shadow: none; }
-  }
-  @keyframes ring-fade {
-    0% { opacity: 1; }
-    70% { opacity: 1; }
-    100% { opacity: 0; }
+    0% { box-shadow: 0 0 24px rgba(10, 132, 255, 0.6); outline-color: rgba(10, 132, 255, 1); }
+    40% { box-shadow: 0 0 16px rgba(10, 132, 255, 0.4); outline-color: rgba(10, 132, 255, 0.8); }
+    100% { box-shadow: none; outline-color: transparent; }
   }
 </style>
