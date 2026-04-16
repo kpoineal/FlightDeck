@@ -16,8 +16,8 @@
   // Build "stories" — only actionable, non-redundant information
   let stories = $derived.by(() => {
     const s = [];
-    const now = Date.now();
-    const recentCutoff = now - 24 * 60 * 60 * 1000; // last 24h only
+    const currentTime = now.getTime(); // use reactive now so stories refresh periodically
+    const recentCutoff = currentTime - 24 * 60 * 60 * 1000; // last 24h only
     const seenItemIds = new Set();
 
     // Primary source: item updateHistory (the actual substance)
@@ -37,10 +37,13 @@
       let text;
       if (statusChange) {
         text = `${item.title}: ${statusChange}`;
-      } else if (summaryText && summaryText !== 'Updated') {
+      } else if (summaryText && summaryText !== 'Updated' && summaryText !== 'Discovered') {
         // Use summary but truncate, and prefix with item title for context
         const shortSummary = summaryText.length > 60 ? summaryText.slice(0, 57) + '...' : summaryText;
         text = `${item.title}: ${shortSummary}`;
+      } else if (changes[0] === 'Discovered') {
+        // Skip initial discovery entries — these aren't "updates"
+        continue;
       } else {
         text = `${item.title} updated`;
       }
@@ -73,7 +76,7 @@
       const discoveredTime = new Date(item.discoveredAt || item.trackedAt || 0).getTime();
       if (!isNew && discoveredTime < recentCutoff) continue;
 
-      const time = discoveredTime || now;
+      const time = discoveredTime || currentTime;
       seenItemIds.add(item.id);
       s.push({
         id: `new_${item.id}`,
@@ -86,11 +89,11 @@
     }
 
     // Upcoming meetings (within 60 minutes)
-    const soonCutoff = now + 60 * 60 * 1000;
+    const soonCutoff = currentTime + 60 * 60 * 1000;
     for (const m of ($meetings || [])) {
       const time = new Date(m.startAt).getTime();
-      if (time > now && time < soonCutoff) {
-        const mins = Math.round((time - now) / 60_000);
+      if (time > currentTime && time < soonCutoff) {
+        const mins = Math.round((time - currentTime) / 60_000);
         s.push({
           id: `mtg_${m.id}`,
           itemId: null,
