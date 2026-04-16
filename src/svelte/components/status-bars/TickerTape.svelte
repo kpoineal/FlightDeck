@@ -1,6 +1,7 @@
 <script>
-  import { items, history, scanners, meetings, highlightedItemId, mode, filter } from '../../lib/stores.js';
+  import { items, history, scanners, meetings, highlightedItemId, mode, filter, collapsedSections } from '../../lib/stores.js';
   import { normalizeSeverity } from '../../lib/utils.js';
+  import { get } from 'svelte/store';
 
   let now = $state(new Date());
   let timer = $state(null);
@@ -87,8 +88,20 @@
     if (story.itemId) {
       filter.set('all');
       mode.set('Radar');
-      highlightedItemId.set(story.itemId);
-      setTimeout(() => highlightedItemId.set(null), 4000);
+
+      // Expand the scanner section containing this item
+      const targetItem = get(items).find(i => i.id === story.itemId);
+      if (targetItem && targetItem.scannerId) {
+        const sectionId = `scanner-${targetItem.scannerId}`;
+        const allSectionIds = get(scanners).map(s => `scanner-${s.id}`);
+        collapsedSections.set(allSectionIds.filter(id => id !== sectionId));
+      }
+
+      // Delay highlight to let DOM update after section expansion
+      setTimeout(() => {
+        highlightedItemId.set(story.itemId);
+        setTimeout(() => highlightedItemId.set(null), 4000);
+      }, 100);
     }
   }
 </script>
