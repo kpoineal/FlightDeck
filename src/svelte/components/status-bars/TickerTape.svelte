@@ -21,31 +21,29 @@
     const seenItemIds = new Set();
 
     // Primary source: item updateHistory (the actual substance)
-    // Only show the LATEST update per item, and only if it has real content
+    // Show the LATEST update per item if it's recent
     for (const item of ($items || [])) {
+      if (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived') continue;
       const updates = (item.updateHistory || []);
       if (!updates.length) continue;
       const latest = updates[0];
       const time = new Date(latest.timestamp).getTime();
       if (time < recentCutoff) continue;
 
-      // Build a meaningful text from the update
+      // Skip initial "Discovered" entries that have no real update
       const changes = Array.isArray(latest.changes) ? latest.changes : [];
-      const statusChange = changes.find(c => c.startsWith('Status:') || c.startsWith('Severity:'));
-      const summaryText = latest.summary || '';
+      if (changes.length === 1 && changes[0] === 'Discovered' && updates.length === 1) continue;
+
+      // Build a meaningful text from the update
+      const statusChange = changes.find(c => /^(Status|Severity):/.test(c));
 
       let text;
       if (statusChange) {
         text = `${item.title}: ${statusChange}`;
-      } else if (summaryText && summaryText !== 'Updated' && summaryText !== 'Discovered') {
-        // Use summary but truncate, and prefix with item title for context
-        const shortSummary = summaryText.length > 60 ? summaryText.slice(0, 57) + '...' : summaryText;
-        text = `${item.title}: ${shortSummary}`;
-      } else if (changes[0] === 'Discovered') {
-        // Skip initial discovery entries — these aren't "updates"
-        continue;
       } else {
-        text = `${item.title} updated`;
+        const summaryText = latest.summary || '';
+        const shortSummary = summaryText.length > 60 ? summaryText.slice(0, 57) + '...' : summaryText;
+        text = shortSummary ? `${item.title}: ${shortSummary}` : `${item.title} updated`;
       }
 
       seenItemIds.add(item.id);
@@ -106,7 +104,7 @@
 
     // Sort newest first
     s.sort((a, b) => b.time - a.time);
-    return s.slice(0, 15);
+    return s.slice(0, 25);
   });
 
   function relativeTime(ms) {
