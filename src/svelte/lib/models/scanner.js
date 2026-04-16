@@ -22,7 +22,7 @@ export function normalizeScannerDefinition(raw) {
     prompt: typeof raw?.prompt === 'string' ? raw.prompt : DEFAULT_SCANNER_PROMPT,
     enabled: raw?.enabled !== false,
     scheduleType: raw?.scheduleType === 'one-time' ? 'one-time' : raw?.scheduleType === 'weekly' ? 'weekly' : 'interval',
-    scheduleValue: SCHEDULE_INTERVAL_OPTIONS.some((entry) => entry.value === raw?.scheduleValue) ? raw.scheduleValue : '4h',
+    scheduleValue: SCHEDULE_INTERVAL_OPTIONS.some((entry) => entry.value === raw?.scheduleValue) ? raw.scheduleValue : '2h',
     oneTimeAt: raw?.oneTimeAt || null,
     weeklyDays: Array.isArray(raw?.weeklyDays) && raw.weeklyDays.length
       ? raw.weeklyDays.filter((d) => WEEKLY_DAY_OPTIONS.some((o) => o.value === d))
@@ -30,8 +30,8 @@ export function normalizeScannerDefinition(raw) {
     weeklyTimes: Array.isArray(raw?.weeklyTimes) && raw.weeklyTimes.length
       ? raw.weeklyTimes.filter((t) => /^\d{2}:\d{2}$/.test(t))
       : [...DEFAULT_WEEKLY_TIMES],
-    workHoursOnly: raw?.workHoursOnly === true,
-    autoMonitorNewItems: raw?.autoMonitorNewItems === true,
+    workHoursOnly: raw?.workHoursOnly !== false,
+    autoMonitorNewItems: raw?.autoMonitorNewItems !== false,
     notificationMode: ['all', 'critical-only', 'silent'].includes(raw?.notificationMode) ? raw.notificationMode : 'all',
     signalTypes: Array.isArray(raw?.signalTypes) && raw.signalTypes.length
       ? raw.signalTypes.filter((s) => ALL_SIGNAL_TYPES.includes(s))
@@ -40,12 +40,12 @@ export function normalizeScannerDefinition(raw) {
     autoMonitorSeverityThreshold: SEVERITY_THRESHOLD_OPTIONS.some((o) => o.value === raw?.autoMonitorSeverityThreshold) ? raw.autoMonitorSeverityThreshold : 'all',
     maxItemsPerScan: Number.isFinite(Number(raw?.maxItemsPerScan)) && Number(raw.maxItemsPerScan) >= 1 && Number(raw.maxItemsPerScan) <= 25 ? Number(raw.maxItemsPerScan) : 10,
     runOnStartup: raw?.runOnStartup === true,
-    missedRunPolicy: MISSED_RUN_POLICY_OPTIONS.some((o) => o.value === raw?.missedRunPolicy) ? raw.missedRunPolicy : 'run-once',
-    dedupStrategy: DEDUP_STRATEGY_OPTIONS.some((o) => o.value === raw?.dedupStrategy) ? raw.dedupStrategy : 'evidence-url',
+    missedRunPolicy: MISSED_RUN_POLICY_OPTIONS.some((o) => o.value === raw?.missedRunPolicy) ? raw.missedRunPolicy : 'skip',
+    dedupStrategy: DEDUP_STRATEGY_OPTIONS.some((o) => o.value === raw?.dedupStrategy) ? raw.dedupStrategy : 'both',
     excludeKeywords: Array.isArray(raw?.excludeKeywords) ? raw.excludeKeywords.filter((v) => typeof v === 'string' && v.trim()) : [],
-    defaultMonitorSchedule: SCHEDULE_INTERVAL_OPTIONS.some((o) => o.value === raw?.defaultMonitorSchedule) ? raw.defaultMonitorSchedule : '4h',
+    defaultMonitorSchedule: SCHEDULE_INTERVAL_OPTIONS.some((o) => o.value === raw?.defaultMonitorSchedule) ? raw.defaultMonitorSchedule : '2h',
     defaultMonitorScheduleType: raw?.defaultMonitorScheduleType === 'one-time' ? 'one-time' : raw?.defaultMonitorScheduleType === 'weekly' ? 'weekly' : 'interval',
-    defaultMonitorWorkHoursOnly: raw?.defaultMonitorWorkHoursOnly === true,
+    defaultMonitorWorkHoursOnly: raw?.defaultMonitorWorkHoursOnly !== false,
     defaultMonitorSignals: Array.isArray(raw?.defaultMonitorSignals) && raw.defaultMonitorSignals.length
       ? raw.defaultMonitorSignals.filter((s) => ALL_SIGNAL_TYPES.includes(s))
       : [...ALL_SIGNAL_TYPES],
@@ -58,7 +58,6 @@ export function normalizeScannerDefinition(raw) {
       : [...DEFAULT_WEEKLY_TIMES],
     autoArchiveAfterDays: Number.isFinite(Number(raw?.autoArchiveAfterDays)) && Number(raw.autoArchiveAfterDays) >= 0 ? Number(raw.autoArchiveAfterDays) : 0,
     retentionDays: Number.isFinite(Number(raw?.retentionDays)) && Number(raw.retentionDays) >= 1 && Number(raw.retentionDays) <= 365 ? Number(raw.retentionDays) : 365,
-    webhookUrl: typeof raw?.webhookUrl === 'string' && raw.webhookUrl.trim() ? raw.webhookUrl.trim() : '',
     scannerGroupId: typeof raw?.scannerGroupId === 'string' && raw.scannerGroupId.trim() ? raw.scannerGroupId.trim() : '',
     excludedItemIds: Array.isArray(raw?.excludedItemIds) ? raw.excludedItemIds.filter((v) => typeof v === 'string') : [],
     lastRunAt: raw?.lastRunAt || null,

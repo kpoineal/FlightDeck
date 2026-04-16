@@ -39,7 +39,6 @@
   let defaultMonitorSignals = $state(isEdit && Array.isArray(scanner.defaultMonitorSignals) ? [...scanner.defaultMonitorSignals] : [...ALL_SIGNAL_TYPES]);
   let autoArchiveAfterDays = $state(isEdit ? (scanner.autoArchiveAfterDays || 0) : 0);
   let retentionDays = $state(isEdit ? (scanner.retentionDays || 365) : 365);
-  let webhookUrl = $state(isEdit ? (scanner.webhookUrl || '') : '');
   let scannerGroupId = $state(isEdit ? (scanner.scannerGroupId || '') : '');
 
   let weeklyDays = $state(isEdit && Array.isArray(scanner.weeklyDays) ? [...scanner.weeklyDays] : [...DEFAULT_WEEKLY_DAYS]);
@@ -71,7 +70,6 @@
       defaultMonitorSignals: defaultMonitorSignals.length ? defaultMonitorSignals : [...ALL_SIGNAL_TYPES],
       autoArchiveAfterDays: Number(autoArchiveAfterDays) || 0,
       retentionDays: Number(retentionDays) || 365,
-      webhookUrl: webhookUrl.trim(),
       scannerGroupId: scannerGroupId.trim(),
       weeklyDays: scheduleType === 'weekly' ? weeklyDays : undefined,
       weeklyTimes: scheduleType === 'weekly' ? weeklyTimes : undefined,
@@ -326,12 +324,6 @@
     <div class="scanner-form-field scanner-form-field-grow">
       <label class="scanner-form-label">Exclude keywords</label>
       <input class="tracking-input" type="text" placeholder="newsletter, digest, all-hands" bind:value={excludeKeywords} />
-    </div>
-  </div>
-  <div class="scanner-form-row scanner-form-options">
-    <div class="scanner-form-field scanner-form-field-grow">
-      <label class="scanner-form-label">Webhook URL</label>
-      <input class="tracking-input" type="url" placeholder="https://hooks.slack.com/..." bind:value={webhookUrl} />
     </div>
   </div>
 
