@@ -1,8 +1,9 @@
 <script>
-  import { mode, connected, loading } from '../lib/stores.js';
+  import { mode, connected, loading, highlightedItemId, filter, items, scanners, collapsedSections } from '../lib/stores.js';
   import { setMode } from '../lib/actions.js';
   import SearchOverlay from './SearchOverlay.svelte';
   import iconUrl from '../../icon.png';
+  import { get } from 'svelte/store';
 
   let { version = '', updateAvailable = false, updateText = 'Update available', updateUrl = '', onupdatedismiss } = $props();
 
@@ -29,7 +30,22 @@
     if (type === 'briefing') {
       setMode('Briefings');
     } else {
+      filter.set('all');
       setMode('Radar');
+
+      // Expand the scanner section containing this item
+      const targetItem = get(items).find(i => i.id === id);
+      if (targetItem && targetItem.scannerId) {
+        const sectionId = `scanner-${targetItem.scannerId}`;
+        const allSectionIds = get(scanners).map(s => `scanner-${s.id}`);
+        collapsedSections.set(allSectionIds.filter(sid => sid !== sectionId));
+      }
+
+      // Highlight and scroll to item
+      setTimeout(() => {
+        highlightedItemId.set(id);
+        setTimeout(() => highlightedItemId.set(null), 4000);
+      }, 100);
     }
   }
 
