@@ -19,7 +19,6 @@
     { key: 'mission', icon: '⚡', title: 'Mission Control' },
     { key: 'heatmap', icon: '▦', title: 'Heatmap' },
     { key: 'momentum', icon: '◉', title: 'Momentum' },
-    { key: 'ticker', icon: '≡', title: 'Ticker' },
   ];
 
   function loadStripMode() {
@@ -146,8 +145,6 @@
         <HeatmapStrip />
       {:else if stripMode === 'momentum'}
         <MomentumGauge />
-      {:else if stripMode === 'ticker'}
-        <TickerTape />
       {/if}
     </div>
   {/if}

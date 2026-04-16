@@ -195,14 +195,14 @@
 
 <style>
   .ticker-tape {
-    padding: 6px 0 2px;
+    padding: 8px 0 4px;
     overflow: hidden;
     position: relative;
-    mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%);
   }
   .ticker-quiet {
-    font-size: 0.72rem;
+    font-size: 0.82rem;
     color: var(--text-muted);
     padding: 8px 0;
     display: block;
@@ -214,7 +214,7 @@
   }
   .ticker-content {
     display: flex;
-    gap: 24px;
+    gap: 32px;
     white-space: nowrap;
     animation: ticker-scroll 40s linear infinite;
     width: max-content;
@@ -229,12 +229,12 @@
   .ticker-story {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 7px;
     background: none;
     border: none;
     color: var(--text);
-    font-size: 0.72rem;
-    padding: 2px 0;
+    font-size: 0.82rem;
+    padding: 3px 0;
     cursor: default;
     white-space: nowrap;
     flex-shrink: 0;
@@ -246,19 +246,19 @@
     text-decoration: underline;
   }
   .ticker-dot {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
   }
   .ticker-text {
-    max-width: 260px;
+    max-width: 320px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .ticker-time {
     color: var(--text-muted);
-    font-size: 0.62rem;
+    font-size: 0.72rem;
     flex-shrink: 0;
   }
   .ticker-new-badge {

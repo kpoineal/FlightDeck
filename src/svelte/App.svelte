@@ -15,6 +15,7 @@
   import Topbar from './components/Topbar.svelte';
   import ConnectBanner from './components/ConnectBanner.svelte';
   import SummaryStrip from './components/SummaryStrip.svelte';
+  import TickerTape from './components/status-bars/TickerTape.svelte';
   import RadarView from './components/RadarView.svelte';
   import BriefingsView from './components/BriefingsView.svelte';
   import HistoryView from './components/HistoryView.svelte';
@@ -220,6 +221,12 @@
     <SummaryStrip />
 
     {#if $mode === 'Radar'}
+      <div class="ticker-bar">
+        <TickerTape />
+      </div>
+    {/if}
+
+    {#if $mode === 'Radar'}
       <RadarView />
     {:else if $mode === 'Briefings'}
       <BriefingsView />
@@ -234,3 +241,15 @@
   oncancel={() => { confirmOpen = false; }} />
 
 <Toast />
+
+<style>
+  .ticker-bar {
+    background: linear-gradient(135deg, var(--bg-surface) 0%, color-mix(in srgb, var(--accent) 4%, var(--bg-surface)) 100%);
+    backdrop-filter: blur(var(--blur-radius));
+    -webkit-backdrop-filter: blur(var(--blur-radius));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 4px 20px;
+    box-shadow: var(--shadow-card);
+  }
+</style>
