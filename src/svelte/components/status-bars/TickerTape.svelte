@@ -46,6 +46,9 @@
         text = shortSummary ? `${item.title}: ${shortSummary}` : `${item.title} updated`;
       }
 
+      const isTerminal = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
+      const cardIsNew = !isTerminal && (item.isNew === true || item.hasNewUpdate === true);
+
       seenItemIds.add(item.id);
       s.push({
         id: `${item.id}_${latest.timestamp}`,
@@ -53,6 +56,7 @@
         time,
         severity: normalizeSeverity(latest.severity || item.severity),
         text,
+        isNew: cardIsNew,
       });
     }
 
@@ -67,24 +71,6 @@
       continue;
     }
 
-    // New/recently discovered items (isNew flag or discovered in last 24h)
-    for (const item of ($items || [])) {
-      if (seenItemIds.has(item.id)) continue; // already have an update story for this
-      const isNew = item.isNew === true;
-      const discoveredTime = new Date(item.discoveredAt || item.trackedAt || 0).getTime();
-      if (!isNew && discoveredTime < recentCutoff) continue;
-
-      const time = discoveredTime || currentTime;
-      seenItemIds.add(item.id);
-      s.push({
-        id: `new_${item.id}`,
-        itemId: item.id,
-        time,
-        severity: normalizeSeverity(item.severity),
-        text: `🆕 ${item.title}`,
-        isNew: true,
-      });
-    }
 
     // Upcoming meetings (within 60 minutes)
     const soonCutoff = currentTime + 60 * 60 * 1000;
