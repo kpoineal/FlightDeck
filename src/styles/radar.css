@@ -157,6 +157,10 @@
   background: color-mix(in srgb, var(--color-critical) 18%, transparent);
   color: var(--color-critical);
 }
+.radar-attn-badge.attn-in-progress {
+  background: color-mix(in srgb, var(--accent, #0a84ff) 18%, transparent);
+  color: var(--accent, #0a84ff);
+}
 .radar-attn-badge.attn-waiting {
   background: color-mix(in srgb, var(--color-elevated) 18%, transparent);
   color: var(--color-elevated);
