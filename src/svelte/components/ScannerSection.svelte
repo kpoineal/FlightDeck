@@ -25,13 +25,13 @@
   let critical = $derived(items.filter(i => i.severity === 'Critical').length);
   let elevated = $derived(items.filter(i => i.severity === 'Elevated').length);
   let observe = $derived(items.filter(i => i.severity !== 'Critical' && i.severity !== 'Elevated').length);
+  let inProgressCount = $derived(items.filter(i => i.lifecycleStatus === 'in-progress').length);
   let blocked = $derived(items.filter(i => i.lifecycleStatus === 'blocked').length);
   let waiting = $derived(items.filter(i => i.lifecycleStatus === 'waiting').length);
   let newCount = $derived(items.filter(i =>
     (i.isNew || i.hasNewUpdate) &&
     i.lifecycleStatus !== 'complete' &&
-    i.lifecycleStatus !== 'archived' &&
-    i.lifecycleStatus !== 'snoozed'
+    i.lifecycleStatus !== 'archived'
   ).length);
 
   let latestActivity = $derived(items.reduce((max, i) => {
@@ -121,6 +121,13 @@
         </span>
       {/if}
 
+      {#if inProgressCount > 0}
+        <span class="radar-attn-badge attn-in-progress" class:active={isFilterActive('status', 'in-progress')}
+          title="{inProgressCount} in progress — click to filter"
+          on:click|stopPropagation={() => toggleFilter('status', 'in-progress')}
+          on:keydown={(e) => e.key === 'Enter' && toggleFilter('status', 'in-progress')}
+          role="button" tabindex="0">{inProgressCount} in progress</span>
+      {/if}
       {#if blocked > 0}
         <span class="radar-attn-badge attn-blocked" class:active={isFilterActive('status', 'blocked')}
           title="{blocked} blocked — click to filter"
