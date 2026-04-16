@@ -138,7 +138,13 @@
       <div class="greeting-row-left">
         <span class="greeting-icon">{icon}</span>
         <span class="greeting-text">
-          {greeting}{#if highlights.length} · {#each highlights as h, i}{#if i > 0} · {/if}{#if h.cls}<strong class="greeting-hl greeting-hl--{h.cls}">{h.text}</strong>{:else}{h.text}{/if}{/each}{:else} · All clear{/if}
+          {greeting}{#if highlights.length}
+            {#each highlights as h, i}
+              <span class="greeting-sep"> · </span>{#if h.cls}<strong class="greeting-hl greeting-hl--{h.cls}">{h.text}</strong>{:else}{h.text}{/if}
+            {/each}
+          {:else}
+            <span class="greeting-sep"> · </span>All clear
+          {/if}
         </span>
       </div>
       <div class="greeting-row-right">
@@ -209,10 +215,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 4px 0 0;
+    gap: 16px;
+    padding: 8px 0 2px;
     cursor: pointer;
-    min-height: 22px;
+    min-height: 28px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
+    margin-top: 6px;
   }
   .greeting-row-left {
     display: flex;
@@ -225,14 +233,18 @@
     flex-shrink: 0;
   }
   .greeting-text {
-    font-size: 0.78rem;
+    font-size: 0.82rem;
     color: var(--text-muted);
-    white-space: nowrap;
+    white-space: normal;
+    line-height: 1.5;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .greeting-hl {
     font-weight: 600;
+  }
+  .greeting-sep {
+    color: color-mix(in srgb, var(--text-muted) 50%, transparent);
   }
   .greeting-hl--critical {
     color: var(--color-critical);
