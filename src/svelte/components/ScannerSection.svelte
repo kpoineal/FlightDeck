@@ -72,6 +72,10 @@
       inlineFilter = null;
     } else {
       inlineFilter = { type, value };
+      // Auto-expand section when a filter is activated
+      if (collapsed) {
+        toggleSection(sourceId);
+      }
     }
   }
 
