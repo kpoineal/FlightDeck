@@ -13,56 +13,105 @@
 
   let paused = $state(false);
 
-  // Build "stories" from various sources
+  // Build "stories" — only actionable, non-redundant information
   let stories = $derived.by(() => {
     const s = [];
+    const now = Date.now();
+    const recentCutoff = now - 24 * 60 * 60 * 1000; // last 24h only
+    const seenItemIds = new Set();
 
-    // From item updateHistory (recent entries)
+    // Primary source: item updateHistory (the actual substance)
+    // Only show the LATEST update per item, and only if it has real content
     for (const item of ($items || [])) {
-      for (const upd of (item.updateHistory || []).slice(0, 2)) {
+      const updates = (item.updateHistory || []);
+      if (!updates.length) continue;
+      const latest = updates[0];
+      const time = new Date(latest.timestamp).getTime();
+      if (time < recentCutoff) continue;
+
+      // Build a meaningful text from the update
+      const changes = Array.isArray(latest.changes) ? latest.changes : [];
+      const statusChange = changes.find(c => c.startsWith('Status:') || c.startsWith('Severity:'));
+      const summaryText = latest.summary || '';
+
+      let text;
+      if (statusChange) {
+        text = `${item.title}: ${statusChange}`;
+      } else if (summaryText && summaryText !== 'Updated') {
+        // Use summary but truncate, and prefix with item title for context
+        const shortSummary = summaryText.length > 60 ? summaryText.slice(0, 57) + '...' : summaryText;
+        text = `${item.title}: ${shortSummary}`;
+      } else {
+        text = `${item.title} updated`;
+      }
+
+      seenItemIds.add(item.id);
+      s.push({
+        id: `${item.id}_${latest.timestamp}`,
+        itemId: item.id,
+        time,
+        severity: normalizeSeverity(latest.severity || item.severity),
+        text,
+      });
+    }
+
+    // Secondary source: history store — only scanner results and failures
+    // Skip: startup, meetings loaded, item deletions, mark as seen, generic "Meaningful change" entries
+    for (const h of ($history || []).slice(0, 20)) {
+      const time = new Date(h.at).getTime();
+      if (time < recentCutoff) continue;
+
+      // Skip noise
+      if (h.kind === 'startup') continue;
+      if (h.kind === 'action') continue;
+      if (h.kind === 'intent') continue;
+      if (h.kind === 'selection') continue;
+      // Skip "Meaningful change detected" — the item updateHistory already covers this
+      if (h.summary?.startsWith('Meaningful change')) continue;
+      // Skip "Loaded N meetings" — noise
+      if (h.summary?.startsWith('Loaded')) continue;
+      // Skip entries for items we already have stories for
+      if (h.payload?.itemId && seenItemIds.has(h.payload.itemId)) continue;
+
+      // Only keep: scanner results, failures, completions
+      if (h.kind === 'scan' && h.summary?.includes('found')) {
         s.push({
-          id: `${item.id}_${upd.timestamp}`,
-          itemId: item.id,
-          time: new Date(upd.timestamp).getTime(),
-          severity: normalizeSeverity(upd.severity || item.severity),
-          text: upd.changesDescription || upd.summary?.slice(0, 80) || `${item.title} updated`,
+          id: h.id,
+          itemId: null,
+          time,
+          severity: 'Elevated',
+          text: h.summary.slice(0, 80),
+        });
+      } else if (h.kind === 'failure') {
+        s.push({
+          id: h.id,
+          itemId: h.payload?.itemId || null,
+          time,
+          severity: 'Critical',
+          text: h.summary?.slice(0, 80) || 'Operation failed',
         });
       }
     }
 
-    // From history store (scan results, completions, etc.)
-    for (const h of ($history || []).slice(0, 10)) {
-      s.push({
-        id: h.id,
-        itemId: h.payload?.itemId || null,
-        time: new Date(h.at).getTime(),
-        severity: h.kind === 'failure' ? 'Critical' : h.kind === 'scan' ? 'Elevated' : 'Observe',
-        text: h.summary?.slice(0, 80) || h.kind,
-      });
-    }
-
-    // From meetings (upcoming)
+    // Upcoming meetings (within 60 minutes)
+    const soonCutoff = now + 60 * 60 * 1000;
     for (const m of ($meetings || [])) {
-      s.push({
-        id: `mtg_${m.id}`,
-        itemId: null,
-        time: new Date(m.startAt).getTime(),
-        severity: 'Observe',
-        text: `Meeting: ${m.title}`,
-      });
-    }
-
-    // Deduplicate by id & sort newest first
-    const seen = new Set();
-    const unique = [];
-    for (const story of s) {
-      if (!seen.has(story.id)) {
-        seen.add(story.id);
-        unique.push(story);
+      const time = new Date(m.startAt).getTime();
+      if (time > now && time < soonCutoff) {
+        const mins = Math.round((time - now) / 60_000);
+        s.push({
+          id: `mtg_${m.id}`,
+          itemId: null,
+          time,
+          severity: 'Observe',
+          text: `📅 ${m.title} in ${mins}m`,
+        });
       }
     }
-    unique.sort((a, b) => b.time - a.time);
-    return unique.slice(0, 20);
+
+    // Sort newest first
+    s.sort((a, b) => b.time - a.time);
+    return s.slice(0, 15);
   });
 
   function relativeTime(ms) {
