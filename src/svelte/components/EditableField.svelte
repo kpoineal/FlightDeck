@@ -94,8 +94,11 @@
     color: var(--text, #ccc);
     border: 1px solid var(--accent, #0a84ff);
     border-radius: 4px;
-    padding: 1px 4px;
+    padding: 4px 8px;
     font-size: inherit;
     font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 180px;
   }
 </style>
