@@ -10,48 +10,42 @@
     return () => clearInterval(timer);
   });
 
-  // Most recent escalation/change
-  let recentEscalation = $derived.by(() => {
-    let best = null;
-    let bestTime = 0;
+  // 3 most recent changes
+  let recentChanges = $derived.by(() => {
+    const candidates = [];
     for (const item of $items) {
       if (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived') continue;
       const hist = item.updateHistory;
       if (!hist?.length) continue;
       const latest = hist[0];
       const t = new Date(latest.timestamp).getTime();
-      if (t > bestTime) {
-        bestTime = t;
-        const changes = Array.isArray(latest.changes) ? latest.changes : [];
-        const statusChange = changes.find(c => c.startsWith('Status:') || c.startsWith('Severity:'));
+      const changes = Array.isArray(latest.changes) ? latest.changes : [];
+      const statusChange = changes.find(c => /^(Status|Severity):/.test(c));
 
-        // Parse status transition for pill rendering
-        let statusTransition = null;
-        if (statusChange) {
-          const match = statusChange.match(/^(?:Status|Severity):\s*(.+?)\s*→\s*(.+)$/);
-          if (match) {
-            statusTransition = {
-              from: match[1].trim(),
-              fromClass: match[1].trim().toLowerCase().replace(/\s+/g, '-'),
-              to: match[2].trim(),
-              toClass: match[2].trim().toLowerCase().replace(/\s+/g, '-'),
-            };
-          }
+      let statusTransition = null;
+      if (statusChange) {
+        const match = statusChange.match(/^(?:Status|Severity):\s*(.+?)\s*→\s*(.+)$/);
+        if (match) {
+          statusTransition = {
+            from: match[1].trim(),
+            fromClass: match[1].trim().toLowerCase().replace(/\s+/g, '-'),
+            to: match[2].trim(),
+            toClass: match[2].trim().toLowerCase().replace(/\s+/g, '-'),
+          };
         }
-
-        let desc;
-        if (!statusTransition) {
-          if (latest.summary && latest.summary !== 'Updated' && latest.summary !== 'Discovered') {
-            desc = latest.summary.length > 60 ? latest.summary.slice(0, 57) + '...' : latest.summary;
-          } else {
-            desc = null;
-          }
-        }
-
-        best = { item, desc, statusTransition, time: t };
       }
+
+      let desc = null;
+      if (!statusTransition) {
+        if (latest.summary && latest.summary !== 'Updated' && latest.summary !== 'Discovered') {
+          desc = latest.summary.length > 60 ? latest.summary.slice(0, 57) + '...' : latest.summary;
+        }
+      }
+
+      candidates.push({ item, desc, statusTransition, time: t });
     }
-    return best;
+    candidates.sort((a, b) => b.time - a.time);
+    return candidates.slice(0, 3);
   });
 
   // Upcoming meetings (up to 3)
@@ -86,10 +80,6 @@
     }, 100);
   }
 
-  function reviewItem() {
-    if (recentEscalation) navigateToItem(recentEscalation.item.id);
-  }
-
   function prepMeeting(meeting) {
     mode.set('Briefings');
   }
@@ -105,23 +95,29 @@
 
 <div class="mission-control">
   <div class="mc-row">
-    <!-- Left: latest change -->
+    <!-- Left: recent changes (up to 3) -->
     <div class="mc-latest">
-      {#if recentEscalation}
+      {#if recentChanges.length}
         <span class="mc-label">LATEST</span>
-        <button class="mc-link" onclick={reviewItem} title="Click to navigate to this item">
-          {recentEscalation.item.title}
-        </button>
-        {#if recentEscalation.statusTransition}
-          <span class="at-status-transition">
-            <span class="pill at-status-pill at-status-{recentEscalation.statusTransition.fromClass}">{recentEscalation.statusTransition.from}</span>
-            <span class="at-arrow">→</span>
-            <span class="pill at-status-pill at-status-{recentEscalation.statusTransition.toClass}">{recentEscalation.statusTransition.to}</span>
-          </span>
-        {:else if recentEscalation.desc}
-          <span class="mc-desc">{recentEscalation.desc}</span>
-        {/if}
-        <span class="mc-time">{relativeTime(recentEscalation.time)}</span>
+        <div class="mc-changes-list">
+          {#each recentChanges as change, i}
+            <div class="mc-change-row">
+              <button class="mc-link" onclick={() => navigateToItem(change.item.id)} title={change.item.title}>
+                {change.item.title}
+              </button>
+              {#if change.statusTransition}
+                <span class="at-status-transition">
+                  <span class="pill at-status-pill at-status-{change.statusTransition.fromClass}">{change.statusTransition.from}</span>
+                  <span class="at-arrow">→</span>
+                  <span class="pill at-status-pill at-status-{change.statusTransition.toClass}">{change.statusTransition.to}</span>
+                </span>
+              {:else if change.desc}
+                <span class="mc-desc">{change.desc}</span>
+              {/if}
+              <span class="mc-time">{relativeTime(change.time)}</span>
+            </div>
+          {/each}
+        </div>
       {:else}
         <span class="mc-quiet">All quiet — no recent changes</span>
       {/if}
@@ -160,9 +156,20 @@
   }
   .mc-latest {
     display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  .mc-changes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .mc-change-row {
+    display: flex;
     align-items: center;
     gap: 8px;
-    flex: 1;
     min-width: 0;
   }
   .mc-meetings {
@@ -216,6 +223,9 @@
     color: var(--text-muted);
     font-size: 0.68rem;
     flex-shrink: 0;
+    min-width: 50px;
+    text-align: right;
+    margin-left: auto;
   }
   .mc-quiet {
     color: var(--text-muted);
