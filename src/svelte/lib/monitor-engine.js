@@ -124,8 +124,12 @@ export async function runItemCheck(item) {
         const updateHistory = Array.isArray(updated.updateHistory) ? [...updated.updateHistory] : [];
         while (updateHistory.length >= 20) updateHistory.pop();
         const changes = [];
-        if (i.status !== updated.status) changes.push(`Status: ${i.status} → ${updated.status}`);
-        if (i.severity !== updated.severity) changes.push(`Severity: ${i.severity} → ${updated.severity}`);
+        const oldStatus = (i.status || '').trim().toLowerCase();
+        const newStatus = (updated.status || '').trim().toLowerCase();
+        const oldSev = (i.severity || '').trim().toLowerCase();
+        const newSev = (updated.severity || '').trim().toLowerCase();
+        if (oldStatus !== newStatus) changes.push(`Status: ${i.status} → ${updated.status}`);
+        if (oldSev !== newSev) changes.push(`Severity: ${i.severity} → ${updated.severity}`);
         if (!changes.length) changes.push('Updated');
         updateHistory.unshift({
           timestamp: nowIso(),
