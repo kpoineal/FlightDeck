@@ -82,38 +82,6 @@
   function isFilterActive(type, value) {
     return inlineFilter && inlineFilter.type === type && inlineFilter.value === value;
   }
-
-  // Latest activity subtitle for this scanner
-  let latestUpdate = $derived.by(() => {
-    // Find the item with the most recent updateHistory entry in this scanner
-    let best = null;
-    let bestTime = 0;
-    for (const item of items) {
-      const history = item.updateHistory;
-      if (!Array.isArray(history) || !history.length) continue;
-      const latest = history[0];
-      const time = new Date(latest.timestamp).getTime();
-      if (time > bestTime) {
-        bestTime = time;
-        best = { item, entry: latest, time };
-      }
-    }
-    if (!best) return null;
-
-    // Build a concise description
-    const changes = Array.isArray(best.entry.changes) ? best.entry.changes : [];
-    const statusChange = changes.find(c => c.startsWith('Status:') || c.startsWith('Severity:'));
-    let desc;
-    if (statusChange) {
-      desc = `${best.item.title}: ${statusChange}`;
-    } else if (best.entry.summary && best.entry.summary !== 'Updated') {
-      const short = best.entry.summary.length > 50 ? best.entry.summary.slice(0, 47) + '...' : best.entry.summary;
-      desc = `${best.item.title}: ${short}`;
-    } else {
-      desc = `${best.item.title} checked — no new signals`;
-    }
-    return { desc, time: best.time };
-  });
 </script>
 
 <div class="radar-section" class:disabled={!enabled}>
@@ -209,14 +177,6 @@
     </div>
   </div>
 
-  <!-- Latest activity subtitle -->
-  {#if latestUpdate && !collapsed}
-    <div class="scanner-latest">
-      <span class="scanner-latest-text">└ {latestUpdate.desc}</span>
-      <span class="scanner-latest-time">({relativeTime(latestUpdate.time)})</span>
-    </div>
-  {/if}
-
   <!-- Items list -->
   <div class="radar-section-items" class:list--minimal={isMinimal} class:collapsed>
     {#if filteredItems.length}
@@ -257,27 +217,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  .scanner-latest {
-    padding: 2px 20px 4px 32px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    line-height: 1.4;
-    opacity: 0.8;
-  }
-  .scanner-latest-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-  .scanner-latest-time {
-    flex-shrink: 0;
-    font-size: 0.65rem;
-    opacity: 0.7;
-  }
-</style>
