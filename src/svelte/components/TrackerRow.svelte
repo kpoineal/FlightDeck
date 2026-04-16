@@ -11,15 +11,23 @@
   let isExpanded = $state(expanded);
   let rowEl = $state(null);
   let isHighlighted = $derived($highlightedItemId === item.id);
+  let hasAnimated = $state(false);
 
   // Scroll into view and expand when highlighted
   $effect(() => {
     if (isHighlighted && rowEl) {
+      hasAnimated = false;
       isExpanded = true;
       onrowexpand?.({ itemId: item.id });
-      rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      requestAnimationFrame(() => {
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        hasAnimated = true;
+      });
     }
+    if (!isHighlighted) hasAnimated = false;
   });
+
+  let showHighlight = $derived(isHighlighted && hasAnimated);
   let monitoringOpen = $state(false);
   let promptPanelOpen = $state(false);
   let peopleOpen = $state(true);
@@ -62,7 +70,7 @@
   bind:this={rowEl}
   class="tracker-row-wrapper"
   class:is-new={hasNew}
-  class:highlighted={isHighlighted}
+  class:highlighted={showHighlight}
   class:snoozed-card={item.lifecycleStatus === 'snoozed'}
   data-tracker-id={item.id}
   data-item-severity={item.severity || 'Observe'}
@@ -204,7 +212,7 @@
 
 <style>
   .highlighted {
-    animation: highlight-pulse 2.5s ease-out;
+    animation: highlight-pulse 2.5s ease-out forwards;
     outline: 2px solid var(--accent, #0a84ff);
     outline-offset: 2px;
     z-index: 10;

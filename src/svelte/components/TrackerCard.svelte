@@ -11,13 +11,22 @@
   let activeTab = $state('summary');
   let cardEl = $state(null);
   let isHighlighted = $derived($highlightedItemId === item.id);
+  let hasAnimated = $state(false);
 
-  // Scroll into view and animate when this card is highlighted
+  // Scroll into view when this card is highlighted
   $effect(() => {
     if (isHighlighted && cardEl) {
-      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      hasAnimated = false;
+      // Small delay ensures DOM is settled after section expand
+      requestAnimationFrame(() => {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        hasAnimated = true;
+      });
     }
+    if (!isHighlighted) hasAnimated = false;
   });
+
+  let showHighlight = $derived(isHighlighted && hasAnimated);
   let promptPanelOpen = $state(false);
 
   let isTerminalStatus = $derived(item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
@@ -50,7 +59,7 @@
   class="tracker-card"
   class:has-new-update={hasNew}
   class:is-new={hasNew}
-  class:highlighted={isHighlighted}
+  class:highlighted={showHighlight}
   class:snoozed-card={item.lifecycleStatus === 'snoozed'}
   data-tracker-id={item.id}
   data-item-severity={item.severity || 'Observe'}
@@ -210,7 +219,7 @@
 
 <style>
   .highlighted {
-    animation: highlight-pulse 2.5s ease-out;
+    animation: highlight-pulse 2.5s ease-out forwards;
     outline: 2px solid var(--accent, #0a84ff);
     outline-offset: 2px;
     z-index: 10;
