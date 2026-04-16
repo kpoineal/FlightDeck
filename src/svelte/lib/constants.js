@@ -37,7 +37,7 @@ export const DEFAULT_WEEKLY_TIMES = ['08:00', '12:00'];
 export const WORK_HOURS_START_HOUR = 8;
 export const WORK_HOURS_END_HOUR = 17;
 
-export const LIFECYCLE_STATUSES = ['in-progress', 'blocked', 'waiting', 'snoozed', 'complete', 'archived'];
+export const LIFECYCLE_STATUSES = ['in-progress', 'blocked', 'waiting', 'complete', 'archived'];
 
 export const ALL_SIGNAL_TYPES = ['email', 'chat', 'meeting', 'doc'];
 
@@ -73,7 +73,6 @@ export const LIFECYCLE_LABELS = {
   'in-progress': 'In Progress',
   'blocked': 'Blocked',
   'waiting': 'Waiting',
-  'snoozed': 'Snoozed',
   'complete': 'Complete',
   'archived': 'Archived',
 };
