@@ -24,15 +24,31 @@
         bestTime = t;
         const changes = Array.isArray(latest.changes) ? latest.changes : [];
         const statusChange = changes.find(c => c.startsWith('Status:') || c.startsWith('Severity:'));
-        let desc;
+
+        // Parse status transition for pill rendering
+        let statusTransition = null;
         if (statusChange) {
-          desc = `${item.title}: ${statusChange}`;
-        } else if (latest.summary && latest.summary !== 'Updated' && latest.summary !== 'Discovered') {
-          desc = latest.summary.length > 60 ? latest.summary.slice(0, 57) + '...' : latest.summary;
-        } else {
-          desc = item.title;
+          const match = statusChange.match(/^(?:Status|Severity):\s*(.+?)\s*→\s*(.+)$/);
+          if (match) {
+            statusTransition = {
+              from: match[1].trim(),
+              fromClass: match[1].trim().toLowerCase().replace(/\s+/g, '-'),
+              to: match[2].trim(),
+              toClass: match[2].trim().toLowerCase().replace(/\s+/g, '-'),
+            };
+          }
         }
-        best = { item, desc, time: t };
+
+        let desc;
+        if (!statusTransition) {
+          if (latest.summary && latest.summary !== 'Updated' && latest.summary !== 'Discovered') {
+            desc = latest.summary.length > 60 ? latest.summary.slice(0, 57) + '...' : latest.summary;
+          } else {
+            desc = null;
+          }
+        }
+
+        best = { item, desc, statusTransition, time: t };
       }
     }
     return best;
@@ -93,9 +109,19 @@
     <div class="mc-latest">
       {#if recentEscalation}
         <span class="mc-label">LATEST</span>
-        <span class="mc-change" title={recentEscalation.item.title}>{recentEscalation.desc}</span>
+        <button class="mc-link" onclick={reviewItem} title="Click to navigate to this item">
+          {recentEscalation.item.title}
+        </button>
+        {#if recentEscalation.statusTransition}
+          <span class="at-status-transition">
+            <span class="pill at-status-pill at-status-{recentEscalation.statusTransition.fromClass}">{recentEscalation.statusTransition.from}</span>
+            <span class="at-arrow">→</span>
+            <span class="pill at-status-pill at-status-{recentEscalation.statusTransition.toClass}">{recentEscalation.statusTransition.to}</span>
+          </span>
+        {:else if recentEscalation.desc}
+          <span class="mc-desc">{recentEscalation.desc}</span>
+        {/if}
         <span class="mc-time">{relativeTime(recentEscalation.time)}</span>
-        <button class="mc-btn mc-btn--review" onclick={reviewItem}>Review</button>
       {:else}
         <span class="mc-quiet">All quiet — no recent changes</span>
       {/if}
@@ -152,6 +178,31 @@
     letter-spacing: 0.05em;
     font-weight: 600;
     flex-shrink: 0;
+  }
+  .mc-link {
+    color: var(--accent, #0a84ff);
+    background: none;
+    border: none;
+    font-size: inherit;
+    font-family: inherit;
+    padding: 0;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+    text-decoration: none;
+  }
+  .mc-link:hover {
+    text-decoration: underline;
+  }
+  .mc-desc {
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1;
   }
   .mc-change {
     color: var(--text);
