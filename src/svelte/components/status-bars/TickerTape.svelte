@@ -73,7 +73,7 @@
       // Skip entries for items we already have stories for
       if (h.payload?.itemId && seenItemIds.has(h.payload.itemId)) continue;
 
-      // Only keep: scanner results, failures, completions
+      // Only keep: scanner results (not failures — those go to toasts)
       if (h.kind === 'scan' && h.summary?.includes('found')) {
         s.push({
           id: h.id,
@@ -81,14 +81,6 @@
           time,
           severity: 'Elevated',
           text: h.summary.slice(0, 80),
-        });
-      } else if (h.kind === 'failure') {
-        s.push({
-          id: h.id,
-          itemId: h.payload?.itemId || null,
-          time,
-          severity: 'Critical',
-          text: h.summary?.slice(0, 80) || 'Operation failed',
         });
       }
     }
