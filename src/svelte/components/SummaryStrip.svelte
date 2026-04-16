@@ -1,38 +1,12 @@
 <script>
-  import { fade } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { tweened } from 'svelte/motion';
   import { kpis, mode, meetings, briefingsByMeetingId } from '../lib/stores.js';
 
-  import PulseStrip from './status-bars/PulseStrip.svelte';
   import MissionControl from './status-bars/MissionControl.svelte';
-  import HeatmapStrip from './status-bars/HeatmapStrip.svelte';
-  import MomentumGauge from './status-bars/MomentumGauge.svelte';
-  import TickerTape from './status-bars/TickerTape.svelte';
 
   let isBriefings = $derived($mode === 'Briefings');
   let isRadar = $derived($mode === 'Radar');
-
-  // ── Strip mode switcher ────────────────────────────────────────────
-  const STRIP_MODES = [
-    { key: 'pulse', icon: '〰', title: 'Pulse' },
-    { key: 'mission', icon: '⚡', title: 'Mission Control' },
-    { key: 'heatmap', icon: '▦', title: 'Heatmap' },
-    { key: 'momentum', icon: '◉', title: 'Momentum' },
-  ];
-
-  function loadStripMode() {
-    try {
-      return localStorage.getItem('flightdeck-strip-mode') || 'mission';
-    } catch { return 'mission'; }
-  }
-
-  let stripMode = $state(loadStripMode());
-
-  function setStripMode(key) {
-    stripMode = key;
-    try { localStorage.setItem('flightdeck-strip-mode', key); } catch {}
-  }
 
   // Briefing counts
   let briefingCounts = $derived.by(() => {
@@ -41,11 +15,8 @@
     let unbriefed = 0;
     for (const meeting of ($meetings || [])) {
       const stored = ($briefingsByMeetingId || {})[meeting.id] || null;
-      if (stored) {
-        briefed++;
-      } else {
-        unbriefed++;
-      }
+      if (stored) briefed++;
+      else unbriefed++;
     }
     return { briefed, unbriefed };
   });
@@ -123,30 +94,7 @@
   </div>
 
   {#if isRadar}
-    <!-- Strip mode switcher -->
-    <div class="strip-mode-switcher">
-      {#each STRIP_MODES as m}
-        <button
-          class="strip-mode-btn"
-          class:active={stripMode === m.key}
-          onclick={() => setStripMode(m.key)}
-          title={m.title}
-        >{m.icon}</button>
-      {/each}
-    </div>
-
-    <!-- Active status bar -->
-    <div class="strip-bar-area" transition:fade={{ duration: 150 }}>
-      {#if stripMode === 'pulse'}
-        <PulseStrip />
-      {:else if stripMode === 'mission'}
-        <MissionControl />
-      {:else if stripMode === 'heatmap'}
-        <HeatmapStrip />
-      {:else if stripMode === 'momentum'}
-        <MomentumGauge />
-      {/if}
-    </div>
+    <MissionControl />
   {/if}
 </section>
 
@@ -154,41 +102,5 @@
   .summary-strip--stacked {
     flex-direction: column;
     align-items: stretch;
-    position: relative;
-  }
-  .strip-mode-switcher {
-    position: absolute;
-    top: 6px;
-    right: 0;
-    display: flex;
-    gap: 2px;
-  }
-  .strip-mode-btn {
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text-muted);
-    font-size: 0.68rem;
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border-radius: var(--radius-sm, 4px);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.15s, background 0.15s;
-  }
-  .strip-mode-btn:hover {
-    color: var(--text);
-    background: color-mix(in srgb, var(--bg-inset) 80%, transparent);
-  }
-  .strip-mode-btn.active {
-    color: var(--accent, #0a84ff);
-    border-color: color-mix(in srgb, var(--accent, #0a84ff) 30%, transparent);
-    background: color-mix(in srgb, var(--accent, #0a84ff) 10%, transparent);
-  }
-  .strip-bar-area {
-    border-top: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
-    margin-top: 4px;
   }
 </style>
