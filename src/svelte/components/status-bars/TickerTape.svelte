@@ -1,5 +1,5 @@
 <script>
-  import { items, history, scanners, meetings, highlightedItemId } from '../../lib/stores.js';
+  import { items, history, scanners, meetings, highlightedItemId, mode, filter } from '../../lib/stores.js';
   import { normalizeSeverity } from '../../lib/utils.js';
 
   let now = $state(new Date());
@@ -85,7 +85,10 @@
 
   function clickStory(story) {
     if (story.itemId) {
+      filter.set('all');
+      mode.set('Radar');
       highlightedItemId.set(story.itemId);
+      setTimeout(() => highlightedItemId.set(null), 4000);
     }
   }
 </script>
