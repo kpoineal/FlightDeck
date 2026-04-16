@@ -249,7 +249,7 @@
     flex-shrink: 0;
   }
   .ticker-new-badge {
-    background: var(--accent, #0a84ff);
+    background: var(--color-success, #30d158);
     color: #fff;
     font-size: 0.55rem;
     font-weight: 700;
