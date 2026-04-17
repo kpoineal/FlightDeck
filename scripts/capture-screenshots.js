@@ -75,13 +75,39 @@ async function run() {
       console.log(`  📸 02-summary-strip-${theme}.png`);
     }
 
-    // ── 3. Expanded tracker card ─────────────────────────────────
-    // Click the first tracker card to expand it
+    // ── 3. Tracker card — Activity tab (default) ───────────────
     const firstCard = page.locator('article.tracker-card').first();
     if (await firstCard.isVisible()) {
-      await firstCard.click();
-      await sleep(500);
-      await capture(page, '03-tracker-card-expanded', theme);
+      // Activity tab is shown by default
+      await firstCard.scrollIntoViewIfNeeded();
+      await sleep(300);
+      await firstCard.screenshot({ path: path.join(OUT_DIR, `03a-tracker-card-activity-${theme}.png`), type: 'png' });
+      console.log(`  📸 03a-tracker-card-activity-${theme}.png`);
+
+      // ── 3b. Tracker card — Overview tab ──────────────────────
+      const overviewTab = firstCard.locator('button.card-tab').nth(1);
+      if (await overviewTab.count() > 0) {
+        await overviewTab.click();
+        await sleep(300);
+        await firstCard.screenshot({ path: path.join(OUT_DIR, `03b-tracker-card-overview-${theme}.png`), type: 'png' });
+        console.log(`  📸 03b-tracker-card-overview-${theme}.png`);
+      }
+
+      // ── 3c. Tracker card — Monitor tab ───────────────────────
+      const monitorTab = firstCard.locator('button.card-tab').nth(2);
+      if (await monitorTab.count() > 0) {
+        await monitorTab.click();
+        await sleep(300);
+        await firstCard.screenshot({ path: path.join(OUT_DIR, `03c-tracker-card-monitor-${theme}.png`), type: 'png' });
+        console.log(`  📸 03c-tracker-card-monitor-${theme}.png`);
+      }
+
+      // Reset to activity tab for clean state
+      const activityTab = firstCard.locator('button.card-tab').nth(0);
+      if (await activityTab.count() > 0) {
+        await activityTab.click();
+        await sleep(300);
+      }
     }
 
     // ── 4. Tracker card with NEW UPDATE badge ───────────────────
