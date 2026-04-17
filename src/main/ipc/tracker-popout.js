@@ -5,7 +5,6 @@ const { IPC_CHANNELS } = require('../../shared/ipc-contract');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
 const DIST_RENDERER = path.join(APP_ROOT, '..', 'dist-renderer');
-const USE_SVELTE = process.env.SVELTE !== '0' && require('fs').existsSync(path.join(DIST_RENDERER, 'popout.html'));
 
 function registerTrackerPopoutIpc(getMainWindow, popoutWindows) {
   ipcMain.handle(IPC_CHANNELS.OPEN_TRACKER_POPOUT, async (_event, itemId) => {
@@ -30,10 +29,7 @@ function registerTrackerPopoutIpc(getMainWindow, popoutWindows) {
       popoutWindows.delete(popout);
     });
 
-    const popoutHtml = USE_SVELTE
-      ? path.join(DIST_RENDERER, 'popout.html')
-      : path.join(APP_ROOT, 'index.html');
-    popout.loadFile(popoutHtml, { query: { popout: String(itemId) } });
+    popout.loadFile(path.join(DIST_RENDERER, 'popout.html'), { query: { popout: String(itemId) } });
     return { success: true };
   });
 
