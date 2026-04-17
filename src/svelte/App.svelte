@@ -3,7 +3,7 @@
   import { get } from 'svelte/store';
   import { mode, connected, history as historyStore } from './lib/stores.js';
   import { loadPersistentState, savePersistentState } from './lib/persistence.js';
-  import { items, scanners, meetings, briefingsByMeetingId, briefingSeenAt,
+  import { items, scanners, meetings, meetingsLastFetched, briefingsByMeetingId, briefingSeenAt,
     density, filter, collapsedSections, highlightedItemId } from './lib/stores.js';
   import { addHistory } from './lib/actions.js';
   import { startScannerEngine, stopScannerEngine } from './lib/scanner-engine.js';
@@ -51,8 +51,20 @@
     saveTimer = setTimeout(() => savePersistentState(), 500);
   }
 
-  async function fetchMeetings() {
+  async function fetchMeetings(force = false) {
     if (!window.workiq || typeof window.workiq.ask !== 'function') return;
+
+    // Use cached meetings if fetched recently (within 1 hour and same calendar day)
+    if (!force) {
+      const lastFetch = get(meetingsLastFetched);
+      const cached = get(meetings);
+      if (lastFetch && cached.length) {
+        const age = Date.now() - lastFetch;
+        const sameDay = new Date(lastFetch).toDateString() === new Date().toDateString();
+        if (age < 3_600_000 && sameDay) return;
+      }
+    }
+
     try {
       const payload = await runWorkiqJson(
         TODAY_MEETINGS_PROMPT,
@@ -84,6 +96,7 @@
         .sort((a, b) => a.startTime - b.startTime);
 
       meetings.set(processed);
+      meetingsLastFetched.set(Date.now());
       addHistory('scan', `Loaded ${processed.length} upcoming meeting(s)`);
       savePersistentState();
     } catch (err) {

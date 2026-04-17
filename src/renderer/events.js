@@ -539,6 +539,8 @@ function bindEvents() {
       let type, value;
       if (filterAttr === 'new') {
         type = 'new'; value = 'new';
+      } else if (filterAttr === 'updated') {
+        type = 'updated'; value = 'updated';
       } else {
         const parts = filterAttr.split(':');
         type = parts[0]; value = parts.slice(1).join(':');

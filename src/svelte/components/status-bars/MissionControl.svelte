@@ -209,7 +209,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
-    flex: 1;
   }
   .mc-change {
     color: var(--text);
@@ -217,15 +216,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
-    flex: 1;
   }
   .mc-time {
     color: var(--text-muted);
     font-size: 0.68rem;
     flex-shrink: 0;
-    min-width: 50px;
-    text-align: right;
-    margin-left: auto;
   }
   .mc-quiet {
     color: var(--text-muted);

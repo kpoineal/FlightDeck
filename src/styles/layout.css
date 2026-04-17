@@ -90,8 +90,8 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--color-success, #30d158);
-  box-shadow: 0 0 6px rgba(48, 209, 88, 0.4);
+  background: var(--color-new, #0a84ff);
+  box-shadow: 0 0 6px rgba(10, 132, 255, 0.4);
   cursor: pointer;
   flex-shrink: 0;
 }

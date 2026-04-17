@@ -47,7 +47,8 @@
       }
 
       const isTerminal = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
-      const cardIsNew = !isTerminal && (item.isNew === true || item.hasNewUpdate === true);
+      const cardIsNew = !isTerminal && item.isNew === true;
+      const cardIsUpdated = !isTerminal && item.hasNewUpdate === true;
 
       seenItemIds.add(item.id);
       s.push({
@@ -57,6 +58,7 @@
         severity: normalizeSeverity(latest.severity || item.severity),
         text,
         isNew: cardIsNew,
+        isUpdated: cardIsUpdated,
       });
     }
 
@@ -152,10 +154,12 @@
             class="ticker-story"
             class:ticker-story--clickable={!!story.itemId}
             class:ticker-story--new={story.isNew}
+            class:ticker-story--updated={story.isUpdated}
             onclick={() => clickStory(story)}
           >
             <span class="ticker-dot" style="background: {dotColor(story.severity)}"></span>
             {#if story.isNew}<span class="ticker-new-badge">NEW</span>{/if}
+            {#if story.isUpdated}<span class="ticker-updated-badge">UPDATED</span>{/if}
             <span class="ticker-text">{story.text}</span>
             <span class="ticker-time">{relativeTime(story.time)}</span>
           </button>
@@ -166,11 +170,13 @@
             class="ticker-story"
             class:ticker-story--clickable={!!story.itemId}
             class:ticker-story--new={story.isNew}
+            class:ticker-story--updated={story.isUpdated}
             onclick={() => clickStory(story)}
             aria-hidden="true"
           >
             <span class="ticker-dot" style="background: {dotColor(story.severity)}"></span>
             {#if story.isNew}<span class="ticker-new-badge">NEW</span>{/if}
+            {#if story.isUpdated}<span class="ticker-updated-badge">UPDATED</span>{/if}
             <span class="ticker-text">{story.text}</span>
             <span class="ticker-time">{relativeTime(story.time)}</span>
           </button>
@@ -249,7 +255,7 @@
     flex-shrink: 0;
   }
   .ticker-new-badge {
-    background: var(--color-success, #30d158);
+    background: var(--color-new, #0a84ff);
     color: #fff;
     font-size: 0.55rem;
     font-weight: 700;
@@ -260,6 +266,21 @@
     animation: new-pulse 2s ease-in-out infinite;
   }
   .ticker-story--new .ticker-text {
+    color: var(--text);
+    font-weight: 500;
+  }
+  .ticker-updated-badge {
+    background: var(--color-updated, #30d158);
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    animation: new-pulse 2s ease-in-out infinite;
+  }
+  .ticker-story--updated .ticker-text {
     color: var(--text);
     font-weight: 500;
   }

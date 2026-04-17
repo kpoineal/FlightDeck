@@ -5,6 +5,7 @@ import { writable, derived } from 'svelte/store';
 export const items = writable([]);
 export const scanners = writable([]);
 export const meetings = writable([]);
+export const meetingsLastFetched = writable(0);
 export const briefingsByMeetingId = writable({});
 export const briefingSeenAt = writable({});
 export const history = writable([]);

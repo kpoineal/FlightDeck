@@ -548,7 +548,9 @@ function buildCardTabsHtml(item) {
   const historyEntries = Array.isArray(item.updateHistory) ? item.updateHistory : [];
   const isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
   const unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
-  const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
+  const isNewItem = !isTerminalStatus && item.isNew === true;
+  const hasUpdate = !isTerminalStatus && item.hasNewUpdate === true;
+  const hasNew = isNewItem || hasUpdate;
   const people = Array.isArray(item.counterparties) && item.counterparties.length
     ? item.counterparties.join(', ')
     : 'No counterparties listed';
@@ -576,7 +578,8 @@ function buildCardTabsHtml(item) {
         <button class="card-tab" title="Monitoring" data-card-tab="monitor" data-card-tab-item-id="${escapeHtml(item.id)}"><span class="card-tab-icon">\u2699\uFE0F</span><span class="card-tab-label">Monitor</span></button>
       </div>
       <div class="card-tab-panel active" data-card-tab-panel="summary" data-card-tab-panel-item-id="${escapeHtml(item.id)}">
-        ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
+        ${(() => { if (isNewItem) { const disc = item.discoveredAt || item.trackedAt || null; const ts = disc ? new Date(disc) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(disc); if (timeStr) return `<div class="tracker-updated-at">Discovered: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>`; } return ''; })()}
+        ${(() => { if (hasUpdate) { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); if (timeStr) return `<div class="tracker-change-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>`; } return ''; })()}
         ${buildActivityTimelineHtml(item.updateHistory, { maxVisible: 3, itemId: item.id, item })}
       </div>
       <div class="card-tab-panel" data-card-tab-panel="overview" data-card-tab-panel-item-id="${escapeHtml(item.id)}">
@@ -635,11 +638,13 @@ function buildCardTabsHtml(item) {
 
 function buildTrackingCard(item) {
   const isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
-  const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
+  const isNewItem = !isTerminalStatus && item.isNew === true;
+  const hasUpdate = !isTerminalStatus && item.hasNewUpdate === true;
+  const hasNew = isNewItem || hasUpdate;
   const unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
 
   return `
-    <article class="tracker-card ${hasNew ? 'has-new-update is-new' : ''} ${item.lifecycleStatus === 'snoozed' ? 'snoozed-card' : ''}" data-tracker-id="${escapeHtml(item.id)}" data-item-severity="${escapeHtml(item.severity || 'Observe')}" data-item-status="${escapeHtml(item.lifecycleStatus || 'in-progress')}" data-item-new="${hasNew ? 'true' : 'false'}">
+    <article class="tracker-card ${hasNew ? 'has-new-update' : ''} ${isNewItem ? 'is-new' : ''} ${hasUpdate ? 'is-updated' : ''} ${item.lifecycleStatus === 'snoozed' ? 'snoozed-card' : ''}" data-tracker-id="${escapeHtml(item.id)}" data-item-severity="${escapeHtml(item.severity || 'Observe')}" data-item-status="${escapeHtml(item.lifecycleStatus || 'in-progress')}" data-item-new="${hasNew ? 'true' : 'false'}">
       <div class="tracker-head">
         <div class="tracker-head-left">
           <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
@@ -654,7 +659,7 @@ function buildTrackingCard(item) {
         </div>
         <div class="tracker-head-right">
           ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
-          ${hasNew ? '<span class="tracker-new-badge">' + (unseenCount > 1 ? unseenCount + ' ' : '') + 'New</span>' : (() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? '<span class="pill last-updated-pill" title="Last update: ' + escapeHtml(safeDate(lastUpdate)) + '">' + escapeHtml(rt) + '</span>' : ''; })()}
+          ${isNewItem ? '<span class="tracker-new-badge">NEW</span>' : ''}${hasUpdate ? '<span class="tracker-updated-badge">' + (unseenCount > 1 ? unseenCount + ' ' : '') + 'UPDATED</span>' : ''}${!hasNew ? (() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? '<span class="pill last-updated-pill" title="Last update: ' + escapeHtml(safeDate(lastUpdate)) + '">' + escapeHtml(rt) + '</span>' : ''; })() : ''}
           <button class="popout-icon-btn" data-popout-id="${escapeHtml(item.id)}" title="Pop Out" aria-label="Pop out">\u2197</button>
         </div>
       </div>
@@ -676,7 +681,9 @@ function buildTrackingCard(item) {
 
 function buildTrackingRow(item, expandedRowId) {
   const isTerminalStatus = item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived';
-  const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true);
+  const isNewItem = !isTerminalStatus && item.isNew === true;
+  const hasUpdate = !isTerminalStatus && item.hasNewUpdate === true;
+  const hasNew = isNewItem || hasUpdate;
   const unseenCount = isTerminalStatus ? 0 : unseenHistoryCount(item);
   const isExpanded = item.id === expandedRowId;
   const people = Array.isArray(item.counterparties) && item.counterparties.length
@@ -701,7 +708,7 @@ function buildTrackingRow(item, expandedRowId) {
   })();
 
   return `
-  <div class="tracker-row-wrapper ${hasNew ? 'is-new' : ''} ${item.lifecycleStatus === 'snoozed' ? 'snoozed-card' : ''}" data-tracker-id="${escapeHtml(item.id)}" data-item-severity="${escapeHtml(item.severity || 'Observe')}" data-item-status="${escapeHtml(item.lifecycleStatus || 'in-progress')}" data-item-new="${hasNew ? 'true' : 'false'}">
+  <div class="tracker-row-wrapper ${isNewItem ? 'is-new' : ''} ${hasUpdate ? 'is-updated' : ''} ${item.lifecycleStatus === 'snoozed' ? 'snoozed-card' : ''}" data-tracker-id="${escapeHtml(item.id)}" data-item-severity="${escapeHtml(item.severity || 'Observe')}" data-item-status="${escapeHtml(item.lifecycleStatus || 'in-progress')}" data-item-new="${hasNew ? 'true' : 'false'}">
     <div class="tracker-row ${hasNew ? 'has-new-update' : ''} ${isExpanded ? 'expanded' : ''}" data-row-toggle-id="${escapeHtml(item.id)}">
       <select class="severity-select ${severityClass(item.severity)}" data-severity-select-id="${escapeHtml(item.id)}">
         <option value="Critical" ${item.severity === 'Critical' ? 'selected' : ''}>Critical</option>
@@ -713,7 +720,7 @@ function buildTrackingRow(item, expandedRowId) {
       </select>
       ${item.lifecycleStatus === 'snoozed' ? `<span class="snooze-until-label" title="Snoozed until ${item.snoozeUntil ? escapeHtml(safeDate(item.snoozeUntil)) : 'next scan'}">💤 ${item.snoozeUntil ? escapeHtml(relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}</span>` : ''}
       ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
-      ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
+      ${isNewItem ? '<span class="pill badge-pill">NEW</span>' : ''}${hasUpdate ? `<span class="pill badge-pill badge-pill--updated">${unseenCount > 1 ? unseenCount + ' ' : ''}UPDATED</span>` : ''}
       ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
       <span class="tracker-row-title">
         <span class="editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
@@ -725,7 +732,8 @@ function buildTrackingRow(item, expandedRowId) {
       <span class="row-expand-chevron ${isExpanded ? 'open' : ''}">&#9660;</span>
     </div>
     <div class="tracker-row-detail ${isExpanded ? 'show' : ''}">
-      ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? '<div class="tracker-updated-at">Updated: ' + escapeHtml(timeStr) + ' (' + escapeHtml(rt) + ')</div>' : ''; })()}
+      ${(() => { if (isNewItem) { const disc = item.discoveredAt || item.trackedAt || null; const ts = disc ? new Date(disc) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(disc); if (timeStr) return '<div class="tracker-updated-at">Discovered: ' + escapeHtml(timeStr) + ' (' + escapeHtml(rt) + ')</div>'; } return ''; })()}
+      ${(() => { if (hasUpdate) { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); if (timeStr) return '<div class="tracker-change-at">Updated: ' + escapeHtml(timeStr) + ' (' + escapeHtml(rt) + ')</div>'; } return ''; })()}
       ${buildActivityTimelineHtml(item.updateHistory, { maxVisible: 3, itemId: item.id, item })}
       ${buildNextStepHintsHtml(item)}
       <div class="tracker-meta">

@@ -50,7 +50,9 @@
   });
 
   let isTerminalStatus = $derived(item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
-  let hasNew = $derived(!isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true));
+  let isNewItem = $derived(!isTerminalStatus && item.isNew === true);
+  let hasUpdate = $derived(!isTerminalStatus && item.hasNewUpdate === true);
+  let hasNew = $derived(isNewItem || hasUpdate);
   let unseenCount = $derived(isTerminalStatus ? 0 : unseenHistoryCount(item));
   let people = $derived(Array.isArray(item.counterparties) && item.counterparties.length
     ? item.counterparties.join(', ')
@@ -60,6 +62,10 @@
   let lastUpdateTime = $derived(lastUpdate ? new Date(lastUpdate) : null);
   let lastUpdateStr = $derived(lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null);
   let rt = $derived(relativeTime(lastUpdate));
+  let discoveredSource = $derived(item.discoveredAt || item.trackedAt || null);
+  let discoveredTime = $derived(discoveredSource ? new Date(discoveredSource) : null);
+  let discoveredStr = $derived(discoveredTime && Number.isFinite(discoveredTime.getTime()) ? discoveredTime.toLocaleString() : null);
+  let discoveredRt = $derived(relativeTime(discoveredSource));
   let steps = $derived(Array.isArray(item.suggestedNextSteps) ? item.suggestedNextSteps : []);
   let sevClass = $derived(severityClass(item.severity));
   let summaryTruncated = $derived((item.summary || '').replace(/\n/g, ' ').slice(0, 140));
@@ -69,7 +75,8 @@
 <div
   bind:this={rowEl}
   class="tracker-row-wrapper"
-  class:is-new={hasNew}
+  class:is-new={isNewItem}
+  class:is-updated={hasUpdate}
   class:highlighted={showHighlight}
   class:snoozed-card={item.lifecycleStatus === 'snoozed'}
   data-tracker-id={item.id}
@@ -104,8 +111,11 @@
     {#if item.monitorEnabled === false && !isTerminalStatus}
       <span class="pill paused-pill">Paused</span>
     {/if}
-    {#if hasNew}
-      <span class="pill badge-pill">{unseenCount > 1 ? unseenCount + ' ' : ''}New</span>
+    {#if isNewItem}
+      <span class="pill badge-pill">NEW</span>
+    {/if}
+    {#if hasUpdate}
+      <span class="pill badge-pill badge-pill--updated">{unseenCount > 1 ? unseenCount + ' ' : ''}UPDATED</span>
     {/if}
     {#if rt}
       <span class="pill last-updated-pill" class:popped={hasNew} title="Updated: {safeDate(lastUpdate)}">{rt}</span>
@@ -118,8 +128,11 @@
 
   {#if isExpanded}
     <div class="tracker-row-detail show">
-      {#if hasNew && lastUpdateStr}
-        <div class="tracker-updated-at">Updated: {lastUpdateStr} ({rt})</div>
+      {#if isNewItem && discoveredStr}
+        <div class="tracker-updated-at">Discovered: {discoveredStr} ({discoveredRt})</div>
+      {/if}
+      {#if hasUpdate && lastUpdateStr}
+        <div class="tracker-change-at">Updated: {lastUpdateStr} ({rt})</div>
       {/if}
       <ActivityTimeline entries={Array.isArray(item.updateHistory) ? item.updateHistory : []} {item} maxVisible={3} />
 

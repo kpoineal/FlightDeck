@@ -119,7 +119,7 @@
   color: #fff;
 }
 .radar-new-indicator.active {
-  background: var(--color-success, #30d158);
+  background: var(--color-new, #0a84ff);
   color: #fff;
   animation: none;
 }
@@ -170,15 +170,29 @@
 .radar-new-indicator {
   font-size: 0.65rem;
   font-weight: 700;
-  color: var(--color-success, #30d158);
+  color: var(--color-new, #0a84ff);
   padding: 1px 6px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--color-success, #30d158) 15%, transparent);
+  background: color-mix(in srgb, var(--color-new, #0a84ff) 15%, transparent);
   animation: radar-new-pulse 2s ease-in-out infinite;
 }
 @keyframes radar-new-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+.radar-updated-indicator {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-updated, #30d158);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-updated, #30d158) 15%, transparent);
+  animation: radar-new-pulse 2s ease-in-out infinite;
+}
+.radar-updated-indicator.active {
+  background: var(--color-updated, #30d158);
+  color: #fff;
+  animation: none;
 }
 
 /* Last activity timestamp */

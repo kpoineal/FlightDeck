@@ -30,7 +30,9 @@
   let promptPanelOpen = $state(false);
 
   let isTerminalStatus = $derived(item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
-  let hasNew = $derived(!isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true));
+  let isNewItem = $derived(!isTerminalStatus && item.isNew === true);
+  let hasUpdate = $derived(!isTerminalStatus && item.hasNewUpdate === true);
+  let hasNew = $derived(isNewItem || hasUpdate);
   let unseenCount = $derived(isTerminalStatus ? 0 : unseenHistoryCount(item));
   let historyEntries = $derived(Array.isArray(item.updateHistory) ? item.updateHistory : []);
   let people = $derived(Array.isArray(item.counterparties) && item.counterparties.length
@@ -41,6 +43,10 @@
   let lastUpdateTime = $derived(lastUpdate ? new Date(lastUpdate) : null);
   let lastUpdateStr = $derived(lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null);
   let rt = $derived(relativeTime(lastUpdate));
+  let discoveredSource = $derived(item.discoveredAt || item.trackedAt || null);
+  let discoveredTime = $derived(discoveredSource ? new Date(discoveredSource) : null);
+  let discoveredStr = $derived(discoveredTime && Number.isFinite(discoveredTime.getTime()) ? discoveredTime.toLocaleString() : null);
+  let discoveredRt = $derived(relativeTime(discoveredSource));
   let steps = $derived(Array.isArray(item.suggestedNextSteps) ? item.suggestedNextSteps : []);
   let sevClass = $derived(severityClass(item.severity));
 
@@ -58,7 +64,8 @@
   bind:this={cardEl}
   class="tracker-card"
   class:has-new-update={hasNew}
-  class:is-new={hasNew}
+  class:is-new={isNewItem}
+  class:is-updated={hasUpdate}
   class:highlighted={showHighlight}
   class:snoozed-card={item.lifecycleStatus === 'snoozed'}
   data-tracker-id={item.id}
@@ -90,9 +97,13 @@
       {#if item.monitorEnabled === false && !isTerminalStatus}
         <span class="pill paused-pill">Paused</span>
       {/if}
-      {#if hasNew}
-        <span class="tracker-new-badge">{unseenCount > 1 ? unseenCount + ' ' : ''}New</span>
-      {:else if rt}
+      {#if isNewItem}
+        <span class="tracker-new-badge">NEW</span>
+      {/if}
+      {#if hasUpdate}
+        <span class="tracker-updated-badge">{unseenCount > 1 ? unseenCount + ' ' : ''}UPDATED</span>
+      {/if}
+      {#if !hasNew && rt}
         <span class="pill last-updated-pill" title="Last update: {safeDate(lastUpdate)}">{rt}</span>
       {/if}
       <button class="popout-icon-btn" title="Pop Out" aria-label="Pop out"
@@ -127,8 +138,11 @@
 
       <!-- Activity tab -->
       <div class="card-tab-panel" class:active={activeTab === 'summary'}>
-        {#if hasNew && lastUpdateStr}
-          <div class="tracker-updated-at">Updated: {lastUpdateStr} ({rt})</div>
+        {#if isNewItem && discoveredStr}
+          <div class="tracker-updated-at">Discovered: {discoveredStr} ({discoveredRt})</div>
+        {/if}
+        {#if hasUpdate && lastUpdateStr}
+          <div class="tracker-change-at">Updated: {lastUpdateStr} ({rt})</div>
         {/if}
         <ActivityTimeline entries={historyEntries} {item} maxVisible={3} />
       </div>

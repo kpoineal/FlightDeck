@@ -29,7 +29,12 @@
   let blocked = $derived(items.filter(i => i.lifecycleStatus === 'blocked').length);
   let waiting = $derived(items.filter(i => i.lifecycleStatus === 'waiting').length);
   let newCount = $derived(items.filter(i =>
-    (i.isNew || i.hasNewUpdate) &&
+    i.isNew === true &&
+    i.lifecycleStatus !== 'complete' &&
+    i.lifecycleStatus !== 'archived'
+  ).length);
+  let updatedCount = $derived(items.filter(i =>
+    i.hasNewUpdate === true &&
     i.lifecycleStatus !== 'complete' &&
     i.lifecycleStatus !== 'archived'
   ).length);
@@ -56,7 +61,8 @@
     if (!inlineFilter) return sorted;
     if (inlineFilter.type === 'severity') return sorted.filter(i => i.severity === inlineFilter.value);
     if (inlineFilter.type === 'status') return sorted.filter(i => i.lifecycleStatus === inlineFilter.value);
-    if (inlineFilter.type === 'new') return sorted.filter(i => i.isNew === true || i.hasNewUpdate === true);
+    if (inlineFilter.type === 'new') return sorted.filter(i => i.isNew === true);
+    if (inlineFilter.type === 'updated') return sorted.filter(i => i.hasNewUpdate === true);
     return sorted;
   });
 
@@ -144,10 +150,17 @@
       {/if}
       {#if newCount > 0}
         <span class="radar-new-indicator" class:active={isFilterActive('new', 'new')}
-          title="{newCount} new or updated — click to filter"
+          title="{newCount} new — click to filter"
           on:click|stopPropagation={() => toggleFilter('new', 'new')}
           on:keydown={(e) => e.key === 'Enter' && toggleFilter('new', 'new')}
           role="button" tabindex="0">{newCount} new</span>
+      {/if}
+      {#if updatedCount > 0}
+        <span class="radar-updated-indicator" class:active={isFilterActive('updated', 'updated')}
+          title="{updatedCount} updated — click to filter"
+          on:click|stopPropagation={() => toggleFilter('updated', 'updated')}
+          on:keydown={(e) => e.key === 'Enter' && toggleFilter('updated', 'updated')}
+          role="button" tabindex="0">{updatedCount} updated</span>
       {/if}
       {#if inlineFilter}
         <span class="scanner-filter-clear" title="Clear filter"

@@ -5,6 +5,7 @@ import {
   items,
   scanners,
   meetings,
+  meetingsLastFetched,
   briefingsByMeetingId,
   briefingSeenAt,
   history,
@@ -193,6 +194,18 @@ export async function loadPersistentState(isDemo = false) {
         : {}
     );
 
+    // Restore cached meetings (filter to today's future meetings)
+    if (Array.isArray(parsed.meetings) && parsed.meetings.length) {
+      const now = Date.now();
+      const cachedMeetings = parsed.meetings.filter(
+        (m) => m.startTime && Number.isFinite(m.startTime) && m.startTime >= now
+      );
+      if (cachedMeetings.length) meetings.set(cachedMeetings);
+    }
+    if (typeof parsed.meetingsLastFetched === 'number') {
+      meetingsLastFetched.set(parsed.meetingsLastFetched);
+    }
+
     let loadedScanners = Array.isArray(parsed.scanners)
       ? parsed.scanners.map((entry) => normalizeScannerDefinition(entry))
       : [];
@@ -359,6 +372,8 @@ export async function savePersistentState(isDemo = false) {
     radarItems: currentItems,
     briefingsByMeetingId: get(briefingsByMeetingId),
     briefingSeenAt: get(briefingSeenAt),
+    meetings: get(meetings),
+    meetingsLastFetched: get(meetingsLastFetched),
     history: get(history),
     connected: get(connected),
     density: currentDensity,
