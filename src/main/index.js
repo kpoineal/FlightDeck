@@ -13,7 +13,8 @@ const { registerIpcHandlers } = require('./ipc-handlers');
 
 const APP_ROOT = path.join(__dirname, '..');
 const IS_DEMO = process.argv.includes('--demo');
-const USE_SVELTE = process.env.SVELTE === '1';
+const DIST_RENDERER = path.join(APP_ROOT, '..', 'dist-renderer');
+const USE_SVELTE = process.env.SVELTE !== '0' && require('fs').existsSync(path.join(DIST_RENDERER, 'app.html'));
 
 if (process.platform === 'win32') {
   app.setAppUserModelId(getWindowsAppUserModelId());
@@ -62,7 +63,7 @@ function createWindow() {
 
   const loadOpts = IS_DEMO ? { query: { demo: '1' } } : {};
   const htmlFile = USE_SVELTE
-    ? path.join(APP_ROOT, '..', 'dist-renderer', 'app.html')
+    ? path.join(DIST_RENDERER, 'app.html')
     : path.join(APP_ROOT, 'index.html');
   win.loadFile(htmlFile, loadOpts);
 
