@@ -85,6 +85,7 @@ const state = {
   },
   briefing: null,
   meetings: [],
+  meetingsLastFetched: 0,
   expandedBriefingMeetingIds: [],
   briefingsByMeetingId: {},
   briefingSeenAt: {},
@@ -189,6 +190,8 @@ async function savePersistentState() {
     radarItems: state.items,
     briefingsByMeetingId: state.briefingsByMeetingId,
     briefingSeenAt: state.briefingSeenAt,
+    meetings: state.meetings,
+    meetingsLastFetched: state.meetingsLastFetched,
     history: state.history,
     connected: state.connected,
     density: state.density,
@@ -325,6 +328,18 @@ async function loadPersistentState() {
     state.briefingSeenAt = parsed.briefingSeenAt && typeof parsed.briefingSeenAt === 'object'
       ? parsed.briefingSeenAt
       : {};
+
+    // Restore cached meetings (filter to future meetings only)
+    if (Array.isArray(parsed.meetings) && parsed.meetings.length) {
+      const now = Date.now();
+      state.meetings = parsed.meetings.filter(
+        (m) => m.startTime && Number.isFinite(m.startTime) && m.startTime >= now
+      );
+    }
+    if (typeof parsed.meetingsLastFetched === 'number') {
+      state.meetingsLastFetched = parsed.meetingsLastFetched;
+    }
+
     state.scanners = Array.isArray(parsed.scanners)
       ? parsed.scanners.map((entry) => normalizeScannerDefinition(entry))
       : [];

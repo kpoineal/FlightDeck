@@ -486,3 +486,17 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
   7. Monitor engine and scanner engine run background `setInterval` loops with direct state mutation — would need to dispatch to stores rather than mutate directly.
 - **Migration estimate**: M-L effort (~4-6 weeks for one developer), with the heaviest lift in renderers/tracking.js, renderers/radar.js, events.js, and state.js conversion.
 - **Key files analyzed**: All files in `src/renderer/`, `src/renderer/models/`, `src/renderer/renderers/`, `src/styles/`, `src/index.html`, `src/shared/ipc-contract.js`, `src/preload.js`.
+
+### 2026-04-17 — Separate "New" vs "Updated" Badges/Bars
+- **Goal**: Split the combined `hasNew` boolean (which merged `isNew` + `hasNewUpdate`) into two distinct visual treatments: green NEW badge for first-time discoveries, amber UPDATED badge for meaningful changes to existing items.
+- **Changes made**:
+  1. **`renderers/tracking.js`**: In `buildCardTabsHtml()`, `buildTrackingCard()`, and `buildTrackingRow()` — replaced single `hasNew` with `isNewItem` (isNew flag) + `hasUpdate` (hasNewUpdate flag) + `hasNew` (either). Card classes now apply `is-new` only for isNewItem and `is-updated` for hasUpdate. Badge rendering shows separate green "NEW" and amber "UPDATED" spans. Timestamp bars split: "Discovered: {discoveredAt}" (green) for new items, "Updated: {lastChangedAt}" (amber `.tracker-change-at`) for updates. Both shown when both flags are true.
+  2. **`styles/tracking.css`**: Added `.tracker-updated-badge` (amber pill, same shape as `.tracker-new-badge`), `.tracker-change-at` (amber bar, same layout as `.tracker-updated-at`), `.is-updated` glow (amber border/shadow), and dual glow for `.is-new.is-updated`.
+  3. **`styles/components.css`**: Added `.badge-pill--updated` for amber row-view badge.
+  4. **Svelte components**: `TrackerCard.svelte` and `TrackerRow.svelte` — same split applied: `isNewItem` + `hasUpdate` derived states, separate badges, separate bars. Added `discoveredAt` derivation for accurate "Discovered:" timestamps.
+  5. **Test update**: `renderer-tracking-renderers.test.js` — updated assertion to check `tracker-updated-badge` instead of `tracker-new-badge` when only `hasNewUpdate` is true.
+- **No changes to**: data model (item.js), scanner-engine, monitor-engine, events.js `handleMarkSeenClick`. Verified these are already correct.
+- **Dead code** (inside `void function _deadCode()`) was left unchanged — it never executes.
+- **Design tokens**: Used `--color-elevated` (#ff9f0a) for amber since `--color-warning` doesn't exist in tokens.css.
+- **All 589 tests pass**.
+- **Key files**: `src/renderer/renderers/tracking.js`, `src/styles/tracking.css`, `src/styles/components.css`, `src/svelte/components/TrackerCard.svelte`, `src/svelte/components/TrackerRow.svelte`, `test/renderer-tracking-renderers.test.js`.

@@ -25,3 +25,6 @@ jobs:
 
       - name: Run tests
         run: node --test test/*.test.js
+
+      - name: Build renderer
+        run: npm run build:renderer

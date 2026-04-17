@@ -184,6 +184,7 @@ function applyMeetingsPayload(payload) {
     .sort((a, b) => a.startTime - b.startTime);
 
   reconcileMeetingScopedState(state.meetings);
+  state.meetingsLastFetched = Date.now();
   savePersistentState();
 }
 

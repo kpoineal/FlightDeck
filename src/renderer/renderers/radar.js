@@ -14,7 +14,8 @@ function applyInlineFilterDOM(sourceId) {
     if (filter) {
       if (filter.type === 'severity') show = el.getAttribute('data-item-severity') === filter.value;
       else if (filter.type === 'status') show = el.getAttribute('data-item-status') === filter.value;
-      else if (filter.type === 'new') show = el.getAttribute('data-item-new') === 'true';
+      else if (filter.type === 'new') show = el.classList.contains('is-new');
+      else if (filter.type === 'updated') show = el.classList.contains('is-updated');
     }
     el.style.display = show ? '' : 'none';
     if (show) visibleCount++;
@@ -42,6 +43,7 @@ function applyInlineFilterDOM(sourceId) {
     const attr = pill.getAttribute('data-scanner-filter');
     let pillType, pillValue;
     if (attr === 'new') { pillType = 'new'; pillValue = 'new'; }
+    else if (attr === 'updated') { pillType = 'updated'; pillValue = 'updated'; }
     else { const p = attr.split(':'); pillType = p[0]; pillValue = p.slice(1).join(':'); }
     pill.classList.toggle('active', filter !== null && filter.type === pillType && filter.value === pillValue);
   });
@@ -169,7 +171,7 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
 
   // Severity micro-counts
   let critical = 0, elevated = 0, observe = 0;
-  let blocked = 0, waiting = 0, newCount = 0;
+  let blocked = 0, waiting = 0, newCount = 0, updatedCount = 0;
   let latestActivity = 0;
   for (const item of items) {
     if (item.severity === 'Critical') critical++;
@@ -177,7 +179,8 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
     else observe++;
     if (item.lifecycleStatus === 'blocked') blocked++;
     if (item.lifecycleStatus === 'waiting') waiting++;
-    if ((item.isNew || item.hasNewUpdate) && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' && item.lifecycleStatus !== 'snoozed') newCount++;
+    if (item.isNew === true && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' && item.lifecycleStatus !== 'snoozed') newCount++;
+    if (item.hasNewUpdate === true && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' && item.lifecycleStatus !== 'snoozed') updatedCount++;
     const ts = new Date(item.lastChangedAt || item.lastRunAt || 0).getTime();
     if (ts > latestActivity) latestActivity = ts;
   }
@@ -200,8 +203,10 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
   if (blocked > 0) attentionHtml += `<span class="radar-attn-badge attn-blocked${isFilterActive('status', 'blocked') ? ' active' : ''}" data-scanner-filter="status:blocked" data-scanner-source-id="${escapeHtml(sourceId)}" title="${blocked} blocked — click to filter">${blocked} blocked</span>`;
   if (waiting > 0) attentionHtml += `<span class="radar-attn-badge attn-waiting${isFilterActive('status', 'waiting') ? ' active' : ''}" data-scanner-filter="status:waiting" data-scanner-source-id="${escapeHtml(sourceId)}" title="${waiting} waiting — click to filter">${waiting} waiting</span>`;
 
-  // New indicator
-  const newHtml = newCount > 0 ? `<span class="radar-new-indicator${isFilterActive('new', 'new') ? ' active' : ''}" data-scanner-filter="new" data-scanner-source-id="${escapeHtml(sourceId)}" title="${newCount} new or updated — click to filter">${newCount} new</span>` : '';
+  // New + Updated indicators
+  let newUpdatedHtml = '';
+  if (newCount > 0) newUpdatedHtml += `<span class="radar-new-indicator${isFilterActive('new', 'new') ? ' active' : ''}" data-scanner-filter="new" data-scanner-source-id="${escapeHtml(sourceId)}" title="${newCount} new — click to filter">${newCount} new</span>`;
+  if (updatedCount > 0) newUpdatedHtml += `<span class="radar-updated-indicator${isFilterActive('updated', 'updated') ? ' active' : ''}" data-scanner-filter="updated" data-scanner-source-id="${escapeHtml(sourceId)}" title="${updatedCount} updated — click to filter">${updatedCount} updated</span>`;
 
   // Clear filter button (only shown when a filter is active)
   const clearHtml = activeFilter ? `<span class="scanner-filter-clear" data-scanner-filter-clear="${escapeHtml(sourceId)}" title="Clear filter">&times;</span>` : '';
@@ -229,7 +234,7 @@ function buildSectionHeader(sourceId, icon, name, count, { scannerId = null, ena
         <span class="radar-section-count">(${count})</span>
         ${sevDots ? `<span class="radar-sev-dots">${sevDots}</span>` : ''}
         ${attentionHtml}
-        ${newHtml}
+        ${newUpdatedHtml}
         ${clearHtml}
         ${activityHtml}
         ${nextRunHtml ? `<span class="radar-next-run" data-scanner-next-run="${escapeHtml(String(scannerId))}">${nextRunHtml}</span>` : `<span class="radar-next-run" data-scanner-next-run="${escapeHtml(String(scannerId))}"></span>`}
@@ -975,7 +980,8 @@ function renderMorningBanner() {
   const activeItems = items.filter(i => i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived');
   const criticalCount = activeItems.filter(i => normalizeSeverity(i.severity) === 'Critical').length;
   const elevatedCount = activeItems.filter(i => normalizeSeverity(i.severity) === 'Elevated').length;
-  const newCount = activeItems.filter(i => (i.isNew || i.hasNewUpdate) && i.lifecycleStatus !== 'snoozed').length;
+  const newCount = activeItems.filter(i => i.isNew === true && i.lifecycleStatus !== 'snoozed').length;
+  const updatedCount = activeItems.filter(i => i.hasNewUpdate === true && i.lifecycleStatus !== 'snoozed').length;
   const blockedCount = activeItems.filter(i => i.lifecycleStatus === 'blocked').length;
   const snoozedCount = activeItems.filter(i => i.lifecycleStatus === 'snoozed').length;
   const completedItems = items.filter(i => i.lifecycleStatus === 'complete');
@@ -998,7 +1004,8 @@ function renderMorningBanner() {
 
   const highlights = [];
   if (criticalCount > 0) highlights.push(`<strong style="color:var(--color-critical)">${criticalCount} critical</strong>`);
-  if (newCount > 0) highlights.push(`${newCount} new update${newCount > 1 ? 's' : ''}`);
+  if (newCount > 0) highlights.push(`${newCount} new`);
+  if (updatedCount > 0) highlights.push(`${updatedCount} updated`);
   if (blockedCount > 0) highlights.push(`${blockedCount} blocked`);
   if (meetingCount > 0) highlights.push(`${meetingCount} meeting${meetingCount > 1 ? 's' : ''} today`);
   if (recentlyCompletedCount > 0) highlights.push(`${recentlyCompletedCount} completed`);
@@ -1021,7 +1028,7 @@ function renderMorningBanner() {
       ${criticalCount + elevatedCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83D\uDD34 Attention</strong>${criticalCount} critical, ${elevatedCount} elevated items need review</div>` : ''}
       ${meetingCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83D\uDCC5 Meetings</strong>${meetingCount} today${unbriefedCount > 0 ? `, ${unbriefedCount} unbriefed` : ', all briefed'}</div>` : '<div class="morning-banner-detail-card"><strong>\uD83D\uDCC5 Meetings</strong>No meetings today</div>'}
       ${snoozedCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83D\uDCA4 Snoozed</strong>${snoozedCount} item${snoozedCount > 1 ? 's' : ''} snoozed</div>` : ''}
-      ${newCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83C\uDD95 Updates</strong>${newCount} item${newCount > 1 ? 's have' : ' has'} new activity</div>` : '<div class="morning-banner-detail-card"><strong>\u2705 Current</strong>No new updates since last check</div>'}
+      ${newCount + updatedCount > 0 ? `<div class="morning-banner-detail-card"><strong>\uD83C\uDD95 Activity</strong>${newCount > 0 ? `${newCount} new item${newCount > 1 ? 's' : ''}` : ''}${newCount > 0 && updatedCount > 0 ? ', ' : ''}${updatedCount > 0 ? `${updatedCount} updated` : ''}</div>` : '<div class="morning-banner-detail-card"><strong>\u2705 Current</strong>No new updates since last check</div>'}
       ${recentlyCompletedCount > 0 ? `<div class="morning-banner-detail-card"><strong>\u2705 Completed</strong>${recentlyCompletedCount} item${recentlyCompletedCount > 1 ? 's' : ''} completed recently${recentlyCompleted.slice(0, 3).map(i => `<br><small>\u2022 ${escapeHtml(i.title || 'Untitled')}</small>`).join('')}</div>` : ''}
     </div>
   `;

@@ -119,7 +119,7 @@
   color: #fff;
 }
 .radar-new-indicator.active {
-  background: var(--color-success, #30d158);
+  background: var(--color-new, #bf5af2);
   color: #fff;
   animation: none;
 }
@@ -157,6 +157,10 @@
   background: color-mix(in srgb, var(--color-critical) 18%, transparent);
   color: var(--color-critical);
 }
+.radar-attn-badge.attn-in-progress {
+  background: color-mix(in srgb, var(--accent, #0a84ff) 18%, transparent);
+  color: var(--accent, #0a84ff);
+}
 .radar-attn-badge.attn-waiting {
   background: color-mix(in srgb, var(--color-elevated) 18%, transparent);
   color: var(--color-elevated);
@@ -166,15 +170,29 @@
 .radar-new-indicator {
   font-size: 0.65rem;
   font-weight: 700;
-  color: var(--color-success, #30d158);
+  color: var(--color-new, #bf5af2);
   padding: 1px 6px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--color-success, #30d158) 15%, transparent);
+  background: color-mix(in srgb, var(--color-new, #bf5af2) 15%, transparent);
   animation: radar-new-pulse 2s ease-in-out infinite;
 }
 @keyframes radar-new-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+.radar-updated-indicator {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-updated, #30d158);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-updated, #30d158) 15%, transparent);
+  animation: radar-new-pulse 2s ease-in-out infinite;
+}
+.radar-updated-indicator.active {
+  background: var(--color-updated, #30d158);
+  color: #fff;
+  animation: none;
 }
 
 /* Last activity timestamp */

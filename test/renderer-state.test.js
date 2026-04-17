@@ -637,7 +637,7 @@ describe('savePersistentState()', () => {
     assert.equal(parsed.history.length, 1);
     // radarItems is written as legacy rollback key
     assert.ok(Array.isArray(parsed.radarItems));
-    assert.equal(parsed.meetings, undefined);
+    assert.ok(Array.isArray(parsed.meetings));
   });
 
   it('round-trips through save and load', async () => {
@@ -680,7 +680,7 @@ describe('savePersistentState()', () => {
     assert.equal(parsed.briefingSeenAt.mtg1, '2025-06-15T10:00:00Z');
   });
 
-  it('does NOT include meetings in saved payload', async () => {
+  it('includes meetings in saved payload', async () => {
     ctx.state.radarItems = [{ id: 'r1', title: 'Active Radar Item' }];
     ctx.state.meetings = [{ id: 'm1', title: 'Upcoming Meeting' }];
     ctx.state.history = [{ at: new Date().toISOString(), type: 'scan', text: 'verify-save' }];
@@ -690,8 +690,9 @@ describe('savePersistentState()', () => {
     const parsed = mockStore[ctx.STORAGE_KEY];
     // radarItems is now written as legacy rollback key (since Phase 1 unification)
     assert.ok(Array.isArray(parsed.radarItems));
-    assert.equal(parsed.meetings, undefined,
-      'meetings should not appear in persisted payload');
+    assert.ok(Array.isArray(parsed.meetings),
+      'meetings should be included in persisted payload');
+    assert.equal(parsed.meetings.length, 1);
     // Confirm other fields are still written
     assert.equal(parsed.history.length, 1);
   });
