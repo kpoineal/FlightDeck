@@ -91,11 +91,11 @@
 <div class="scanner-form">
   <div class="scanner-form-row">
     <div class="scanner-form-field scanner-form-field-grow">
-      <label class="scanner-form-label">Name</label>
+      <label class="scanner-form-label" title="A short name to identify this scanner in the sidebar">Name</label>
       <input class="tracking-input" type="text" placeholder="e.g., Competitor Intel" bind:value={name} />
     </div>
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Schedule</label>
+      <label class="scanner-form-label" title="How often this scanner runs: on a fixed interval, specific days/times, or just once">Schedule</label>
       <select class="tracking-select" bind:value={scheduleType}>
         <option value="interval">Interval</option>
         <option value="weekly">Scheduled</option>
@@ -104,7 +104,7 @@
     </div>
     {#if scheduleType === 'interval'}
       <div class="scanner-form-field">
-        <label class="scanner-form-label">Interval</label>
+        <label class="scanner-form-label" title="How frequently the scanner repeats (e.g., every 30 minutes or every 4 hours)">Interval</label>
         <select class="tracking-select" bind:value={scheduleValue}>
           {#each SCHEDULE_INTERVAL_OPTIONS as opt}
             <option value={opt.value}>Every {opt.label}</option>
@@ -117,7 +117,7 @@
   {#if scheduleType === 'weekly'}
     <div class="scanner-form-row">
       <div class="scanner-form-field scanner-form-field-grow">
-        <label class="scanner-form-label">Days &amp; Times</label>
+        <label class="scanner-form-label" title="Which days of the week and times of day this scanner should run">Days &amp; Times</label>
         <div class="weekly-days-row">
           {#each WEEKLY_DAY_OPTIONS as d}
             <label class="weekly-day-label" class:active={weeklyDays.includes(d.value)}>
@@ -156,7 +156,7 @@
 
   <div class="scanner-form-row">
     <div class="scanner-form-field scanner-form-field-grow">
-      <label class="scanner-form-label">Prompt</label>
+      <label class="scanner-form-label" title="Instructions telling the AI what signals to look for. Be specific about what matters to you.">Prompt</label>
       <textarea class="tracking-textarea" placeholder="What should this scanner look for?" bind:value={prompt}></textarea>
     </div>
   </div>
@@ -164,7 +164,7 @@
   <div class="scanner-form-section-label">Options</div>
   <div class="scanner-form-row scanner-form-options">
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Signal Types</label>
+      <label class="scanner-form-label" title="Which Microsoft 365 signal types to scan: email, chat, meetings, or documents">Signal Types</label>
       <div class="scanner-signal-types">
         {#each SIGNAL_TYPE_OPTIONS as s}
           <label class="scanner-signal-label" class:active={signalTypes.includes(s.value)}>
@@ -177,7 +177,7 @@
       </div>
     </div>
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Notifications</label>
+      <label class="scanner-form-label" title="When to show desktop notifications for new scanner results">Notifications</label>
       <select class="tracking-select" bind:value={notificationMode}>
         {#each NOTIFICATION_MODE_OPTIONS as o}
           <option value={o.value}>{o.label}</option>
@@ -185,14 +185,14 @@
       </select>
     </div>
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Max items/scan</label>
+      <label class="scanner-form-label" title="Maximum number of items returned per scan run (1–25)">Max items/scan</label>
       <input class="tracking-input scanner-input-narrow" type="number" min="1" max="25" bind:value={maxItemsPerScan} />
     </div>
   </div>
 
   <div class="scanner-form-row scanner-form-options">
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Dedup strategy</label>
+      <label class="scanner-form-label" title="How to detect duplicate items: by matching evidence URLs, similar titles, or both">Dedup strategy</label>
       <select class="tracking-select" bind:value={dedupStrategy}>
         {#each DEDUP_STRATEGY_OPTIONS as o}
           <option value={o.value}>{o.label}</option>
@@ -200,30 +200,26 @@
       </select>
     </div>
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Missed runs</label>
+      <label class="scanner-form-label" title="What to do when the app was closed during a scheduled scan: skip it, run once on reopen, or catch up (max 3)">Missed runs</label>
       <select class="tracking-select" bind:value={missedRunPolicy}>
         {#each MISSED_RUN_POLICY_OPTIONS as o}
           <option value={o.value}>{o.label}</option>
         {/each}
       </select>
     </div>
-    <div class="scanner-form-field">
-      <label class="scanner-form-label">Group</label>
-      <input class="tracking-input" type="text" placeholder="e.g., Work" bind:value={scannerGroupId} />
-    </div>
   </div>
 
   <div class="scanner-form-row scanner-form-toggles">
-    <label class="scanner-toggle-label"><input type="checkbox" bind:checked={autoMonitorNewItems} /> Auto-monitor new items</label>
-    <label class="scanner-toggle-label"><input type="checkbox" bind:checked={workHoursOnly} /> Work hours only</label>
-    <label class="scanner-toggle-label"><input type="checkbox" bind:checked={crossScannerDedup} /> Cross-scanner dedup</label>
-    <label class="scanner-toggle-label"><input type="checkbox" bind:checked={runOnStartup} /> Run on startup</label>
+    <label class="scanner-toggle-label" title="Automatically start monitoring newly discovered items so you get ongoing updates"><input type="checkbox" bind:checked={autoMonitorNewItems} /> Auto-monitor new items</label>
+    <label class="scanner-toggle-label" title="Only run this scanner during business hours (Mon–Fri, 8am–6pm local time)"><input type="checkbox" bind:checked={workHoursOnly} /> Work hours only</label>
+    <label class="scanner-toggle-label" title="Prevent the same item from appearing in multiple scanners by checking across all scanner results"><input type="checkbox" bind:checked={crossScannerDedup} /> Cross-scanner dedup</label>
+    <label class="scanner-toggle-label" title="Run this scanner immediately when FlightDeck opens, in addition to its regular schedule"><input type="checkbox" bind:checked={runOnStartup} /> Run on startup</label>
   </div>
 
   <div class="scanner-form-section-label">Monitoring Defaults</div>
   <div class="scanner-form-row scanner-form-options">
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Auto-monitor threshold</label>
+      <label class="scanner-form-label" title="Minimum severity required for auto-monitoring: monitor everything, only Critical, or Elevated and above">Auto-monitor threshold</label>
       <select class="tracking-select" bind:value={autoMonitorSeverityThreshold}>
         {#each SEVERITY_THRESHOLD_OPTIONS as o}
           <option value={o.value}>{o.label}</option>
@@ -231,7 +227,7 @@
       </select>
     </div>
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Schedule type</label>
+      <label class="scanner-form-label" title="Default schedule type for monitoring newly discovered items">Schedule type</label>
       <select class="tracking-select" bind:value={defaultMonitorScheduleType}>
         <option value="interval">Interval</option>
         <option value="weekly">Scheduled</option>
@@ -240,7 +236,7 @@
     </div>
     {#if defaultMonitorScheduleType === 'interval'}
       <div class="scanner-form-field">
-        <label class="scanner-form-label">Interval</label>
+        <label class="scanner-form-label" title="Default monitoring interval for newly tracked items">Interval</label>
         <select class="tracking-select" bind:value={defaultMonitorSchedule}>
           {#each SCHEDULE_INTERVAL_OPTIONS as o}
             <option value={o.value}>Every {o.label}</option>
@@ -253,7 +249,7 @@
   {#if defaultMonitorScheduleType === 'weekly'}
     <div class="scanner-form-row">
       <div class="scanner-form-field scanner-form-field-grow">
-        <label class="scanner-form-label">Monitor days &amp; times</label>
+        <label class="scanner-form-label" title="Default days and times for monitoring newly tracked items">Monitor days &amp; times</label>
         <div class="weekly-days-row">
           {#each WEEKLY_DAY_OPTIONS as d}
             <label class="weekly-day-label" class:active={defaultMonitorWeeklyDays.includes(d.value)}>
@@ -292,7 +288,7 @@
 
   <div class="scanner-form-row scanner-form-options">
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Monitor signals</label>
+      <label class="scanner-form-label" title="Which signal types to check when monitoring items from this scanner">Monitor signals</label>
       <div class="scanner-signal-types">
         {#each SIGNAL_TYPE_OPTIONS as s}
           <label class="scanner-signal-label" class:active={defaultMonitorSignals.includes(s.value)}>
@@ -307,22 +303,22 @@
   </div>
 
   <div class="scanner-form-row scanner-form-toggles">
-    <label class="scanner-toggle-label"><input type="checkbox" bind:checked={defaultMonitorWorkHoursOnly} /> Work hours only</label>
-    <label class="scanner-toggle-label"><input type="checkbox" bind:checked={defaultMonitorNotifyEnabled} /> Notify on changes</label>
+    <label class="scanner-toggle-label" title="Only run monitoring checks during business hours for items from this scanner"><input type="checkbox" bind:checked={defaultMonitorWorkHoursOnly} /> Work hours only</label>
+    <label class="scanner-toggle-label" title="Show desktop notifications when monitored items have meaningful changes"><input type="checkbox" bind:checked={defaultMonitorNotifyEnabled} /> Notify on changes</label>
   </div>
 
   <div class="scanner-form-section-label">Lifecycle</div>
   <div class="scanner-form-row scanner-form-options">
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Auto-archive after (days)</label>
+      <label class="scanner-form-label" title="Automatically archive items after this many days with no new activity (0 = disabled)">Auto-archive after (days)</label>
       <input class="tracking-input scanner-input-narrow" type="number" min="0" max="365" bind:value={autoArchiveAfterDays} title="0 = disabled" />
     </div>
     <div class="scanner-form-field">
-      <label class="scanner-form-label">Retention (days)</label>
+      <label class="scanner-form-label" title="How long to keep completed/archived items before permanently removing them">Retention (days)</label>
       <input class="tracking-input scanner-input-narrow" type="number" min="1" max="365" bind:value={retentionDays} />
     </div>
     <div class="scanner-form-field scanner-form-field-grow">
-      <label class="scanner-form-label">Exclude keywords</label>
+      <label class="scanner-form-label" title="Comma-separated words — items containing any of these in the title or summary will be filtered out">Exclude keywords</label>
       <input class="tracking-input" type="text" placeholder="newsletter, digest, all-hands" bind:value={excludeKeywords} />
     </div>
   </div>

@@ -30,15 +30,14 @@
       const time = new Date(latest.timestamp).getTime();
       if (time < recentCutoff) continue;
 
-      // Skip initial "Discovered" entries that have no real update
-      const changes = Array.isArray(latest.changes) ? latest.changes : [];
-      if (changes.length === 1 && changes[0] === 'Discovered' && updates.length === 1) continue;
-
       // Build a meaningful text from the update
+      const changes = Array.isArray(latest.changes) ? latest.changes : [];
       const statusChange = changes.find(c => /^(Status|Severity):/.test(c));
 
       let text;
-      if (statusChange) {
+      if (changes.length === 1 && changes[0] === 'Discovered' && updates.length === 1) {
+        text = `${item.title}: Discovered`;
+      } else if (statusChange) {
         text = `${item.title}: ${statusChange}`;
       } else {
         const summaryText = latest.summary || '';
@@ -255,7 +254,7 @@
     flex-shrink: 0;
   }
   .ticker-new-badge {
-    background: var(--color-new, #0a84ff);
+    background: var(--color-new, #bf5af2);
     color: #fff;
     font-size: 0.55rem;
     font-weight: 700;

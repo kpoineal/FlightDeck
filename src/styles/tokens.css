@@ -75,7 +75,7 @@
   --color-elevated: #ff9f0a;
   --color-observe: #64d2ff;
   --color-success: #30d158;
-  --color-new: #0a84ff;
+  --color-new: #bf5af2;
   --color-updated: #30d158;
   --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.25);
 
@@ -202,7 +202,7 @@ html[data-theme="light"] {
     --color-elevated: #ff9500;
     --color-observe: #32ade6;
     --color-success: #34c759;
-    --color-new: #007aff;
+    --color-new: #a855f7;
     --color-updated: #34c759;
 
     --modal-overlay: rgba(0, 0, 0, 0.35);

@@ -339,15 +339,15 @@ describe('New vs Updated badge separation — buildTrackingCard', () => {
     assert.match(html, /Updated:/, 'bar should say Updated:');
   });
 
-  it('falls back to lastRunAt for Updated: bar when lastChangedAt is missing', () => {
+  it('falls back to discoveredAt for Updated: bar when lastChangedAt is missing', () => {
     const item = makeItem({
       isNew: false,
       hasNewUpdate: true,
       lastChangedAt: null,
-      lastRunAt: '2026-04-16T09:00:00Z',
+      discoveredAt: '2026-04-16T09:00:00Z',
     });
     const html = ctx.buildTrackingCard(item);
-    assert.match(html, /tracker-change-at/, 'should show the Updated bar using lastRunAt');
+    assert.match(html, /tracker-change-at/, 'should show the Updated bar using discoveredAt');
   });
 
   it('does NOT show Discovered: bar when only hasNewUpdate=true', () => {

@@ -39,7 +39,7 @@
     ? item.counterparties.join(', ')
     : 'No counterparties listed');
   let links = $derived(Array.isArray(item.evidenceLinks) ? item.evidenceLinks.filter((e) => e && e.url) : []);
-  let lastUpdate = $derived(item.lastChangedAt || item.lastRunAt || null);
+  let lastUpdate = $derived(item.lastChangedAt || item.discoveredAt || null);
   let lastUpdateTime = $derived(lastUpdate ? new Date(lastUpdate) : null);
   let lastUpdateStr = $derived(lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null);
   let rt = $derived(relativeTime(lastUpdate));

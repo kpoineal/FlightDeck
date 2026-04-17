@@ -579,7 +579,7 @@ function buildCardTabsHtml(item) {
       </div>
       <div class="card-tab-panel active" data-card-tab-panel="summary" data-card-tab-panel-item-id="${escapeHtml(item.id)}">
         ${(() => { if (isNewItem) { const disc = item.discoveredAt || item.trackedAt || null; const ts = disc ? new Date(disc) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(disc); if (timeStr) return `<div class="tracker-updated-at">Discovered: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>`; } return ''; })()}
-        ${(() => { if (hasUpdate) { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); if (timeStr) return `<div class="tracker-change-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>`; } return ''; })()}
+        ${(() => { if (hasUpdate) { const lastUpdate = item.lastChangedAt || item.discoveredAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); if (timeStr) return `<div class="tracker-change-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>`; } return ''; })()}
         ${buildActivityTimelineHtml(item.updateHistory, { maxVisible: 3, itemId: item.id, item })}
       </div>
       <div class="card-tab-panel" data-card-tab-panel="overview" data-card-tab-panel-item-id="${escapeHtml(item.id)}">
@@ -659,7 +659,7 @@ function buildTrackingCard(item) {
         </div>
         <div class="tracker-head-right">
           ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
-          ${isNewItem ? '<span class="tracker-new-badge">NEW</span>' : ''}${hasUpdate ? '<span class="tracker-updated-badge">' + (unseenCount > 1 ? unseenCount + ' ' : '') + 'UPDATED</span>' : ''}${!hasNew ? (() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? '<span class="pill last-updated-pill" title="Last update: ' + escapeHtml(safeDate(lastUpdate)) + '">' + escapeHtml(rt) + '</span>' : ''; })() : ''}
+          ${isNewItem ? '<span class="tracker-new-badge">NEW</span>' : ''}${hasUpdate ? '<span class="tracker-updated-badge">' + (unseenCount > 1 ? unseenCount + ' ' : '') + 'UPDATED</span>' : ''}${!hasNew ? (() => { const lastUpdate = item.lastChangedAt || item.discoveredAt || null; const rt = relativeTime(lastUpdate); return rt ? '<span class="pill last-updated-pill" title="Last update: ' + escapeHtml(safeDate(lastUpdate)) + '">' + escapeHtml(rt) + '</span>' : ''; })() : ''}
           <button class="popout-icon-btn" data-popout-id="${escapeHtml(item.id)}" title="Pop Out" aria-label="Pop out">\u2197</button>
         </div>
       </div>
@@ -721,7 +721,7 @@ function buildTrackingRow(item, expandedRowId) {
       ${item.lifecycleStatus === 'snoozed' ? `<span class="snooze-until-label" title="Snoozed until ${item.snoozeUntil ? escapeHtml(safeDate(item.snoozeUntil)) : 'next scan'}">💤 ${item.snoozeUntil ? escapeHtml(relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}</span>` : ''}
       ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
       ${isNewItem ? '<span class="pill badge-pill">NEW</span>' : ''}${hasUpdate ? `<span class="pill badge-pill badge-pill--updated">${unseenCount > 1 ? unseenCount + ' ' : ''}UPDATED</span>` : ''}
-      ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
+      ${(() => { const lastUpdate = item.lastChangedAt || item.discoveredAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
       <span class="tracker-row-title">
         <span class="editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
       </span>
@@ -733,7 +733,7 @@ function buildTrackingRow(item, expandedRowId) {
     </div>
     <div class="tracker-row-detail ${isExpanded ? 'show' : ''}">
       ${(() => { if (isNewItem) { const disc = item.discoveredAt || item.trackedAt || null; const ts = disc ? new Date(disc) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(disc); if (timeStr) return '<div class="tracker-updated-at">Discovered: ' + escapeHtml(timeStr) + ' (' + escapeHtml(rt) + ')</div>'; } return ''; })()}
-      ${(() => { if (hasUpdate) { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); if (timeStr) return '<div class="tracker-change-at">Updated: ' + escapeHtml(timeStr) + ' (' + escapeHtml(rt) + ')</div>'; } return ''; })()}
+      ${(() => { if (hasUpdate) { const lastUpdate = item.lastChangedAt || item.discoveredAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); if (timeStr) return '<div class="tracker-change-at">Updated: ' + escapeHtml(timeStr) + ' (' + escapeHtml(rt) + ')</div>'; } return ''; })()}
       ${buildActivityTimelineHtml(item.updateHistory, { maxVisible: 3, itemId: item.id, item })}
       ${buildNextStepHintsHtml(item)}
       <div class="tracker-meta">
@@ -847,7 +847,7 @@ void function _deadCode() {
           </select>
           ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
           ${hasNew ? `<span class="pill badge-pill">${unseenCount > 1 ? unseenCount + ' ' : ''}New</span>` : ''}
-          ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
+          ${(() => { const lastUpdate = item.lastChangedAt || item.discoveredAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill ${hasNew ? 'popped' : ''}" title="Updated: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
           <span class="tracker-row-title">
             <span class="editable-field" data-edit-field="title" data-item-id="${escapeHtml(item.id)}" title="Click to edit">${escapeHtml(item.title || 'Untitled item')}</span>
           </span>
@@ -858,7 +858,7 @@ void function _deadCode() {
           <span class="row-expand-chevron ${isExpanded ? 'open' : ''}">&#9660;</span>
         </div>
         <div class="tracker-row-detail ${isExpanded ? 'show' : ''}">
-          ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
+          ${(() => { const lastUpdate = item.lastChangedAt || item.discoveredAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
           <p class="tracker-summary">${renderMarkdownLinks(item.summary || 'No summary available.')}</p>
           ${buildNextStepHintsHtml(item)}
           <div class="tracker-meta">
@@ -948,11 +948,11 @@ void function _deadCode() {
         </div>
         <div class="tracker-head-right">
           ${item.monitorEnabled === false && item.lifecycleStatus !== 'complete' && item.lifecycleStatus !== 'archived' ? '<span class="pill paused-pill">Paused</span>' : ''}
-          ${(() => { if (hasNew) { const label = unseenCount > 1 ? `${unseenCount} NEW` : 'NEW'; const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return `<span class="tracker-new-badge">${label}${timeStr ? ` \u00b7 ${timeStr}` : ''}</span>`; } const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Last update: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
+          ${(() => { if (hasNew) { const label = unseenCount > 1 ? `${unseenCount} NEW` : 'NEW'; const lastUpdate = item.lastChangedAt || item.discoveredAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null; return `<span class="tracker-new-badge">${label}${timeStr ? ` \u00b7 ${timeStr}` : ''}</span>`; } const lastUpdate = item.lastChangedAt || item.discoveredAt || null; const rt = relativeTime(lastUpdate); return rt ? `<span class="pill last-updated-pill" title="Last update: ${escapeHtml(safeDate(lastUpdate))}">${escapeHtml(rt)}</span>` : ''; })()}
         </div>
       </div>
       <div class="card-body">
-        ${(() => { const lastUpdate = item.lastChangedAt || item.lastRunAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
+        ${(() => { const lastUpdate = item.lastChangedAt || item.discoveredAt || null; const ts = lastUpdate ? new Date(lastUpdate) : null; const timeStr = ts && Number.isFinite(ts.getTime()) ? ts.toLocaleString() : null; const rt = relativeTime(lastUpdate); return hasNew && timeStr ? `<div class="tracker-updated-at">Updated: ${escapeHtml(timeStr)} (${escapeHtml(rt)})</div>` : ''; })()}
         ${buildActivityTimelineHtml(item.updateHistory, { maxVisible: 3, itemId: item.id, item })}
         <div class="tracker-meta">
           <span>Source: ${escapeHtml(item.sourceType || 'Signal')}</span>

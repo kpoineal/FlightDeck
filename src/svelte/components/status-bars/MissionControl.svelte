@@ -36,10 +36,8 @@
       }
 
       let desc = null;
-      if (!statusTransition) {
-        if (latest.summary && latest.summary !== 'Updated' && latest.summary !== 'Discovered') {
-          desc = latest.summary.length > 60 ? latest.summary.slice(0, 57) + '...' : latest.summary;
-        }
+      if (latest.summary && latest.summary !== 'Updated' && latest.summary !== 'Discovered') {
+        desc = latest.summary.length > 60 ? latest.summary.slice(0, 57) + '...' : latest.summary;
       }
 
       candidates.push({ item, desc, statusTransition, time: t });
@@ -106,12 +104,13 @@
                 {change.item.title}
               </button>
               {#if change.statusTransition}
-                <span class="at-status-transition">
-                  <span class="pill at-status-pill at-status-{change.statusTransition.fromClass}">{change.statusTransition.from}</span>
-                  <span class="at-arrow">→</span>
-                  <span class="pill at-status-pill at-status-{change.statusTransition.toClass}">{change.statusTransition.to}</span>
+                <span class="mc-status-change">
+                  <span class="mc-status-from">{change.statusTransition.from}</span>
+                  <span class="mc-status-arrow">→</span>
+                  <span class="mc-status-to">{change.statusTransition.to}</span>
                 </span>
-              {:else if change.desc}
+              {/if}
+              {#if change.desc}
                 <span class="mc-desc">{change.desc}</span>
               {/if}
               <span class="mc-time">{relativeTime(change.time)}</span>
@@ -174,8 +173,8 @@
   }
   .mc-meetings {
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
+    flex-direction: column;
+    gap: 2px;
     flex-shrink: 0;
   }
   .mc-label {
@@ -221,6 +220,21 @@
     color: var(--text-muted);
     font-size: 0.68rem;
     flex-shrink: 0;
+  }
+  .mc-status-change {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.65rem;
+    flex-shrink: 0;
+    color: var(--text-muted);
+  }
+  .mc-status-from, .mc-status-to {
+    font-weight: 600;
+  }
+  .mc-status-arrow {
+    color: var(--text-dim);
+    font-size: 0.6rem;
   }
   .mc-quiet {
     color: var(--text-muted);

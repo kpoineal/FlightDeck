@@ -45,9 +45,9 @@
   border-color: color-mix(in srgb, var(--text-muted) 50%, transparent);
 }
 .at-status-snoozed {
-  background-color: color-mix(in srgb, var(--color-elevated) 12%, transparent);
-  color: var(--color-elevated);
-  border-color: color-mix(in srgb, var(--color-elevated) 30%, transparent);
+  background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-muted);
+  border-color: color-mix(in srgb, var(--text-muted) 30%, transparent);
 }
 
 /* ── Transition suppression (used during incremental DOM patching) ── */
@@ -230,7 +230,7 @@
 
 /* ── Snoozed status ── */
 .status-snoozed { color: var(--text-muted); font-style: italic; }
-.status-select.status-snoozed { border-color: color-mix(in srgb, var(--color-elevated) 30%, transparent); }
+.status-select.status-snoozed { border-color: color-mix(in srgb, var(--text-muted) 30%, transparent); }
 .tracker-card.snoozed-card { opacity: 0.65; }
 .tracker-row-wrapper.snoozed-card { opacity: 0.65; }
 .snooze-picker {
@@ -764,8 +764,8 @@
 /* ── Persistent "new" glow — stays until Mark as Seen is clicked ── */
 .tracker-card.is-new,
 .tracker-row-wrapper.is-new .tracker-row {
-  border-color: color-mix(in srgb, var(--color-new, #0a84ff) 60%, transparent) !important;
-  box-shadow: 0 0 12px color-mix(in srgb, var(--color-new, #0a84ff) 18%, transparent);
+  border-color: color-mix(in srgb, var(--color-new, #bf5af2) 60%, transparent) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-new, #bf5af2) 18%, transparent);
 }
 /* ── Persistent "updated" glow — amber, stays until Mark as Seen ── */
 .tracker-card.is-updated,
@@ -776,7 +776,7 @@
 /* When both new AND updated, blend both glows */
 .tracker-card.is-new.is-updated,
 .tracker-row-wrapper.is-new.is-updated .tracker-row {
-  box-shadow: 0 0 12px color-mix(in srgb, var(--color-new, #0a84ff) 14%, transparent),
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-new, #bf5af2) 14%, transparent),
               0 0 18px color-mix(in srgb, var(--color-updated, #30d158) 10%, transparent);
 }
 .tracker-head {
