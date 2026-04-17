@@ -4,6 +4,74 @@ All notable changes to FlightDeck will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-04-17
+
+### Added — Svelte Migration
+
+- **Full Svelte 5 renderer** — Complete port from vanilla JS to Svelte 5 with runes syntax (`$state`, `$derived`, `$props`), reactive stores, and component architecture.
+- **27 Svelte components** — Modular UI: `RadarView`, `BriefingsView`, `HistoryView`, `TrackerCard`, `TrackerRow`, `ScannerSection`, `SummaryStrip`, `Topbar`, `SearchOverlay`, `ScannerSettingsModal`, `AddTaskModal`, `ScheduleControls`, `EditableField`, `ActivityTimeline`, `ConfirmModal`, `ConnectBanner`, `Toast`, and more.
+- **Vite build pipeline** — `vite build` produces optimized `dist-renderer/` output with CSS code-splitting, Svelte runtime deduplication via `manualChunks`, and hot module replacement in dev mode.
+- **Reactive store layer** — Centralized state management via Svelte writable/derived stores: `items`, `scanners`, `meetings`, `briefingsByMeetingId`, `history`, `kpis`, `filteredItems`, and UI state stores.
+
+### Added — New Features
+
+- **Demo mode** — `npm run demo` launches with realistic sample data and zero WorkIQ API calls. Separate `flightdeck.demo.v2` storage key — real data never touched. All dates auto-shift to current time so demos always look fresh.
+- **Demo reseed** — `npm run demo:reseed` forces fresh fixture data on every launch, useful after fixture changes.
+- **Automated screenshots** — `npm run screenshots` uses Playwright Electron support to capture 24 PNGs (12 views × 2 themes) for documentation. Captures Radar, Briefings, History, tracker card tabs (Activity/Overview/Monitor), scanner settings modal, add task modal, KPI strip, topbar.
+- **Demo fixture dataset** — 9 tracked items across 3 scanners (Customer Escalations, Project Risks, Contract & Compliance), 4 upcoming meetings with briefing content, day briefing with priorities and time blocks, 12 history entries.
+- **New vs Updated badge system** — Separated "New" (purple) and "Updated" (green) into distinct visual concepts across cards, rows, scanner filters, ticker, and Mission Control. Both badges show simultaneously when applicable.
+- **Mission Control KPI strip** — 5 switchable KPI modes (Pulse, Mission Control, Heatmap, Momentum, Ticker). LATEST section with 3 most recent changes. NEXT MEETINGS section with cached meeting countdown.
+- **Ticker tape** — Scrolling bar showing new discoveries, updates, and upcoming meetings with NEW/UPDATED badges. Click navigates to item with section expand + highlight animation.
+- **Meeting caching** — Meetings persisted to store with `meetingsLastFetched` timestamp. Cached meetings load instantly if < 1 hour old and same calendar day.
+- **Inline editable fields** — Click-to-edit for title, due date, owner, and done criteria directly on tracker cards.
+- **Scanner config tooltips** — All 22 scanner form fields have descriptive hover tooltips.
+- **In-progress filter** — Filter button added to scanner section headers.
+- **Desktop notification navigation** — Notification click navigates to card with pulse + ring animation, without auto-marking as seen.
+
+### Added — Color System
+
+- **Semantic color tokens** — `--color-new` (purple `#bf5af2`) and `--color-updated` (green) in `tokens.css`, independent of `--color-success`/`--color-elevated`.
+- **3 color conflicts resolved** — NEW vs In Progress (both were blue), Waiting vs Snoozed (both orange), Updated vs Complete (both green).
+
+### Changed
+
+- **Renderer architecture** — Migrated from vanilla JS DOM manipulation to Svelte 5 component architecture with reactive stores. All UI rendering is now declarative.
+- **State persistence** — Moved from localStorage to `electron-store` via IPC bridge. Two stores: `flightdeck-data` (active) and `flightdeck-cold` (archived items >24hrs).
+- **Build process** — All `dist` scripts chain `build:renderer` first. `dist-renderer/` included in electron-builder packaging. CI validates Svelte build.
+- **Scanner defaults** — Removed unused "Group" field and webhook URL from config UI.
+- **Default scan interval** — Updated scanner defaults.
+- **Timestamp consistency** — Card pills, LATEST, and ticker all use same source (`lastChangedAt || discoveredAt`, not `lastRunAt`).
+
+### Fixed
+
+- **Version display** — Shows FlightDeck version (from `package.json`) instead of Electron version in topbar.
+- **Svelte runtime deduplication** — `manualChunks` config prevents `effect_orphan` errors from multiple Svelte instances.
+- **Immutable store updates** — Svelte detects item changes correctly.
+- **Case-insensitive status/severity comparison** — Prevents false transitions in update history.
+- **Monitor engine** — Only records actual status/severity changes, not false positives.
+- **Scanner inline filter** — Auto-clears when zero results remain. Event propagation stopped on filter buttons.
+- **Highlight animation** — Prevented double-glow on notification click.
+- **Demo fixture statuses** — Uses valid lifecycle values (Waiting, Blocked, Complete) instead of made-up statuses.
+
+### Removed
+
+- **Legacy vanilla JS renderer** — Deleted `src/renderer/` (14 files, 5,801 lines) and 13 associated test files + test helper (6,487 lines). Total: 12,288 lines of dead code removed.
+- **localStorage for app state** — All app state now persists via electron-store. Only `fd-theme` (theme preference) remains in localStorage.
+
+### Documentation
+
+- **README.md** — Rewritten from scratch for Svelte 5 + Vite + electron-store stack. Correct project structure, screenshots, demo mode docs.
+- **CONTRIBUTING.md** — Rewritten with Svelte 5 runes, Vite build process, correct file paths, branch → PR → merge workflow.
+- **architecture.md** — Rewritten with Svelte component hierarchy, reactive stores, persistence bridge, scanner/monitor engines, 6 Mermaid diagrams.
+- **user-guide.md** — Added Demo Mode section with `npm run demo`, `demo:reseed`, and `screenshots` commands.
+
+### Tests
+
+- 33 new tests for New vs Updated badge separation.
+- Updated persistence tests for meeting caching.
+- Updated popout test for Svelte renderer path.
+- Fixed test script to reference only existing test files after legacy cleanup.
+
 ## [1.1.0] - 2026-04-13
 
 ### Added
