@@ -72,7 +72,14 @@ function fetchLatestRelease() {
 
 function registerIpcHandlers(getMainWindow, popoutWindows) {
 
-  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => app.getVersion());
+  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8'));
+      return pkg.version || app.getVersion();
+    } catch (_) {
+      return app.getVersion();
+    }
+  });
 
   ipcMain.handle(IPC_CHANNELS.ASK_WORKIQ, async (_event, question) => {
     return runWorkiqCommand(question);
