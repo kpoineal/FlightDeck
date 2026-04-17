@@ -9,7 +9,7 @@
       "counterparties": ["Priya Sharma", "James Okonkwo", "Lucia Ferreira"],
       "summary": "Acme Corp's MSA expires April 25. Priya Sharma sent a counter-proposal with a 12% rate increase. Legal review pending — James Okonkwo flagged indemnity clause changes. Failure to renew by deadline triggers 90-day wind-down.",
       "reason": "Contract deadline in 8 days with unresolved legal and pricing objections. No fallback vendor identified.",
-      "status": "Awaiting Decision",
+      "status": "Waiting",
       "evidenceLinks": [
         { "label": "Priya Sharma — counter-proposal email", "type": "email", "url": "https://demo.flightdeck.app/email/acme-counter-proposal" },
         { "label": "MSA Redline (v4)", "type": "doc", "url": "https://demo.flightdeck.app/doc/acme-msa-redline-v4" },
@@ -32,7 +32,7 @@
           "timestamp": "2026-04-17T08:30:00Z",
           "changes": ["Links: +1 new", "Summary updated"],
           "summary": "Priya Sharma responded with revised pricing terms. Indemnity clause still under legal review by James Okonkwo. Lucia Ferreira requested executive sign-off by April 21.",
-          "status": "Awaiting Decision",
+          "status": "Waiting",
           "severity": "Critical",
           "seen": false,
           "changesDescription": "New counter-proposal received from Acme procurement. Legal review still outstanding.",
@@ -41,9 +41,9 @@
         },
         {
           "timestamp": "2026-04-14T16:00:00Z",
-          "changes": ["Status: In Progress → Awaiting Decision"],
+          "changes": ["Status: In Progress → Waiting"],
           "summary": "Procurement meeting concluded. Acme wants 12% rate increase; our budget ceiling is 8%. James Okonkwo raised indemnity clause concerns.",
-          "status": "Awaiting Decision",
+          "status": "Waiting",
           "severity": "Critical",
           "seen": true
         },
@@ -70,7 +70,7 @@
       "counterparties": ["Jordan Chen", "Amara Diallo"],
       "summary": "Phase 2 delivery target is April 22. Two backend service dependencies remain unresolved — auth service migration and data pipeline refactor. Jordan Chen reports the pipeline work needs 5 more days.",
       "reason": "Milestone deadline in 5 days with two blocking dependencies and no approved timeline extension.",
-      "status": "At Risk",
+      "status": "Blocked",
       "evidenceLinks": [
         { "label": "Jordan Chen — blocker update in Teams", "type": "chat", "url": "https://demo.flightdeck.app/chat/aurora-blocker-update" },
         { "label": "Phase 2 milestone tracker", "type": "doc", "url": "https://demo.flightdeck.app/doc/aurora-phase2-tracker" },
@@ -90,9 +90,9 @@
       "updateHistory": [
         {
           "timestamp": "2026-04-16T15:00:00Z",
-          "changes": ["Status: In Progress → At Risk"],
+          "changes": ["Status: In Progress → Blocked"],
           "summary": "Jordan Chen confirmed pipeline refactor needs 5 additional days. Phase 2 milestone now at risk without timeline extension.",
-          "status": "At Risk",
+          "status": "Blocked",
           "severity": "Critical",
           "seen": true,
           "suggestedNextSteps": ["Request timeline extension from VP Engineering", "Identify parallel workstreams to recover schedule"]
@@ -120,7 +120,7 @@
       "counterparties": ["Sofia Martinez", "Raj Patel", "Tomoko Nakamura"],
       "summary": "Meridian Labs filed a Tier 1 escalation: data export API returning stale results in their production environment. Sofia Martinez reports the issue affects 3 client-facing dashboards. SLA clock started April 15.",
       "reason": "Tier 1 SLA breach risk — 48-hour response window closes April 17 EOD. Customer threatening churn.",
-      "status": "At Risk",
+      "status": "Blocked",
       "evidenceLinks": [
         { "label": "Sofia Martinez — escalation email", "type": "email", "url": "https://demo.flightdeck.app/email/meridian-escalation" },
         { "label": "Raj Patel — engineering thread", "type": "chat", "url": "https://demo.flightdeck.app/chat/meridian-eng-thread" },
@@ -142,7 +142,7 @@
           "timestamp": "2026-04-16T14:00:00Z",
           "changes": ["Summary updated"],
           "summary": "Raj Patel identified root cause — cache invalidation bug in export service. Hotfix in progress, ETA tomorrow morning.",
-          "status": "At Risk",
+          "status": "Blocked",
           "severity": "Elevated",
           "seen": true,
           "suggestedNextSteps": ["Send interim update to Sofia Martinez", "Confirm hotfix deployment timeline with Raj Patel"]
@@ -219,7 +219,7 @@
       "counterparties": ["Kenji Watanabe", "Elena Vasquez", "Oluwaseun Adeyemi"],
       "summary": "Platform team transferring ETL pipeline ownership to Data Engineering. Kenji Watanabe leading transition — runbook drafts due April 18. Elena Vasquez raised concerns about on-call rotation gaps during handoff.",
       "reason": "Handoff deadline April 22. On-call coverage gap could cause data freshness SLA breaches for 3 downstream teams.",
-      "status": "Awaiting Decision",
+      "status": "Waiting",
       "evidenceLinks": [
         { "label": "Handoff planning meeting — Apr 14", "type": "meeting", "url": "https://demo.flightdeck.app/meeting/etl-handoff-apr14" },
         { "label": "ETL runbook draft (v2)", "type": "doc", "url": "https://demo.flightdeck.app/doc/etl-runbook-v2" },
@@ -242,7 +242,7 @@
           "timestamp": "2026-04-16T10:00:00Z",
           "changes": ["Summary updated"],
           "summary": "Kenji Watanabe shared runbook draft v2. Elena Vasquez still flagging on-call rotation gap for April 22-24.",
-          "status": "Awaiting Decision",
+          "status": "Waiting",
           "severity": "Elevated",
           "seen": true,
           "suggestedNextSteps": ["Review runbook draft and provide feedback by EOD", "Propose interim on-call rotation to cover gap"]
@@ -415,7 +415,7 @@
       "counterparties": ["Yuki Tanaka", "Adebayo Olawale"],
       "summary": "Vendor evaluation complete. Pinnacle Systems selected for data warehouse migration. Contract signed April 14. Kickoff meeting scheduled for next week.",
       "reason": "Vendor selection finalized and contract executed. No further action required.",
-      "status": "Resolved",
+      "status": "Complete",
       "evidenceLinks": [
         { "label": "Vendor evaluation scorecard", "type": "doc", "url": "https://demo.flightdeck.app/doc/pinnacle-vendor-scorecard" },
         { "label": "Yuki Tanaka — signed contract confirmation", "type": "email", "url": "https://demo.flightdeck.app/email/pinnacle-contract-signed" }
@@ -436,9 +436,9 @@
       "updateHistory": [
         {
           "timestamp": "2026-04-14T16:00:00Z",
-          "changes": ["Status: In Progress → Resolved"],
+          "changes": ["Status: In Progress → Complete"],
           "summary": "Pinnacle Systems contract signed. Vendor selection complete. Kickoff meeting being scheduled.",
-          "status": "Resolved",
+          "status": "Complete",
           "severity": "Observe",
           "seen": true
         },
