@@ -125,6 +125,47 @@ async function run() {
       await topbar.screenshot({ path: path.join(OUT_DIR, `09-topbar-${theme}.png`), type: 'png' });
       console.log(`  📸 09-topbar-${theme}.png`);
     }
+
+    // ── 10. Scanner Settings Modal ──────────────────────────────
+    // Click the gear icon on the first scanner section
+    await page.locator('button.mode-btn:has-text("Radar")').click();
+    await sleep(500);
+    const settingsBtn = page.locator('div.radar-section-header').first().locator('button.icon-btn').nth(3);
+    if (await settingsBtn.count() > 0) {
+      await settingsBtn.click();
+      await sleep(500);
+      const modal = page.locator('div.modal.show');
+      if (await modal.count() > 0) {
+        await modal.locator('div.modal-card').screenshot({ path: path.join(OUT_DIR, `10-scanner-settings-modal-${theme}.png`), type: 'png' });
+        console.log(`  📸 10-scanner-settings-modal-${theme}.png`);
+        // Close by clicking backdrop (top-left corner of modal overlay)
+        await modal.click({ position: { x: 5, y: 5 } });
+        await sleep(500);
+      }
+    }
+
+    // ── 11. Add Task Modal ──────────────────────────────────────
+    const addBtn = page.locator('div.radar-section-header').first().locator('button.icon-btn').first();
+    if (await addBtn.count() > 0) {
+      await addBtn.click();
+      await sleep(500);
+      const addModal = page.locator('div.modal.show');
+      if (await addModal.count() > 0) {
+        await addModal.locator('div.modal-card').screenshot({ path: path.join(OUT_DIR, `11-add-task-modal-${theme}.png`), type: 'png' });
+        console.log(`  📸 11-add-task-modal-${theme}.png`);
+        await addModal.click({ position: { x: 5, y: 5 } });
+        await sleep(500);
+      }
+    }
+
+    // ── 12. Monitor/Schedule controls on a tracker card ─────────
+    // Click the gear icon on the first tracker card to show schedule tab
+    const cardGear = page.locator('article.tracker-card').first().locator('button.icon-btn-gear, .icon-btn-settings, [title="Settings"], [aria-label="Settings"]').first();
+    if (await cardGear.count() > 0) {
+      await cardGear.click();
+      await sleep(500);
+      await capture(page, '12-monitor-controls', theme);
+    }
   }
 
   console.log(`\n✅ Screenshots saved to docs/screenshots/\n`);
