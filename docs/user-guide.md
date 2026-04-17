@@ -23,6 +23,7 @@ FlightDeck is a personal work-intelligence dashboard that connects to Microsoft 
 - [Version Notifications](#version-notifications)
 - [Theme](#theme)
 - [System Tray](#system-tray)
+- [Demo Mode](#demo-mode)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 
 ---
@@ -374,6 +375,33 @@ FlightDeck runs in the **system tray** when minimized:
 - Monitoring schedules continue — you'll receive **desktop notifications** when tracked items have meaningful changes
 - Click the tray icon to restore the window
 - Right-click the tray icon for options
+
+---
+
+## Demo Mode
+
+FlightDeck includes a demo mode for presentations, screenshots, and exploring the app without a Microsoft 365 connection.
+
+### Running in Demo Mode
+
+```bash
+npm run demo          # Launch with sample data (cached between runs)
+npm run demo:reseed   # Launch with fresh sample data (always resets)
+```
+
+Demo mode:
+- Loads realistic sample data (9 items across 3 scanners, meetings, briefings, history)
+- **Never calls WorkIQ** — all AI features are disabled, no M365 connection needed
+- Uses a separate data store (`flightdeck.demo.v2`) — your real data is never touched
+- Dates adjust automatically so the demo always looks current
+
+### Automated Screenshots
+
+```bash
+npm run screenshots   # Capture all views in dark + light themes
+```
+
+Screenshots are saved to `docs/screenshots/` — useful for documentation, presentations, and README images.
 
 ---
 

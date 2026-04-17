@@ -1,62 +1,132 @@
 # Contributing to FlightDeck
 
-Thanks for your interest in contributing! This document covers the conventions and workflow for the project.
+Thanks for your interest in contributing! This guide covers setup, conventions, and workflow.
 
 ---
 
-## Development Setup
+## Getting Started
 
 ```bash
 git clone <repo-url>
 cd FlightDeck
 npm install
-npm start          # Launch the Electron app
+npm run dev          # Start the Vite dev server (renderer hot-reload)
+npm start            # Build renderer + launch Electron
 ```
 
 ### Prerequisites
 
 - **Node.js** v18+
-- **WorkIQ CLI** installed globally (`npm i -g @microsoft/workiq`)
-- A valid **Microsoft Copilot license** with tenant admin consent
+- **npm** v9+
 
 ---
 
-## Project Conventions
+## Development Workflow
 
-### Code Style
+FlightDeck is an Electron app with a **Svelte 5** renderer built by **Vite**.
 
-- **No bundler** — the renderer loads plain `<script>` tags in order. Globals are shared between renderer modules.
-- **No framework** — vanilla HTML, CSS, and JavaScript throughout the renderer.
-- Use `const` by default; use `let` only when reassignment is necessary.
-- Prefer named functions over anonymous arrow functions for top-level declarations.
-- Keep files focused: models in `src/renderer/models/`, DOM rendering in `src/renderer/renderers/`, wiring in `src/renderer/events.js`.
+- **`npm run dev`** — starts the Vite dev server for rapid UI iteration.
+- **`npm start`** — builds the renderer then launches Electron.
+- **`npm run demo`** — runs the app with demo fixture data.
+- **`npm run demo:reseed`** — regenerates demo fixture data and launches.
+- **`npm run screenshots`** — captures screenshots via Playwright.
 
-### File Organization
+### Renderer (Svelte 5)
+
+UI code lives in `src/svelte/`. Components use **Svelte 5 runes** for reactivity:
+
+- `$state` — reactive state
+- `$derived` — computed values
+- `$props` — component props
+
+Entry points: `src/svelte/main.js` (app window) and `src/svelte/popout.js` (popout window).
+
+### Main Process (Electron)
+
+Main-process code lives in `src/main/`. Entry point: `src/main/index.js`.
+IPC handlers, PTY bridge, store, and window-state management are separate modules.
+
+---
+
+## Build Process
+
+Vite builds the renderer into `dist-renderer/`.
+
+```bash
+npm run build:renderer    # Vite build → dist-renderer/
+npm run dist              # Build renderer + package MSI (Windows)
+npm run dist:mac          # Build renderer + package DMG/zip (macOS)
+npm run dist:linux        # Build renderer + package AppImage/deb (Linux)
+```
+
+Vite config: `vite.config.js` — root is `src/`, output is `dist-renderer/`, Svelte runtime is chunked into a shared bundle.
+
+---
+
+## File Organization
 
 | Directory | Purpose |
 |---|---|
-| `src/` | All application source code |
-| `src/main/` | Electron main-process code (app lifecycle, IPC, PTY, utilities) |
-| `src/renderer/` | Renderer-process code (UI logic, models, renderers) |
-| `src/renderer/models/` | Pure data helpers — normalization, diffing, schedule math |
-| `src/renderer/renderers/` | DOM-building functions (return HTML strings or manipulate the DOM) |
-| `src/prompts/` | Markdown prompt templates sent to WorkIQ |
+| `src/main/` | Electron main process (lifecycle, IPC, PTY, utilities) |
+| `src/main/ipc/` | IPC sub-handlers (e.g., tracker popout) |
+| `src/svelte/` | Svelte 5 renderer entry points |
+| `src/svelte/components/` | UI components (`.svelte` files) |
+| `src/svelte/lib/` | Shared logic — stores, persistence, models, engines, utilities |
+| `src/svelte/lib/models/` | Pure data helpers |
+| `src/shared/` | Code shared between main and renderer (IPC contract) |
+| `src/prompts/` | Markdown prompt templates for WorkIQ |
 | `src/styles/` | CSS organized by component; design tokens in `tokens.css` |
-| `test/` | Tests using the Node.js built-in test runner |
-| `test/helpers/` | Shared mocks (Electron, renderer context) |
+| `src/demo/` | Demo fixture data |
+| `test/` | Tests (Node.js built-in test runner) |
+| `test/helpers/` | Shared mocks (`electron-mock.js`) |
+| `dist-renderer/` | Vite build output (git-ignored) |
 
-### Naming
+---
 
-- Files: `kebab-case.js`
-- Test files: `<layer>-<module>.test.js` (e.g., `renderer-models-tracking.test.js`)
-- CSS files: match the component they style (e.g., `radar.css` for the Radar view)
+## Code Style
 
-### Security
+- Use `const` by default; `let` only when reassignment is needed.
+- Files: `kebab-case.js` / `PascalCase.svelte`.
+- CSS files match the component they style (e.g., `radar.css` for RadarView).
+- Prefer Svelte 5 runes (`$state`, `$derived`, `$props`) over legacy reactive syntax.
+- Keep components focused — split large views into child components.
+- Shared logic belongs in `src/svelte/lib/`, not inline in components.
 
-- Never bypass the Content Security Policy (`default-src 'self'`).
-- All external URLs must go through `workiq.openExternal()` — never navigate the Electron window to an external URL.
-- Escape any LLM-generated content before rendering it in the DOM.
-- Keep `contextIsolation: true` and `nodeIntegration: false`.
+---
+
+## Testing
+
+Tests use the **Node.js built-in test runner** (`node:test`) — no external framework.
+
+```bash
+npm test
+```
+
+### Current Test Files
+
+| Test File | Module Under Test |
+|---|---|
+| `main-utils.test.js` | `src/main/utils.js` |
+| `main-window-state.test.js` | `src/main/window-state.js` |
+| `main-pty-bridge.test.js` | `src/main/pty-bridge.js` |
+| `main-ipc-handlers.test.js` | `src/main/ipc-handlers.js` |
+| `main-ipc-tracker-popout.test.js` | `src/main/ipc/tracker-popout.js` |
+
+### Writing Tests
+
+- Place test files in `test/` with naming pattern `<layer>-<module>.test.js`.
+- Use `test/helpers/electron-mock.js` to stub Electron APIs.
+- Keep tests focused on pure logic (utilities, models, IPC handlers).
+
+---
+
+## Security Guidelines
+
+- **CSP**: Never bypass the Content Security Policy (`default-src 'self'`).
+- **Context isolation**: Keep `contextIsolation: true` and `nodeIntegration: false`.
+- **IPC bridge**: All renderer ↔ main communication goes through `src/preload.js`. Never expose Node.js APIs directly.
+- **External URLs**: Route through `workiq.openExternal()` — never navigate the Electron window to an external URL.
+- **LLM content**: Sanitize any AI-generated content before rendering.
 
 ---
 
@@ -66,100 +136,42 @@ npm start          # Launch the Electron app
    ```bash
    git checkout -b feature/your-feature-name
    ```
-
 2. **Make your changes** — keep commits focused and descriptive.
-
-3. **Add or update tests** for any new logic in `renderer/models/` or `main/`.
-
-4. **Run the test suite** before pushing:
+3. **Add or update tests** for new logic in `src/main/` or `src/svelte/lib/`.
+4. **Run the test suite**:
    ```bash
    npm test
    ```
-
-5. **Open a pull request** against `main` with a clear description of what changed and why.
-
----
-
-## Testing
-
-Tests use the **Node.js built-in test runner** (`node:test` module) — no external test framework is needed.
-
-```bash
-npm test
-```
-
-### Writing Tests
-
-- Place test files in `test/` with the naming pattern `<layer>-<module>.test.js`.
-- Use the helpers in `test/helpers/` to mock Electron APIs and renderer context:
-  - `electron-mock.js` — stubs for `ipcRenderer`, `BrowserWindow`, etc.
-  - `renderer-context.js` — sets up a minimal `window.workiq` and `localStorage` environment.
-- Keep tests focused on pure logic (models, utilities, parsers). DOM interaction tests are not currently in scope.
-
-### Test Coverage Map
-
-| Test File | Module Under Test |
-|---|---|
-| `main-utils.test.js` | `main/utils.js` |
-| `main-window-state.test.js` | `main/window-state.js` |
-| `main-pty-bridge.test.js` | `main/pty-bridge.js` |
-| `renderer-utils.test.js` | `renderer/utils.js` |
-| `renderer-json-parser.test.js` | `renderer/json-parser.js` |
-| `renderer-models-tracking.test.js` | `renderer/models/tracking.js` |
-| `renderer-models-radar.test.js` | `renderer/models/radar.js` |
-| `renderer-models-briefing.test.js` | `renderer/models/briefing.js` |
-| `renderer-state.test.js` | `renderer/state.js` |
-
----
-
-## Branching & Release Strategy
-
-FlightDeck uses **tag-based releases**. PRs merge to `main` freely — no MSI is built until you explicitly tag a version.
-
-### Workflow
-
-```
-feature/xyz ──PR──► main ──(accumulate changes)──► git tag v1.x.x ──► MSI built & GitHub Release created
-```
-
-1. **PRs merge to `main`** — CI runs tests on every PR and push. No installer is built.
-2. **When ready to release**, bump the version and tag:
-   ```bash
-   npm version patch           # or minor / major — bumps package.json and creates git tag
-   git push && git push --tags
-   ```
-3. **The `release.yml` workflow triggers on `v*` tags** — it builds the MSI, creates a GitHub Release, and attaches the installer.
-4. **Manual trigger**: you can also run the Release workflow from the Actions tab with a specific tag via `workflow_dispatch`.
-
-### Version Discipline
-
-- The version in `package.json` **must match** the git tag. The release workflow verifies this and fails on mismatch.
-- Use [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
-- Update `CHANGELOG.md` before tagging a release.
+5. **Open a pull request** against `main`. Never push directly to `main`.
 
 ---
 
 ## Pull Request Guidelines
 
-- Keep PRs small and focused — one feature or fix per PR.
-- Include a summary of what changed and link to any related issues.
+- One feature or fix per PR — keep them small and focused.
+- Include a summary of what changed and link to related issues.
 - Ensure `npm test` passes locally before requesting review.
-- If you modify prompts in `prompts/`, test the actual LLM output manually since prompt changes can't be unit-tested.
-- Update the README or this file if your change affects setup, architecture, or conventions.
+- If you modify prompts in `src/prompts/`, test LLM output manually.
+- Update README or this file if your change affects setup or conventions.
 
 ---
 
-## Reporting Issues
+## Branching & Releases
 
-Open an issue in the repository with:
+FlightDeck uses **tag-based releases**. PRs merge to `main` freely — no installer is built until you tag.
 
-- A clear description of the bug or feature request
-- Steps to reproduce (for bugs)
-- Expected vs. actual behavior
-- Your Node.js version and OS
+```
+feature/xyz ──PR──► main ──(accumulate)──► git tag v1.x.x ──► installer built
+```
+
+1. Bump version and tag: `npm version patch` (or `minor` / `major`).
+2. Push: `git push && git push --tags`.
+3. The release workflow builds the installer and creates a GitHub Release.
+
+Use [Semantic Versioning](https://semver.org/). Update `CHANGELOG.md` before tagging.
 
 ---
 
 ## Questions?
 
-Reach out to the team in the project's discussion channel.
+Open an issue or reach out in the project's discussion channel.
