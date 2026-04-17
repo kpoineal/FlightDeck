@@ -42,10 +42,12 @@ let _loaded = false;
  * Adjusts all dates in the fixture to be relative to now so the demo
  * never looks stale regardless of when it's run.
  */
-export async function seedDemoFixture() {
+export async function seedDemoFixture(force = false) {
   try {
-    const existing = await window.workiq.storeGet(DEMO_STORAGE_KEY);
-    if (existing && existing.items && existing.items.length) return; // already seeded
+    if (!force) {
+      const existing = await window.workiq.storeGet(DEMO_STORAGE_KEY);
+      if (existing && existing.items && existing.items.length) return; // already seeded
+    }
 
     const fixture = JSON.parse(JSON.stringify(fixtureData)); // deep clone
 

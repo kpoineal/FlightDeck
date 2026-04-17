@@ -111,10 +111,12 @@
     initTheme();
 
     // Detect demo mode from query param (set by main process --demo flag)
-    const demoMode = new URLSearchParams(window.location.search).has('demo');
+    const params = new URLSearchParams(window.location.search);
+    const demoMode = params.has('demo');
+    const demoReseed = params.has('reseed');
     if (demoMode) {
       isDemo.set(true);
-      await seedDemoFixture();
+      await seedDemoFixture(demoReseed);
     }
 
     await loadPersistentState(demoMode);
