@@ -1,8 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
-  import { mode, connected, history as historyStore } from './lib/stores.js';
-  import { loadPersistentState, savePersistentState } from './lib/persistence.js';
+  import { mode, connected, history as historyStore, isDemo } from './lib/stores.js';
+  import { loadPersistentState, savePersistentState, seedDemoFixture } from './lib/persistence.js';
   import { items, scanners, meetings, meetingsLastFetched, briefingsByMeetingId, briefingSeenAt,
     density, filter, collapsedSections, highlightedItemId } from './lib/stores.js';
   import { addHistory } from './lib/actions.js';
@@ -48,7 +48,7 @@
 
   function debouncedSave() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => savePersistentState(), 500);
+    saveTimer = setTimeout(() => savePersistentState(get(isDemo)), 500);
   }
 
   async function fetchMeetings(force = false) {
@@ -109,9 +109,19 @@
 
   onMount(async () => {
     initTheme();
-    await loadPersistentState();
+
+    // Detect demo mode from query param (set by main process --demo flag)
+    const params = new URLSearchParams(window.location.search);
+    const demoMode = params.has('demo');
+    const demoReseed = params.has('reseed');
+    if (demoMode) {
+      isDemo.set(true);
+      await seedDemoFixture(demoReseed);
+    }
+
+    await loadPersistentState(demoMode);
     await loadPersistedLog();
-    logInfo('app', 'FlightDeck Svelte app initialized');
+    logInfo('app', demoMode ? 'FlightDeck demo mode initialized' : 'FlightDeck Svelte app initialized');
 
     // Read version from workiq bridge
     if (window.workiq && typeof window.workiq.getAppVersion === 'function') {
@@ -136,8 +146,8 @@
       } catch (_) {}
     }
 
-    // Start background engines and fetch meetings if connected
-    if (window.workiq && typeof window.workiq.ask === 'function') {
+    // Start background engines and fetch meetings if connected (skip in demo mode)
+    if (!demoMode && window.workiq && typeof window.workiq.ask === 'function') {
       const isConnected = $connected;
       if (isConnected) {
         startScannerEngine();

@@ -30,9 +30,94 @@ import {
 import { hashString } from './utils.js';
 import { normalizeItem } from './models/item.js';
 import { normalizeScannerDefinition, computeScannerNextRunAt } from './models/scanner.js';
+import fixtureData from '../../demo/fixture.json';
 
 // Guard: true only after loadPersistentState completes
 let _loaded = false;
+
+// ── Demo fixture seeding ────────────────────────────────────────────
+
+/**
+ * Seed demo fixture data into the demo storage key if it's empty.
+ * Adjusts all dates in the fixture to be relative to now so the demo
+ * never looks stale regardless of when it's run.
+ */
+export async function seedDemoFixture(force = false) {
+  try {
+    if (!force) {
+      const existing = await window.workiq.storeGet(DEMO_STORAGE_KEY);
+      if (existing && existing.items && existing.items.length) return; // already seeded
+    }
+
+    const fixture = JSON.parse(JSON.stringify(fixtureData)); // deep clone
+
+    // Adjust dates relative to now
+    const ANCHOR = new Date('2026-04-17T12:00:00Z').getTime();
+    const offset = Date.now() - ANCHOR;
+    const shiftDate = (iso) => {
+      if (!iso) return iso;
+      const t = new Date(iso).getTime();
+      if (!Number.isFinite(t)) return iso;
+      return new Date(t + offset).toISOString();
+    };
+
+    for (const item of fixture.items || []) {
+      item.discoveredAt = shiftDate(item.discoveredAt);
+      item.trackedAt = shiftDate(item.trackedAt);
+      item.lastRunAt = shiftDate(item.lastRunAt);
+      item.lastChangedAt = shiftDate(item.lastChangedAt);
+      item.completedAt = shiftDate(item.completedAt);
+      item.nextRunAt = shiftDate(item.nextRunAt);
+      item.dueAt = shiftDate(item.dueAt);
+      item.oneTimeAt = shiftDate(item.oneTimeAt);
+      item.snoozeUntil = shiftDate(item.snoozeUntil);
+      if (Array.isArray(item.updateHistory)) {
+        for (const entry of item.updateHistory) {
+          entry.timestamp = shiftDate(entry.timestamp);
+        }
+      }
+      if (Array.isArray(item.evidenceLinks)) {
+        for (const link of item.evidenceLinks) {
+          link.signalAt = shiftDate(link.signalAt);
+        }
+      }
+    }
+
+    for (const scanner of fixture.scanners || []) {
+      scanner.lastRunAt = shiftDate(scanner.lastRunAt);
+      scanner.nextRunAt = shiftDate(scanner.nextRunAt);
+    }
+
+    for (const mtg of fixture.meetings || []) {
+      mtg.startAt = shiftDate(mtg.startAt);
+      mtg.endAt = shiftDate(mtg.endAt);
+      mtg.startTime = mtg.startAt ? new Date(mtg.startAt).getTime() : undefined;
+    }
+
+    for (const briefing of Object.values(fixture.briefingsByMeetingId || {})) {
+      briefing.generatedAt = shiftDate(briefing.generatedAt);
+      if (briefing.upcomingMeeting) {
+        briefing.upcomingMeeting.startAt = shiftDate(briefing.upcomingMeeting.startAt);
+      }
+      if (Array.isArray(briefing.meetingsRequiringPrep)) {
+        for (const mp of briefing.meetingsRequiringPrep) {
+          mp.startAt = shiftDate(mp.startAt);
+        }
+      }
+    }
+
+    for (const entry of fixture.history || []) {
+      entry.at = shiftDate(entry.at);
+    }
+
+    fixture.meetingsLastFetched = Date.now();
+
+    await window.workiq.storeSet(DEMO_STORAGE_KEY, fixture);
+    console.log('[flightdeck] Demo fixture data seeded');
+  } catch (err) {
+    console.warn('[flightdeck] Failed to seed demo fixture', err.message);
+  }
+}
 
 // ── Housekeeping helpers ────────────────────────────────────────────
 

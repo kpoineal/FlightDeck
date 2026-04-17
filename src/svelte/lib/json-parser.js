@@ -260,6 +260,14 @@ const _parseFailureCounts = {};
  * @returns {Promise<object>} Parsed and validated JSON payload
  */
 export async function runWorkiqJson(prompt, validator, label, { maxRetries = 1, retryDelayMs = 2000, onRetry } = {}) {
+  // Demo mode: skip all WorkIQ calls
+  const { get } = await import('svelte/store');
+  const { isDemo } = await import('./stores.js');
+  if (get(isDemo)) {
+    console.log(`[flightdeck-demo] ${label}: WorkIQ call skipped (demo mode)`);
+    return null;
+  }
+
   let lastError;
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {

@@ -10,6 +10,9 @@ export const briefingsByMeetingId = writable({});
 export const briefingSeenAt = writable({});
 export const history = writable([]);
 
+// ── Demo mode ────────────────────────────────────────────────────────
+export const isDemo = writable(false);
+
 // ── UI state stores ──────────────────────────────────────────────────
 export const connected = writable(false);
 export const loading = writable(false);

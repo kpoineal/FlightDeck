@@ -13,6 +13,7 @@ const { registerIpcHandlers } = require('./ipc-handlers');
 
 const APP_ROOT = path.join(__dirname, '..');
 const IS_DEMO = process.argv.includes('--demo');
+const IS_DEMO_RESEED = process.argv.includes('--demo-reseed');
 const DIST_RENDERER = path.join(APP_ROOT, '..', 'dist-renderer');
 
 if (process.platform === 'win32') {
@@ -60,7 +61,8 @@ function createWindow() {
 
   attachExternalNavigationGuards(win);
 
-  const loadOpts = IS_DEMO ? { query: { demo: '1' } } : {};
+  const demoQuery = IS_DEMO || IS_DEMO_RESEED ? { demo: '1', ...(IS_DEMO_RESEED ? { reseed: '1' } : {}) } : {};
+  const loadOpts = Object.keys(demoQuery).length ? { query: demoQuery } : {};
   win.loadFile(path.join(DIST_RENDERER, 'app.html'), loadOpts);
 
   win.on('resize', () => debouncedSaveWindowState(win, app));
