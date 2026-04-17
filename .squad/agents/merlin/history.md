@@ -9,6 +9,27 @@
 ## Learnings
 <!-- Append learnings below -->
 
+### 2026-04-17 — New vs Updated Badge Separation Test Coverage
+
+**Context:** Goose separated the combined `hasNew` flag into distinct `isNewItem` and `hasUpdate` rendering paths. Previously a single `const hasNew = !isTerminalStatus && (item.hasNewUpdate === true || item.isNew === true)` controlled everything. Now:
+- `isNewItem` = `!isTerminalStatus && item.isNew === true` → green "NEW" badge + "Discovered:" bar
+- `hasUpdate` = `!isTerminalStatus && item.hasNewUpdate === true` → amber "UPDATED" badge + "Updated:" bar
+
+**File modified:** `test/renderer-tracking-renderers.test.js`
+
+**Tests added (33 new, 2 new suites):**
+- **buildTrackingCard suite (23 tests):** new-only badge + CSS class + Discovered bar (with discoveredAt and trackedAt fallback), updated-only badge + CSS class + Updated bar (with lastChangedAt and lastRunAt fallback), both-flags showing both badges + both bars + both CSS classes, neither-flags showing nothing, terminal status suppressing NEW badge alone / UPDATED badge alone / both, Mark as Seen button visibility for isNew / hasNewUpdate / neither, unseen count display in UPDATED badge (>1 shows count, =1 omits count).
+- **buildTrackingRow suite (10 tests):** NEW pill / UPDATED pill / both / neither in row view, is-new / is-updated wrapper classes, terminal status suppression, Discovered/Updated bars in expanded row detail.
+
+**Key patterns:**
+- The `buildTrackingCard` HTML uses `tracker-new-badge` class for NEW and `tracker-updated-badge` for UPDATED. The card article gets both `is-new` and `is-updated` CSS classes independently.
+- The `buildTrackingRow` HTML uses `badge-pill` for NEW and `badge-pill badge-pill--updated` for UPDATED.
+- Discovered bar uses class `tracker-updated-at`, Updated bar uses `tracker-change-at`.
+- Discovered bar timestamp source: `item.discoveredAt || item.trackedAt`.
+- Updated bar timestamp source: `item.lastChangedAt || item.lastRunAt`.
+
+**Test count:** 626 total (622 pass, 4 skipped), 124 suites. Net new: 33 tests, 2 suites.
+
 ### 2026-04-03 — DEC-063: Radar/Scanner Unification Test Updates
 
 **Context:** Removed the concept of a "default/undeletable" radar scanner. Radar becomes just another scanner. Source changes were made by Goose/Viper; this task updated all affected tests.

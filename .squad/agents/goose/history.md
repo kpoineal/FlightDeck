@@ -472,3 +472,31 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Root cause found**: `loadPersistentState()` in `state.js` had `if (!parsed) return;` that returned early when store was empty, skipping seed scanner creation and `_loaded` flag.
 - **Fix applied by coordinator**: Replaced early return with `parsed = {}` fallback. Test added for empty store scenario. 589 tests pass.
 - **Pattern**: Early returns in state initialization functions can silently skip downstream setup logic. Always ensure fallback-to-empty-object instead of bail-out when a store read returns null/undefined.
+
+### 2026-04-15 — Svelte Migration Feasibility Analysis
+- **Research task**: Comprehensive analysis of migrating FlightDeck from vanilla JS to Svelte.
+- **Frontend scope**: ~8,800 lines renderer JS, ~3,600 lines CSS, ~200 lines HTML across 22 JS modules, 9 CSS files, and 1 HTML shell.
+- **Key architectural challenges identified**:
+  1. Global mutable `state` object + `elements` DOM cache pattern is deeply intertwined — every module reads/writes state directly and calls render functions imperatively. Svelte stores would require inverting this: state changes drive rendering reactively instead of explicit `renderXxxMode()` calls.
+  2. Script-tag loading with shared global scope means all ~60+ functions are globally available. Moving to Svelte components requires explicit imports and prop/store passing at every boundary.
+  3. Massive HTML string concatenation in renderers (tracking.js: 934 lines, radar.js: 922 lines, scanner.js: 251 lines) generates HTML via template literals with `innerHTML`. Each would become declarative Svelte markup — the biggest refactoring effort.
+  4. Events.js (1,113 lines) is a single event-delegation root using `closest()` traversals. Svelte's `on:click` per-component would distribute this across ~30+ components.
+  5. IPC bridge via `window.workiq` (preload.js) would need a thin Svelte-friendly wrapper (store or context) but the bridge itself is clean and unchanged.
+  6. CSS tokens/theming already uses CSS custom properties — maps well to Svelte's scoped styles. Light/dark defined 2× (explicit + media query) could stay as-is.
+  7. Monitor engine and scanner engine run background `setInterval` loops with direct state mutation — would need to dispatch to stores rather than mutate directly.
+- **Migration estimate**: M-L effort (~4-6 weeks for one developer), with the heaviest lift in renderers/tracking.js, renderers/radar.js, events.js, and state.js conversion.
+- **Key files analyzed**: All files in `src/renderer/`, `src/renderer/models/`, `src/renderer/renderers/`, `src/styles/`, `src/index.html`, `src/shared/ipc-contract.js`, `src/preload.js`.
+
+### 2026-04-17 — Separate "New" vs "Updated" Badges/Bars
+- **Goal**: Split the combined `hasNew` boolean (which merged `isNew` + `hasNewUpdate`) into two distinct visual treatments: green NEW badge for first-time discoveries, amber UPDATED badge for meaningful changes to existing items.
+- **Changes made**:
+  1. **`renderers/tracking.js`**: In `buildCardTabsHtml()`, `buildTrackingCard()`, and `buildTrackingRow()` — replaced single `hasNew` with `isNewItem` (isNew flag) + `hasUpdate` (hasNewUpdate flag) + `hasNew` (either). Card classes now apply `is-new` only for isNewItem and `is-updated` for hasUpdate. Badge rendering shows separate green "NEW" and amber "UPDATED" spans. Timestamp bars split: "Discovered: {discoveredAt}" (green) for new items, "Updated: {lastChangedAt}" (amber `.tracker-change-at`) for updates. Both shown when both flags are true.
+  2. **`styles/tracking.css`**: Added `.tracker-updated-badge` (amber pill, same shape as `.tracker-new-badge`), `.tracker-change-at` (amber bar, same layout as `.tracker-updated-at`), `.is-updated` glow (amber border/shadow), and dual glow for `.is-new.is-updated`.
+  3. **`styles/components.css`**: Added `.badge-pill--updated` for amber row-view badge.
+  4. **Svelte components**: `TrackerCard.svelte` and `TrackerRow.svelte` — same split applied: `isNewItem` + `hasUpdate` derived states, separate badges, separate bars. Added `discoveredAt` derivation for accurate "Discovered:" timestamps.
+  5. **Test update**: `renderer-tracking-renderers.test.js` — updated assertion to check `tracker-updated-badge` instead of `tracker-new-badge` when only `hasNewUpdate` is true.
+- **No changes to**: data model (item.js), scanner-engine, monitor-engine, events.js `handleMarkSeenClick`. Verified these are already correct.
+- **Dead code** (inside `void function _deadCode()`) was left unchanged — it never executes.
+- **Design tokens**: Used `--color-elevated` (#ff9f0a) for amber since `--color-warning` doesn't exist in tokens.css.
+- **All 589 tests pass**.
+- **Key files**: `src/renderer/renderers/tracking.js`, `src/styles/tracking.css`, `src/styles/components.css`, `src/svelte/components/TrackerCard.svelte`, `src/svelte/components/TrackerRow.svelte`, `test/renderer-tracking-renderers.test.js`.

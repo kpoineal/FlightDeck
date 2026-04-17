@@ -88,7 +88,7 @@ describe('registerTrackerPopoutIpc()', () => {
     const [createdWindow] = [...popoutWindows];
     assert.ok(createdWindow instanceof BrowserWindowMock);
     assert.ok(createdWindow.loadFileArgs);
-    assert.ok(createdWindow.loadFileArgs.filePath.endsWith(path.join('src', 'index.html')));
+    assert.ok(createdWindow.loadFileArgs.filePath.endsWith('popout.html') || createdWindow.loadFileArgs.filePath.endsWith(path.join('src', 'index.html')));
     assert.deepEqual(createdWindow.loadFileArgs.options, { query: { popout: 'task-42' } });
 
     createdWindow.emitClosed();

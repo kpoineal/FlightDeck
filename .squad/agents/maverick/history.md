@@ -324,3 +324,68 @@
 **User preference:** Kyle does NOT want radar as a separate construct. It should be deletable and behave identically to custom scanners. A seed scanner on first launch is fine.
 
 **Decision written to:** `.squad/decisions/inbox/maverick-radar-unification.md`
+
+### 2026-04-15 — Svelte Migration Feasibility Assessment
+
+**Context:** Kyle asked for a thorough LOE assessment for migrating FlightDeck from vanilla JS to Svelte. The codebase has already been decomposed from a 5,355-line monolith into ~25 focused modules across renderer/, models/, renderers/, styles/.
+
+**Current codebase metrics (renderer layer only):**
+- 25 JS files totaling ~8,600 lines in `src/renderer/`
+- 9 CSS files totaling ~3,600 lines in `src/styles/`
+- 18 test files totaling ~5,350 lines using `node:test` + `vm.runInContext`
+- 20 IPC channels via `window.workiq` preload bridge
+- No bundler — 22 `<script>` tags with explicit load order
+- Shared mutable `state` object — all modules reference the same global
+- Renderers generate HTML via template literals + innerHTML injection
+- Events via manual delegation (events.js: 1,113 lines)
+
+**Key architectural observations for migration:**
+1. Module decomposition already maps well to Svelte components — renderers/tracking.js (934L) → TrackingCard.svelte, renderers/radar.js (922L) → RadarView.svelte, etc.
+2. The innerHTML rendering pattern is the #1 thing Svelte replaces — every renderer file becomes a declarative Svelte template.
+3. events.js (1,113 lines of manual event delegation) would be entirely eliminated — Svelte handles all event binding declaratively.
+4. state.js + shared mutable `state` → Svelte stores (writable/derived). This is the hardest migration piece — every consumer of `state` must switch to store subscriptions.
+5. Main process (`src/main/`) and preload.js are completely unaffected.
+6. IPC bridge (`window.workiq`) works unchanged from Svelte components.
+7. Testing overhaul required — `vm.runInContext` pattern is incompatible with Svelte compiled components. Must switch to Vitest + @testing-library/svelte.
+
+**LOE by area:**
+- Build tooling (Vite + Svelte + Electron): **S** — well-documented, electron-vite or manual Vite config
+- Component conversion (renderers → .svelte files): **L** — 2,800+ lines of HTML-string renderers to convert
+- State management (mutable object → Svelte stores): **M-L** — touches every module, needs careful reactive wiring
+- Styling (CSS → scoped styles): **S-M** — mostly mechanical, 3,600 lines to distribute into components
+- IPC integration: **S** — `window.workiq` works as-is, optional thin wrapper
+- Event migration: **M** — events.js (1,113L) eliminated but logic redistributed into components
+- Models/logic (non-rendering): **S** — item.js, scanner.js, briefing.js stay mostly as-is (pure logic)
+- Testing migration: **L** — 5,350 lines rewritten for Vitest + Svelte testing patterns
+- Overall: **XL** (full rewrite of renderer layer)
+
+**Risks identified:**
+- Electron + Svelte + Vite integration has rough edges (CSP, dev server vs file://, HMR in Electron)
+- State migration is the highest-risk area — shared mutable state → reactive stores requires rethinking data flow
+- innerHTML renderers use `escapeHtml()` for XSS protection; Svelte's `{@html}` requires same discipline
+- `node-pty` and `@microsoft/workiq` native modules complicate Vite's build pipeline (must be externalized)
+- Demo mode interceptor pattern (monkey-patching `runWorkiqJson`) needs adaptation
+
+**Recommendation:** The codebase is already well-modularized enough that the framework "escape velocity" benefit is reduced. Svelte would buy: reactive state, declarative templates, scoped styles, smaller bundles. But the cost is a full renderer rewrite (XL). Alternative: stay vanilla JS, add a bundler (Vite with vanilla mode), convert to ES modules. This gets 60% of the DX benefit at 20% of the cost.
+
+### 2026-04-15 — DEC-084 Revised: Svelte Migration — Go Now
+
+**Context:** Kyle pushed back on the "ES modules first" recommendation (DEC-084), arguing that the DOM update pattern is already the primary source of bugs TODAY, not a future risk. Re-examined the evidence and reversed my position.
+
+**Evidence that changed my mind:**
+- **29 of 188 commits (15.4%) are UI/render/state bug fixes.** This is not hypothetical — it's the dominant pain category in the entire project.
+- The `mutate → save → render` pattern requires three manual steps per state change. `events.js` calls `savePersistentState()` 17 times and `renderRadarMode()` 17 times — each pair manually wired.
+- `captureRadarUiState()` / `restoreRadarUiState()` (60+ lines) and `patchSingleItem()` (80+ lines) are band-aids for innerHTML destroying DOM state. These wouldn't exist with a reactive framework.
+- ES modules fix script loading but NOT the render problem. It's effort on the wrong problem.
+- Test suite must be rewritten for either path (vm.runInContext breaks with ES modules too) — no cost savings from the intermediate step.
+
+**Lesson learned:**
+- When a project owner says "this is already hurting us," believe them over your own risk-minimization instinct. Phased approaches that don't address the actual pain point are delay, not de-risking.
+- The fact that the codebase is already well-modularized (25 files, clean separation) means the Svelte migration is LESS risky than it looks — the hard decomposition work is done.
+- An intermediate step that gets thrown away when the real fix arrives wastes team effort and morale. Skip it when the final destination is clear.
+
+**Revised recommendation:** Proceed with incremental Svelte migration. Phase 0: History tab as proof of concept. If Electron+Svelte+CSP integrates cleanly, continue through Phases 1-5. Migration order: History → KPI/static views → Briefings → Radar cards → Modals/Popout → Cleanup.
+
+**Decision written to:** `.squad/decisions/inbox/maverick-svelte-revised.md`
+
+**Decision written to:** `.squad/decisions/inbox/maverick-svelte-assessment.md`
