@@ -58,7 +58,7 @@ On subsequent launches, if you were previously connected, FlightDeck automatical
 
 When you launch FlightDeck, you'll see the main dashboard with three tabs: **Radar**, **Briefings**, and **History**. The active tab is highlighted in the top navigation bar.
 
-![FlightDeck Radar View — the main dashboard showing inbound signals prioritized by severity](electron_DJB2hb9lEB.png)
+![FlightDeck Radar View — the main dashboard showing inbound signals prioritized by severity](screenshots/01-radar-view-dark.png)
 
 The dashboard is organized into three horizontal zones:
 
@@ -69,6 +69,8 @@ The dashboard is organized into three horizontal zones:
 ---
 
 ## Navigation
+
+![Topbar with search, tab navigation, connection status, and theme toggle](screenshots/09-topbar-dark.png)
 
 The top-right corner of the dashboard contains three main tabs:
 
@@ -83,6 +85,8 @@ Click any tab to switch views. The active tab is highlighted with a colored back
 ---
 
 ## KPI Summary Bar
+
+![KPI summary bar showing severity counts, distribution bar, and upcoming meetings](screenshots/02-summary-strip-dark.png)
 
 The KPI summary bar appears at the top of the main content area with at-a-glance metrics.
 
@@ -104,9 +108,15 @@ Next to the counters:
 
 The Radar is FlightDeck's primary view. It shows **all your items** — both inbound signals discovered by scanners and items you're actively monitoring — organized into collapsible sections grouped by scanner.
 
-![Radar view showing prioritized inbound signals organized as cards](electron_DJB2hb9lEB.png)
+![Radar view showing prioritized inbound signals organized as cards](screenshots/01-radar-view-dark.png)
 
 ### Item Cards
+
+Each item displays three tabs — **Activity** (update timeline), **Overview** (metadata, people, links), and **Monitor** (schedule and signal controls):
+
+| Activity | Overview | Monitor |
+|----------|----------|---------|
+| ![Activity tab](screenshots/03a-tracker-card-activity-dark.png) | ![Overview tab](screenshots/03b-tracker-card-overview-dark.png) | ![Monitor tab](screenshots/03c-tracker-card-monitor-dark.png) |
 
 Each item appears as a card with:
 
@@ -143,6 +153,8 @@ Click the **density toggle** button next to the filter bar to switch between the
 
 ### Scanners
 
+![Scanner section header with severity counts, action buttons, and countdown](screenshots/08-scanner-section-header-dark.png)
+
 Scanners are the heart of FlightDeck's Radar. Each scanner is a named, scheduled AI scan that searches your M365 signals for specific topics. Items discovered by a scanner appear grouped under that scanner's section header.
 
 Each scanner section header shows:
@@ -158,7 +170,11 @@ Click any severity dot, attention badge, or "new" indicator to filter that scann
 
 ### Adding a Scanner
 
-Click the **+ Scanner** button at the top of the Radar view to create a new scanner. The scanner settings modal opens with:
+Click the **+ Scanner** button at the top of the Radar view to create a new scanner.
+
+![Add Task modal for creating a new tracked item in a scanner](screenshots/11-add-task-modal-dark.png)
+
+The scanner settings modal opens with:
 
 | Field | Description |
 |-------|-------------|
@@ -184,7 +200,11 @@ Additional options include:
 
 ### Scanner Settings
 
-To edit an existing scanner's settings, click the **⚙️ gear icon** in that scanner's section header. This opens the scanner settings modal where you can modify any of the options described above.
+To edit an existing scanner's settings, click the **⚙️ gear icon** in that scanner's section header.
+
+![Scanner settings modal showing prompt, signal types, schedule, and lifecycle options](screenshots/10-scanner-settings-modal-dark.png)
+
+This opens the scanner settings modal where you can modify any of the options described above.
 
 You can also:
 
@@ -195,6 +215,8 @@ You can also:
 ### Tracked Items & Monitoring
 
 Any item can be promoted to active monitoring. When you click **Track Item**, FlightDeck enables periodic re-scanning for that specific item and notifies you when something meaningful changes.
+
+![Tracker card with NEW badge showing unseen updates and status transitions](screenshots/04-tracker-card-updated-dark.png)
 
 Monitored items show a **"Monitored" badge** and have richer detail:
 
@@ -259,7 +281,7 @@ Lifecycle transitions can happen automatically based on AI analysis (e.g., an it
 
 The Briefings view generates **AI-powered meeting preparation** for your upcoming meetings and a daily overview to start your day. When you switch to the Briefings tab for the first time in a session, FlightDeck automatically fetches your meetings if they haven't been loaded yet.
 
-![Briefings view showing the My Day briefing with priorities, meetings, and suggested time blocks](electron_rRFhbowDeH.png)
+![Briefings view showing the My Day briefing with priorities, meetings, and suggested time blocks](screenshots/05-briefings-view-dark.png)
 
 ### My Day Briefing
 
@@ -284,7 +306,7 @@ Below My Day, each upcoming meeting appears as a collapsible row with:
 
 Click a meeting row to expand it and see the full briefing.
 
-![Expanded meeting briefing showing key updates, decisions needed, risks, talk track, and sources](electron_QRe1U8xGyC.png)
+![Expanded meeting briefing showing key updates, decisions needed, risks, talk track, and sources](screenshots/05-briefings-view-dark.png)
 
 ### Meeting Briefing Content
 
@@ -310,7 +332,7 @@ Click **▸ Edit Briefing Prompt** to customize the AI instructions used to gene
 
 The History view is a chronological **audit trail** of everything FlightDeck has done — every scan, every recommendation, and every system event.
 
-![History view showing the audit trail with timestamped events](electron_qOVhqd45jM.png)
+![History view showing the audit trail with timestamped events](screenshots/07-history-view-dark.png)
 
 ### Event Types
 
