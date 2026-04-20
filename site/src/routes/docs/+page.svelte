@@ -316,21 +316,79 @@
 
 			<!-- Tracked Items -->
 			<h2 id="tracked-items">Tracked Items & Monitoring</h2>
+			<p>
+				Click <strong>Track Item</strong> on any radar result to promote it to active monitoring.
+				FlightDeck re-scans the item on a schedule you control and notifies you when something
+				meaningful changes. Each tracked item card has three tabs — <strong>Activity</strong>,
+				<strong>Overview</strong>, and <strong>Monitor</strong> — giving you full control over
+				what's being watched, why it matters, and how often it's checked.
+			</p>
+
 			<img
 				src="{base}/screenshots/04-tracker-card-updated-{theme}.png"
 				alt="Tracked item with update badge"
 			/>
+
+			<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1.5rem 0;">
+				<figure style="margin: 0; text-align: center;">
+					<img src="{base}/screenshots/03a-tracker-card-activity-{theme}.png" alt="Activity tab" />
+					<figcaption style="font-size: 0.85em; color: var(--color-themed-muted);">Activity</figcaption>
+				</figure>
+				<figure style="margin: 0; text-align: center;">
+					<img src="{base}/screenshots/03b-tracker-card-overview-{theme}.png" alt="Overview tab" />
+					<figcaption style="font-size: 0.85em; color: var(--color-themed-muted);">Overview</figcaption>
+				</figure>
+				<figure style="margin: 0; text-align: center;">
+					<img src="{base}/screenshots/03c-tracker-card-monitor-{theme}.png" alt="Monitor tab" />
+					<figcaption style="font-size: 0.85em; color: var(--color-themed-muted);">Monitor</figcaption>
+				</figure>
+			</div>
+
+			<h3>Activity Tab</h3>
 			<p>
-				Click <strong>Track Item</strong> to promote any item to active monitoring. FlightDeck
-				re-scans periodically and notifies you when something meaningful changes.
+				A chronological timeline of every change detected by the monitoring AI. Each entry shows a
+				timestamp, severity badge, and a description of what changed.
 			</p>
-			<p>Monitored items show a "Monitored" badge and offer:</p>
 			<ul>
-				<li><strong>NEW UPDATE badge</strong> — When a meaningful change is detected</li>
-				<li><strong>Activity timeline</strong> — Progression of changes over time</li>
-				<li><strong>Schedule configuration</strong> — Interval, Scheduled, or One-time checks</li>
-				<li><strong>Signal selection</strong> — Toggle Email, Chat, Meetings, Documents</li>
-				<li><strong>Custom monitoring prompt</strong> — Fine-tune what to look for</li>
+				<li><strong>Unseen updates</strong> are highlighted — click <strong>Mark as Seen</strong> to clear them</li>
+				<li>The card shows up to 3 recent entries; expand to see the full history</li>
+				<li>A <strong>NEW UPDATE</strong> badge appears on the card when unseen changes exist</li>
+			</ul>
+
+			<h3>Overview Tab</h3>
+			<p>
+				The Overview tab is the item's profile — editable metadata and AI-generated context that
+				keeps the full picture in one place.
+			</p>
+			<ul>
+				<li><strong>Suggested next steps</strong> — AI-recommended actions with <strong>Draft ↗</strong> buttons that generate ready-to-send messages</li>
+				<li><strong>Source type</strong> — Where the item originated (Email, Chat, Meeting, etc.)</li>
+				<li><strong>Due date</strong> — Editable inline; auto-extracted from signals or set manually</li>
+				<li><strong>Owner</strong> — Editable inline assignment</li>
+				<li><strong>Done when</strong> — A text field defining completion criteria. This value is automatically included in the monitoring prompt so the AI watches for it and can mark the item complete</li>
+				<li><strong>People</strong> — Collapsible list of contacts involved</li>
+				<li><strong>Evidence links</strong> — Deep links back to the original M365 source</li>
+			</ul>
+
+			<h3>Monitor Tab</h3>
+			<p>
+				Full control over how FlightDeck watches this item. Configure what gets scanned, when,
+				and what the AI should look for.
+			</p>
+			<ul>
+				<li><strong>Source scanner</strong> — Which scanner handles this item</li>
+				<li><strong>Enabled / Notifications / Work hours</strong> — Toggle monitoring on/off, control alerts, restrict to business hours</li>
+				<li><strong>Schedule type</strong> — Choose from:
+					<ul>
+						<li><strong>Interval</strong> — 15m, 30m, 1h, 2h, or 4h</li>
+						<li><strong>Weekly</strong> — Pick specific days and times</li>
+						<li><strong>One-time</strong> — Single future check</li>
+					</ul>
+				</li>
+				<li><strong>Signal filters</strong> — Toggle which M365 channels to scan: Email, Chat, Meetings, Documents</li>
+				<li><strong>Custom monitoring prompt</strong> — Editable AI instructions for exactly what to watch for</li>
+				<li><strong>Run check now</strong> — Trigger an immediate scan</li>
+				<li><strong>Delete</strong> — Remove the item from tracking entirely</li>
 			</ul>
 
 			<h3>Lifecycle Statuses</h3>
