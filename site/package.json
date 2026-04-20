@@ -1,0 +1,21 @@
+{
+  "name": "flightdeck-site",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "copy:screenshots": "node -e \"const fs=require('fs');const p=require('path');const src=p.join(__dirname,'..','docs','screenshots');const dst=p.join(__dirname,'static','screenshots');fs.mkdirSync(dst,{recursive:true});fs.readdirSync(src).filter(f=>f.endsWith('.png')).forEach(f=>fs.copyFileSync(p.join(src,f),p.join(dst,f)));console.log('Screenshots copied.');\""
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.0",
+    "@sveltejs/kit": "^2.0.0",
+    "@tailwindcss/typography": "^0.5.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "svelte": "^5.0.0",
+    "tailwindcss": "^4.0.0",
+    "vite": "^8.0.0"
+  }
+}

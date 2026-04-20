@@ -1,0 +1,91 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+	--font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+	/* Dark palette (primary) */
+	--color-bg-body: #09090b;
+	--color-bg-surface: rgba(24, 24, 27, 0.82);
+	--color-bg-inset: rgba(39, 39, 42, 0.78);
+	--color-bg-raised: rgba(52, 52, 56, 0.78);
+
+	--color-border: rgba(255, 255, 255, 0.1);
+	--color-border-card: rgba(255, 255, 255, 0.15);
+
+	--color-text-primary: #ffffff;
+	--color-text-muted: rgba(235, 235, 245, 0.6);
+	--color-text-dim: rgba(235, 235, 245, 0.3);
+
+	--color-accent: #0a84ff;
+	--color-accent-glow: rgba(10, 132, 255, 0.3);
+
+	--color-critical: #ff453a;
+	--color-elevated: #ff9f0a;
+	--color-observe: #64d2ff;
+	--color-success: #30d158;
+
+	/* Spacing */
+	--spacing-section: 6rem;
+	--spacing-section-lg: 8rem;
+
+	/* Easing */
+	--ease-apple: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Base styles */
+html {
+	scroll-behavior: smooth;
+}
+
+body {
+	font-family: var(--font-sans);
+	background-color: var(--color-bg-body);
+	color: var(--color-text-primary);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Light mode overrides */
+html.light body {
+	background-color: #f5f5f7;
+	color: #1d1d1f;
+}
+
+html.light {
+	--color-bg-body: #f5f5f7;
+	--color-bg-surface: rgba(255, 255, 255, 0.88);
+	--color-bg-inset: rgba(240, 240, 245, 0.85);
+	--color-bg-raised: rgba(230, 230, 235, 0.85);
+	--color-border: rgba(0, 0, 0, 0.08);
+	--color-border-card: rgba(0, 0, 0, 0.12);
+	--color-text-primary: #1d1d1f;
+	--color-text-muted: rgba(60, 60, 67, 0.6);
+	--color-text-dim: rgba(60, 60, 67, 0.3);
+}
+
+/* Screenshot glow effect */
+.screenshot-glow {
+	filter: drop-shadow(0 0 40px rgba(10, 132, 255, 0.15));
+	transition: filter 0.4s var(--ease-apple), transform 0.4s var(--ease-apple);
+}
+
+.screenshot-glow:hover {
+	filter: drop-shadow(0 0 60px rgba(10, 132, 255, 0.25));
+	transform: scale(1.02);
+}
+
+/* Prose overrides for docs */
+.prose-flightdeck {
+	--tw-prose-body: var(--color-text-primary);
+	--tw-prose-headings: var(--color-text-primary);
+	--tw-prose-links: var(--color-accent);
+	--tw-prose-bold: var(--color-text-primary);
+	--tw-prose-code: var(--color-accent);
+	--tw-prose-pre-bg: var(--color-bg-inset);
+	--tw-prose-pre-code: var(--color-text-primary);
+	--tw-prose-th-borders: var(--color-border);
+	--tw-prose-td-borders: var(--color-border);
+}
