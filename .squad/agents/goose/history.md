@@ -507,3 +507,14 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Verification**: Grepped all `--color-new` references — all other usages are via `var(--color-new)` with purple fallbacks (`#bf5af2`). No hardcoded blue values elsewhere.
 - **Key file**: `src/styles/tokens.css`.
 - **Pattern**: The two light-mode blocks (`html[data-theme="light"]` explicit + `@media prefers-color-scheme: light`) must stay in sync. When adding new color tokens, set the value in both blocks identically.
+
+### 2026-04-20 — Docs Site Mobile Nav Spacing Fix
+- **Problem**: On mobile viewports, the FlightDeck icon was "mushed" against the Features link — overlapping or too close together.
+- **Root cause**: `site/src/lib/components/Nav.svelte` used fixed `gap-8` (2rem) between nav links and `px-6` padding with no responsive breakpoints. On small screens, the logo and nav links competed for the same space.
+- **Fix**: Added responsive Tailwind classes:
+  - Container padding: `px-4 sm:px-6` (tighter on mobile, original on sm+)
+  - Logo link: added `shrink-0` to prevent logo from shrinking, reduced gap to `gap-2 sm:gap-2.5`
+  - Nav links: `gap-3 sm:gap-8` (much tighter on mobile, original on sm+)
+  - Link text: `text-xs sm:text-sm` (smaller on mobile, original on sm+)
+- **Key file**: `site/src/lib/components/Nav.svelte`
+- **Pattern**: Docs site uses Tailwind CSS (via SvelteKit). Mobile-first responsive design — always check that fixed gap/padding values have `sm:` breakpoint variants for mobile.
