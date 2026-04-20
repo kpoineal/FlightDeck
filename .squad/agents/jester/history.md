@@ -73,3 +73,8 @@
 - **Signing config:** SHA256 digest, RFC 3161 timestamping via `timestamp.acs.microsoft.com`, certificate profile is Public Trust (CN=Kyle Poineal).
 - **Secrets required:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_CODE_SIGNING_ENDPOINT_URL`, `AZURE_CODE_SIGNING_ACCOUNT_NAME`, `AZURE_CODE_SIGNING_PROFILE_NAME` — all pre-configured by Kyle.
 - **Step order:** Build MSI → Azure Login → Sign MSI → Create GitHub Release. No existing steps modified.
+
+### 2026-04-20 — Incremental Cleanup Exit Code Fix
+- **Issue:** "Cleanup old incrementals" step in `.github/workflows/incremental.yml` failed on run #24654922912 because `git push origin :refs/tags/...` returned non-zero when deleting the last tag in the loop. PowerShell propagates `$LASTEXITCODE` from the final native command as the script exit code.
+- **Fix:** Reset `$global:LASTEXITCODE = 0` after each `git push` tag deletion (tag may already be gone — not an error), and added explicit `exit 0` at end of script as a safety net.
+- **Pattern:** In PowerShell GitHub Actions steps, always reset `$LASTEXITCODE` after fire-and-forget native commands, especially inside loops. The "Create pre-release" step was unaffected because `gh release create` runs after its `git push`, overwriting the exit code.
