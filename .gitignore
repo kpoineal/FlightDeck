@@ -7,6 +7,12 @@ dist-renderer/
 out/
 manifests/
 
+# Docs site build artifacts
+site/build/
+site/.svelte-kit/
+site/node_modules/
+site/static/screenshots/*.png
+
 # Electron build artifacts
 release/
 build/*
