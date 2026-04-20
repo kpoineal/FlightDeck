@@ -30,14 +30,14 @@
 		<!-- Sidebar -->
 		<aside class="hidden lg:block w-56 shrink-0">
 			<div class="sticky top-24">
-				<h4 class="text-xs font-semibold uppercase tracking-wider text-white/30 mb-4">User Guide</h4>
+				<h4 class="text-xs font-semibold uppercase tracking-wider text-themed-dim mb-4">User Guide</h4>
 				<nav class="space-y-1">
 					{#each sections as section}
 						<a
 							href="#{section.id}"
 							class="block rounded-lg px-3 py-1.5 text-sm transition-colors no-underline {activeSection === section.id
 								? 'bg-[#0a84ff]/10 text-[#0a84ff]'
-								: 'text-white/50 hover:text-white hover:bg-white/5'}"
+								: 'text-themed-muted hover:text-themed hover:bg-themed-inset'}"
 							onclick={() => { activeSection = section.id; }}
 						>
 							{section.label}
@@ -48,23 +48,17 @@
 		</aside>
 
 		<!-- Content -->
-		<article class="min-w-0 flex-1 prose prose-invert prose-flightdeck max-w-none
+		<article class="min-w-0 flex-1 prose prose-flightdeck max-w-none
 			prose-headings:font-semibold prose-headings:tracking-tight
 			prose-h1:text-4xl prose-h2:text-2xl prose-h2:mt-16 prose-h2:mb-6
 			prose-h3:text-lg prose-h3:mt-10 prose-h3:mb-4
-			prose-p:text-white/70 prose-p:leading-relaxed
 			prose-a:text-[#0a84ff] prose-a:no-underline hover:prose-a:underline
-			prose-strong:text-white
-			prose-code:text-[#0a84ff] prose-code:bg-white/5 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
-			prose-pre:bg-[#18181b] prose-pre:border prose-pre:border-white/10 prose-pre:rounded-xl
-			prose-img:rounded-xl prose-img:border prose-img:border-white/10
+			prose-code:text-[#0a84ff] prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
+			prose-img:rounded-xl
 			prose-table:text-sm
-			prose-th:text-white/80 prose-th:font-medium prose-th:border-white/10
-			prose-td:text-white/60 prose-td:border-white/10
-			prose-li:text-white/70
 		">
 			<h1 class="!text-4xl md:!text-5xl">User Guide</h1>
-			<p class="!text-lg !text-white/50 !mt-2 !mb-12">
+			<p class="!text-lg text-themed-muted !mt-2 !mb-12">
 				FlightDeck is a personal work-intelligence dashboard that connects to Microsoft 365 via
 				the WorkIQ CLI. It scans your email, Teams chats, meetings, and documents, then surfaces
 				the items that need your attention — ranked by urgency.
