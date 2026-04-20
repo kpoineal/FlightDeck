@@ -26,7 +26,7 @@
 			</div>
 
 			<div in:fly={{ y: 30, duration: 800, delay: 150, easing: (t) => 1 - Math.pow(1 - t, 4) }}>
-				<p class="mx-auto max-w-2xl text-lg md:text-xl text-white/60 leading-relaxed mb-10">
+				<p class="mx-auto max-w-2xl text-lg md:text-xl text-themed-muted leading-relaxed mb-10">
 					FlightDeck scans your Microsoft 365 — email, Teams, meetings, docs — and surfaces what needs your attention. Prioritized. Monitored. Briefed.
 				</p>
 			</div>
@@ -45,7 +45,7 @@
 				</a>
 				<a
 					href="https://github.com/kpoineal/FlightDeck"
-					class="text-sm text-white/50 hover:text-white transition-colors no-underline"
+					class="text-sm text-themed-muted hover:text-themed transition-colors no-underline"
 					target="_blank"
 					rel="noopener"
 				>
@@ -58,7 +58,7 @@
 				<img
 					src="{base}/screenshots/01-radar-view-dark.png"
 					alt="FlightDeck Radar View — prioritized inbound signals"
-					class="w-full rounded-2xl border border-white/10 shadow-2xl shadow-black/50 screenshot-glow"
+					class="w-full rounded-2xl screenshot-border shadow-2xl shadow-black/50 screenshot-glow"
 				/>
 			</div>
 		{/if}

@@ -55,10 +55,10 @@
 				>
 					<div class="flex-1">
 						<h3 class="text-2xl md:text-3xl font-semibold mb-4">{detail.title}</h3>
-						<p class="text-white/50 leading-relaxed text-lg">{detail.description}</p>
+						<p class="text-themed-muted leading-relaxed text-lg">{detail.description}</p>
 					</div>
 					<div class="flex-1">
-						<div class="overflow-hidden rounded-2xl border border-white/10">
+						<div class="overflow-hidden rounded-2xl screenshot-border">
 							<img
 								src="{base}/screenshots/{detail.screenshot}"
 								alt="FlightDeck — {detail.title}"

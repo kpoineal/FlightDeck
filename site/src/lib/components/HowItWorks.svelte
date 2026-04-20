@@ -59,7 +59,7 @@
 						</div>
 						<div>
 							<h3 class="text-xl font-semibold mb-2">{step.title}</h3>
-							<p class="text-white/50 leading-relaxed">{step.description}</p>
+							<p class="text-themed-muted leading-relaxed">{step.description}</p>
 						</div>
 					</div>
 				{/each}

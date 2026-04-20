@@ -66,6 +66,68 @@ html.light {
 	--color-text-dim: rgba(60, 60, 67, 0.3);
 }
 
+/* Theme-aware text and border utilities */
+.text-themed { color: var(--color-text-primary); }
+.text-themed-muted { color: var(--color-text-muted); }
+.text-themed-dim { color: var(--color-text-dim); }
+.border-themed { border-color: var(--color-border); }
+.border-themed-card { border-color: var(--color-border-card); }
+.bg-themed-surface { background-color: var(--color-bg-surface); }
+.bg-themed-inset { background-color: var(--color-bg-inset); }
+.bg-themed-body { background-color: var(--color-bg-body); }
+
+/* Nav – theme-aware */
+.nav-scrolled {
+	background: rgba(9, 9, 11, 0.8);
+	backdrop-filter: blur(20px);
+	-webkit-backdrop-filter: blur(20px);
+	border-bottom: 1px solid var(--color-border);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+html.light .nav-scrolled {
+	background: rgba(245, 245, 247, 0.85);
+	box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Cards – theme-aware */
+.card-themed {
+	border: 1px solid var(--color-border-card);
+	background: var(--color-bg-surface);
+}
+.card-themed:hover {
+	border-color: var(--color-border);
+}
+html.light .card-themed {
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+/* Code blocks – theme-aware */
+.code-themed {
+	background: rgba(0, 0, 0, 0.4);
+	border: 1px solid rgba(255, 255, 255, 0.05);
+	color: rgba(235, 235, 245, 0.7);
+}
+html.light .code-themed {
+	background: rgba(0, 0, 0, 0.04);
+	border: 1px solid rgba(0, 0, 0, 0.08);
+	color: rgba(60, 60, 67, 0.8);
+}
+
+/* Footer – theme-aware */
+.footer-themed {
+	background: var(--color-bg-body);
+	border-top: 1px solid var(--color-border);
+}
+
+/* Theme toggle button */
+.theme-toggle {
+	border: 1px solid var(--color-border);
+	background: var(--color-bg-surface);
+}
+.theme-toggle:hover {
+	border-color: var(--color-border-card);
+}
+
 /* Screenshot glow effect */
 .screenshot-glow {
 	filter: drop-shadow(0 0 40px rgba(10, 132, 255, 0.15));
@@ -75,6 +137,21 @@ html.light {
 .screenshot-glow:hover {
 	filter: drop-shadow(0 0 60px rgba(10, 132, 255, 0.25));
 	transform: scale(1.02);
+}
+
+html.light .screenshot-glow {
+	filter: drop-shadow(0 2px 20px rgba(0, 0, 0, 0.12));
+}
+html.light .screenshot-glow:hover {
+	filter: drop-shadow(0 4px 30px rgba(0, 0, 0, 0.18));
+}
+
+/* Screenshot border – theme-aware */
+.screenshot-border {
+	border: 1px solid var(--color-border-card);
+}
+html.light .screenshot-border {
+	box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
 }
 
 /* Prose overrides for docs */
