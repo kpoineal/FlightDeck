@@ -500,3 +500,10 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Design tokens**: Used `--color-elevated` (#ff9f0a) for amber since `--color-warning` doesn't exist in tokens.css.
 - **All 589 tests pass**.
 - **Key files**: `src/renderer/renderers/tracking.js`, `src/styles/tracking.css`, `src/styles/components.css`, `src/svelte/components/TrackerCard.svelte`, `src/svelte/components/TrackerRow.svelte`, `test/renderer-tracking-renderers.test.js`.
+
+### 2026-04-20 — Fix #90: Light Mode --color-new Inconsistency
+- **Bug**: `--color-new` in `html[data-theme="light"]` block was `#007aff` (blue) while the `@media (prefers-color-scheme: light)` block correctly used `#a855f7` (purple). Dark mode uses `#bf5af2` (purple). The explicit light theme showed "new" items as blue instead of purple.
+- **Fix**: Changed `--color-new: #007aff` → `--color-new: #a855f7` in the `html[data-theme="light"]` block (line ~131 of `tokens.css`). One-line change.
+- **Verification**: Grepped all `--color-new` references — all other usages are via `var(--color-new)` with purple fallbacks (`#bf5af2`). No hardcoded blue values elsewhere.
+- **Key file**: `src/styles/tokens.css`.
+- **Pattern**: The two light-mode blocks (`html[data-theme="light"]` explicit + `@media prefers-color-scheme: light`) must stay in sync. When adding new color tokens, set the value in both blocks identically.
