@@ -17,6 +17,7 @@
 		{ id: 'kpi-summary', label: 'KPI Summary Bar' },
 		{ id: 'radar-view', label: 'Radar View' },
 		{ id: 'scanners', label: 'Scanners' },
+		{ id: 'scanner-examples', label: 'Scanner Examples' },
 		{ id: 'tracked-items', label: 'Tracked Items' },
 		{ id: 'briefings', label: 'Briefings' },
 		{ id: 'history', label: 'History' },
@@ -215,6 +216,102 @@
 			<p>
 				Click the <strong>⚙️ gear icon</strong> in any scanner's header to edit its settings.
 				You can also pause/resume, run immediately, or delete a scanner.
+			</p>
+
+			<!-- Scanner Examples -->
+			<h3 id="scanner-examples">Scanner Examples</h3>
+			<p>
+				A great scanner starts with a great prompt. Here are six curated examples — from beginner
+				to advanced — to show what's possible.
+			</p>
+
+			<h4>🟢 Starter</h4>
+
+			<p><strong>Deadline Watchdog</strong> · <code>🟢 Starter</code> — Never miss a due date again.</p>
+			<blockquote>
+				Find any email, chat, or document that mentions a deadline, due date, or delivery date
+				within the next 14 days. Include the specific date, what's due, and who's responsible.
+				Flag anything within 3 days as critical.
+			</blockquote>
+			<p>
+				<strong>Signals:</strong> Email, Chat, Documents · <strong>Schedule:</strong> <code>every 2h</code> during work hours<br />
+				💡 <em>Tip:</em> Add <code>exclude keywords: "newsletter, marketing"</code> to filter out noise from mass emails.
+			</p>
+
+			<p><strong>Action Items I Owe</strong> · <code>🟢 Starter</code> — Surface tasks assigned specifically to you.</p>
+			<blockquote>
+				Search for action items, tasks, or requests assigned to me or where I'm mentioned as the
+				owner. Look for phrases like "can you", "please handle", "action item:", "@me".
+				Prioritize items with no response yet.
+			</blockquote>
+			<p>
+				<strong>Signals:</strong> Email, Chat · <strong>Schedule:</strong> <code>every 1h</code><br />
+				💡 <em>Tip:</em> Enable <code>auto-monitor</code> so new action items get tracked automatically.
+			</p>
+
+			<h4>🟡 Intermediate</h4>
+
+			<p><strong>Team Health Signals</strong> · <code>🟡 Intermediate</code> — Spot morale and capacity issues early.</p>
+			<blockquote>
+				Look for signs of team stress, burnout, or capacity issues: mentions of working weekends,
+				blocked work, missed deadlines, requests for help, or escalation language. Note the person,
+				the signal, and the severity. Don't surface routine workload discussion — only flag genuine
+				concerns.
+			</blockquote>
+			<p>
+				<strong>Signals:</strong> Email, Chat, Meetings · <strong>Schedule:</strong> <code>every 4h</code><br />
+				💡 <em>Tip:</em> Pair with the Scheduled type and run once at end-of-day for a daily digest.
+			</p>
+
+			<p><strong>Sales Deal Radar</strong> · <code>🟡 Intermediate</code> — Track deal momentum across your pipeline.</p>
+			<blockquote>
+				Scan for deal-related updates: pricing discussions, contract mentions, competitor references,
+				timeline changes, budget approvals, or stakeholder objections. For each item, note the deal
+				or customer name, what changed, and the direction (positive/negative/neutral).
+			</blockquote>
+			<p>
+				<strong>Signals:</strong> Email, Chat, Documents · <strong>Schedule:</strong> <code>every 2h</code><br />
+				💡 <em>Tip:</em> Use <code>max items: 10</code> and <code>dedup: merge</code> to keep the view focused on unique deals.
+			</p>
+
+			<h4>🔴 Advanced</h4>
+
+			<p><strong>Executive Briefing Scanner</strong> · <code>🔴 Advanced</code> — Board-ready intelligence from your signals.</p>
+			<blockquote>
+				Identify items that an executive would need to know about: strategic decisions being made,
+				org-level risks, cross-team dependencies at risk, budget or headcount discussions, and
+				customer escalations. Summarize each in one sentence with the business impact. Ignore
+				routine operational updates — only surface things that move the needle.
+			</blockquote>
+			<p>
+				<strong>Signals:</strong> Email, Chat, Meetings, Documents · <strong>Schedule:</strong> <code>Scheduled 8:00 AM</code><br />
+				💡 <em>Tip:</em> Set <code>work hours only</code> and <code>run on startup</code> so it's ready when you open FlightDeck.
+			</p>
+
+			<p><strong>Cross-Team Dependency Tracker</strong> · <code>🔴 Advanced</code> — Surface blockers hiding across team boundaries.</p>
+			<blockquote>
+				Find cross-team dependencies: work that's waiting on another team, handoffs mentioned in
+				conversations, shared deliverables with mismatched timelines, or integration points under
+				discussion. For each, note the teams involved, what's at stake, and whether there's a
+				resolution path. Prioritize items with no clear owner.
+			</blockquote>
+			<p>
+				<strong>Signals:</strong> Email, Chat, Documents · <strong>Schedule:</strong> <code>every 4h</code><br />
+				💡 <em>Tip:</em> Enable <code>notifications: alert</code> for this scanner — dependency risks need fast action.
+			</p>
+
+			<h4>Prompt Writing Tips</h4>
+			<ul>
+				<li><strong>Be specific about what to find</strong> — "mentions of deadline" beats "important stuff". Name the patterns you care about.</li>
+				<li><strong>Tell it what to ignore</strong> — Exclusion criteria reduce noise dramatically. "Don't surface routine standups" saves you from alert fatigue.</li>
+				<li><strong>Ask for structured output</strong> — Phrases like "note the person, the date, and the risk" help the AI produce scannable results.</li>
+				<li><strong>Match schedule to urgency</strong> — Deadlines need hourly checks; team health can run once a day. Over-scanning wastes resources.</li>
+				<li><strong>Iterate</strong> — Start simple, review what comes back, and refine. The best scanners evolve from real usage.</li>
+			</ul>
+
+			<p>
+				See the full <a href="https://github.com/kpoineal/FlightDeck/blob/main/docs/user-guide.md#scanner-examples">Scanner Examples</a>
+				in the complete user guide for all 10 examples and detailed prompt writing guidance.
 			</p>
 
 			<!-- Tracked Items -->

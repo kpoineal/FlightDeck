@@ -14,6 +14,8 @@ FlightDeck is a personal work-intelligence dashboard that connects to Microsoft 
   - [Scanners](#scanners)
   - [Adding a Scanner](#adding-a-scanner)
   - [Scanner Settings](#scanner-settings)
+  - [Scanner Examples](#scanner-examples)
+  - [Prompt Writing Tips](#prompt-writing-tips)
   - [Tracked Items & Monitoring](#tracked-items--monitoring)
   - [Change History](#change-history)
   - [Lifecycle Statuses](#lifecycle-statuses)
@@ -211,6 +213,227 @@ You can also:
 - **Pause/resume** a scanner using the ⏸/▶ button in the section header
 - **Run a scan immediately** using the ⚡ button
 - **Delete a scanner** from the settings modal (items with completed/archived status are preserved)
+
+### Scanner Examples
+
+Not sure what to put in the prompt field? Here are ten ready-to-use scanner prompts organized from simple to advanced. Copy any prompt into a new scanner, adjust the settings, and you're scanning in under a minute.
+
+Every scanner prompt builds on the same base template — you only write the **"Focus specifically on"** part. The template already handles time filtering (`{lastRunAt}`), citation rules, and due-date extraction.
+
+---
+
+#### Starter Examples
+
+These prompts are short, focused, and a great first scanner to set up.
+
+**Deadline Watchdog** — Catches upcoming deadlines mentioned across email, chats, and meetings so nothing sneaks past you.
+
+**Prompt:**
+
+> Focus specifically on: any deadlines, due dates, or time-sensitive commitments involving me — whether I set them or someone else did. Include items where a deadline is implied ("by end of week", "before the board meeting"). Classify as Critical if the deadline is within 48 hours, Elevated if within 7 days, Observe otherwise.
+
+**Settings:** Schedule every 2 h · All signal types · Auto-monitor on · Max 10 items
+
+💡 **Tip:** Pair this with a Scheduled run at 8 AM on Mondays to catch week-ahead deadlines in your morning routine.
+
+---
+
+**Action Items I Owe** — Finds commitments you made in meetings and chats — the stuff that slips through the cracks.
+
+**Prompt:**
+
+> Focus specifically on: action items, commitments, or promises that **I** made to others. Look for phrases like "I'll handle", "I'll send", "let me follow up", "I owe you", or any task I volunteered for. Do NOT surface items that others owe me — only things I need to deliver. Include the person I committed to and any stated or implied deadline.
+
+**Settings:** Schedule every 4 h · Chat + Meetings signals · Max 10 items
+
+💡 **Tip:** Turn on auto-monitor so FlightDeck keeps watching each commitment until you mark it complete.
+
+---
+
+**1:1 Prep Scanner** — Auto-generates talking points for your next 1:1 by scanning recent signals involving that person.
+
+**Prompt:**
+
+> Focus specifically on: any topics, updates, open questions, or unresolved threads involving my direct manager. Include status changes on shared projects, decisions that need alignment, blockers I should raise, and any praise or wins worth mentioning. Group by theme (updates, blockers, asks, wins).
+
+**Settings:** Scheduled, day before your 1:1 · All signal types · Max 8 items
+
+💡 **Tip:** Swap "my direct manager" for a specific name. Duplicate this scanner for each person you have regular 1:1s with.
+
+---
+
+#### Intermediate Examples
+
+These prompts use multi-signal filtering, negative instructions, and severity hints for more targeted scanning.
+
+**Team Health Signals** — Monitors for burnout, overload, or morale signals from your direct reports. Built for managers.
+
+**Prompt:**
+
+> Focus specifically on: signals that indicate team health issues among my direct reports:
+> - Late-night or weekend messages (potential overload)
+> - Requests to reschedule or cancel 1:1s repeatedly
+> - Language suggesting frustration, burnout, or disengagement ("swamped", "drowning", "can't keep up")
+> - Missed deadlines or slipping commitments
+> - Escalations or complaints from stakeholders about a report's work
+>
+> Do NOT surface routine status updates or normal work activity. Only flag patterns that suggest someone may need support. Classify as Critical if multiple signals appear for the same person, Elevated for isolated signals.
+
+**Settings:** Schedule every 4 h · Email + Chat signals · Work hours only · Max 8 items · Critical-only notifications
+
+💡 **Tip:** Set notifications to critical-only — you don't want a firehose, just early warning signs worth a check-in.
+
+---
+
+**Decisions That Affect My Work** — Catches decisions made in meetings you weren't in, so you're never blindsided. Built for ICs.
+
+**Prompt:**
+
+> Focus specifically on: decisions, approvals, direction changes, or priority shifts discussed in meetings I did NOT attend. Look for signals like "we decided", "leadership approved", "we're pivoting", "new priority", or "effective immediately" in meeting recaps, follow-up emails, and chat threads. Include who made the decision and what changed. Do NOT include meetings I attended — only information I might have missed.
+
+**Settings:** Schedule every 2 h · Meetings + Email + Chat signals · Max 10 items
+
+💡 **Tip:** Add exclude keywords for recurring meetings you always attend (e.g., your own team standup) to reduce noise.
+
+---
+
+**Sales Deal Radar** — Tracks deal momentum, buying signals, and competitor mentions across your pipeline.
+
+**Prompt:**
+
+> Focus specifically on: signals related to active sales opportunities:
+> - Buying signals — budget approvals, executive sponsor engagement, procurement involvement, timeline discussions
+> - Risk signals — going silent, postponed meetings, reduced stakeholder engagement, mentions of competing vendors
+> - Competitor mentions — any reference to competing products or vendors by name in customer communications
+> - Deal progression — contract redlines, legal review, POC feedback, reference requests
+>
+> Classify as Critical if a deal shows risk signals or competitor activity. Classify as Elevated for positive buying signals that need follow-up. Include the account/deal name and the specific signal detected.
+
+**Settings:** Schedule every 1 h · Email + Chat signals · Max 15 items · Auto-monitor on
+
+💡 **Tip:** Increase max items to 15 if you're managing 10+ active deals to make sure nothing gets clipped.
+
+---
+
+**Engineering Incident Monitor** — Surfaces P0/P1 alerts, production issues, and outage signals so you can respond fast.
+
+**Prompt:**
+
+> Focus specifically on: production incidents, outage signals, and high-severity engineering alerts:
+> - P0/P1/Sev1/Sev2 mentions in any channel
+> - Keywords: "outage", "incident", "degraded", "rollback", "hotfix", "pages", "on-call"
+> - Customer-reported issues escalated to engineering
+> - Post-incident review or retrospective scheduling
+>
+> Classify as Critical if the incident is active or unresolved. Classify as Elevated for post-incident follow-ups. Do NOT surface routine deployments, feature releases, or low-severity bugs.
+
+**Settings:** Schedule every 30 min · Email + Chat signals · All notifications · Max 10 items · Run on startup
+
+💡 **Tip:** Enable "Run on startup" so you immediately know about any incidents that fired overnight.
+
+---
+
+#### Advanced Examples
+
+These prompts use multi-section extraction, structured severity classification, and complex filtering for power users.
+
+**Executive Briefing Scanner** — Multi-section strategic scanner that surfaces risk, opportunity, and competitive intel for senior leaders.
+
+**Prompt:**
+
+> Focus specifically on: executive-level intelligence across these categories:
+>
+> **Strategic risks:**
+> - Escalations reaching VP+ level
+> - Budget or headcount changes
+> - Key personnel departures or re-orgs
+> - Customer churn signals or major account issues
+>
+> **Opportunities:**
+> - New partnership or expansion discussions
+> - Positive customer feedback or case study candidates
+> - Cross-sell or upsell signals from existing accounts
+>
+> **Competitive intelligence:**
+> - Competitor mentions in customer conversations
+> - Win/loss signals and reasons cited
+> - Market or analyst report references
+>
+> **Organizational signals:**
+> - Cross-functional alignment issues
+> - Recurring meeting cancellations at leadership level
+> - Strategy or priority shifts signaled in all-hands or leadership threads
+>
+> Classify as Critical if a risk could impact quarterly targets or requires immediate executive attention. Classify as Elevated for opportunities with a time window. For each item, include the source, key people involved, and a one-line recommended action.
+
+**Settings:** Scheduled, 7 AM weekdays · All signal types · Max 15 items · Critical-only notifications
+
+💡 **Tip:** Schedule this once per morning rather than on an interval — executive-level signals don't need real-time polling, and a daily digest is easier to act on.
+
+---
+
+**Compliance & Audit Watch** — Tracks regulatory deadlines, audit findings, policy changes, and vendor certification status.
+
+**Prompt:**
+
+> Focus specifically on: compliance, regulatory, and audit-related signals:
+> - Upcoming regulatory deadlines or filing dates
+> - Audit findings, action items, or remediation tracking
+> - Policy changes or new compliance requirements
+> - Vendor/third-party certification renewals or expirations
+> - Data privacy requests (DSAR, GDPR, CCPA) and response deadlines
+> - Internal control review results or exceptions
+>
+> Classify as Critical if a deadline is within 7 days or an audit finding is unresolved. Classify as Elevated for items within 30 days. Do NOT surface general legal discussions, routine contract renewals without compliance implications, or HR policy changes unrelated to regulatory requirements. Include the specific regulation, deadline, or finding reference where available.
+
+**Settings:** Schedule every 4 h · Email + Documents signals · Auto-monitor on · Retention 365 days · Max 10 items
+
+💡 **Tip:** Set retention to the maximum (365 days) — compliance items often have long timelines and you'll want the full audit trail.
+
+---
+
+**Cross-Team Dependency Tracker** — Structured extraction of inter-team blockers, handoffs, and delivery commitments.
+
+**Prompt:**
+
+> Focus specifically on: cross-team dependencies and inter-team coordination signals:
+> - Deliverables my team is waiting on from other teams (and their stated timelines)
+> - Deliverables other teams are waiting on from us
+> - Blocked work items where the blocker is owned by another team
+> - Handoff requests, API contract changes, or shared resource conflicts
+> - Escalations about missed cross-team commitments
+>
+> For each item, extract:
+> - **Dependency direction:** "We need from [Team]" or "[Team] needs from us"
+> - **What:** The specific deliverable or blocker
+> - **Deadline:** Any stated or implied timeline
+> - **Status:** On track, at risk, or blocked
+>
+> Classify as Critical if a dependency is blocked or the deadline is within 3 days. Classify as Elevated if at risk or within 2 weeks. Do NOT include internal team tasks with no cross-team component.
+
+**Settings:** Schedule every 2 h · All signal types · Auto-monitor on · Max 12 items
+
+💡 **Tip:** Duplicate this scanner and customize one per partner team if you have complex multi-team dependencies — the cross-scanner dedup will prevent overlapping items automatically.
+
+---
+
+### Prompt Writing Tips
+
+Getting the most out of your scanners comes down to writing clear, specific prompts. Here are practical tips to level up your scanner results.
+
+1. **Be specific about what "actionable" means.** Don't just say "find important emails." Tell the scanner what makes something actionable: a deadline, a decision needed, a commitment made, a risk detected. The more concrete your criteria, the fewer false positives you'll get.
+
+2. **Use bullet lists for multi-signal prompts.** When you're scanning for several types of signals, break them into a bulleted list inside the prompt. The AI handles structured lists better than run-on paragraphs, and it makes your prompt easier to edit later.
+
+3. **Tell the AI what to ignore.** Negative instructions ("Do NOT surface routine status updates") are just as valuable as positive ones. Without them, you'll get flooded with technically-relevant-but-not-useful items. Be explicit about what's noise for your use case.
+
+4. **Teach severity by example.** Rather than leaving severity classification to the AI's judgment, include concrete rules: "Classify as Critical if the deadline is within 48 hours" or "Classify as Elevated if a competitor is mentioned." This makes severity consistent across scans and makes the KPI bar meaningful.
+
+5. **Match schedule frequency to urgency.** A production incident scanner should run every 30 minutes. A compliance scanner can run every 4 hours. An executive briefing works best as a once-daily scheduled run. Don't waste scan cycles on signals that don't change fast.
+
+6. **Start simple, then layer on.** Your first version of a scanner prompt should be 2–3 lines. Run it a few times, see what comes back, then add negative instructions, severity rules, or additional signal categories. Prompt iteration beats prompt perfection.
+
+7. **Pick the right signal types.** Not every scanner needs all four signal types (Email, Chat, Meetings, Documents). An incident monitor probably doesn't need Documents. A compliance scanner probably doesn't need Chat. Narrowing signal types reduces noise and speeds up scans.
 
 ### Tracked Items & Monitoring
 
