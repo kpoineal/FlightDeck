@@ -1,8 +1,15 @@
 <script>
 	import { base } from '$app/paths';
+	import { darkMode } from '$lib/theme.js';
 
 	let sectionEl = $state(null);
 	let visible = $state(false);
+	let theme = $state('dark');
+
+	$effect(() => {
+		const unsub = darkMode.subscribe(v => { theme = v ? 'dark' : 'light'; });
+		return unsub;
+	});
 
 	$effect(() => {
 		if (!sectionEl) return;
@@ -18,19 +25,19 @@
 		{
 			title: 'Smart Scanners',
 			description: 'Create named, scheduled AI scanners that continuously search your Microsoft 365 for specific topics. Configure signal types, schedules, dedup strategies, and notification preferences.',
-			screenshot: '08-scanner-section-header-dark.png',
+			screenshot: '08-scanner-section-header',
 			reverse: false
 		},
 		{
 			title: 'Full History',
 			description: 'Every scan, every recommendation, every system event — timestamped and searchable. The complete audit trail of your work signals, always available.',
-			screenshot: '07-history-view-dark.png',
+			screenshot: '07-history-view',
 			reverse: true
 		},
 		{
 			title: 'System Tray & Pop-outs',
 			description: 'Minimize to the system tray and keep monitoring in the background. Pop out individual items into dedicated windows for deep-dive tracking alongside your other work.',
-			screenshot: '04-tracker-card-updated-dark.png',
+			screenshot: '04-tracker-card-updated',
 			reverse: false
 		}
 	];
@@ -60,7 +67,7 @@
 					<div class="flex-1">
 						<div class="overflow-hidden rounded-2xl screenshot-border">
 							<img
-								src="{base}/screenshots/{detail.screenshot}"
+								src="{base}/screenshots/{detail.screenshot}-{theme}.png"
 								alt="FlightDeck — {detail.title}"
 								class="w-full screenshot-glow"
 							/>

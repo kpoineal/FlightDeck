@@ -2,9 +2,16 @@
 	import { base } from '$app/paths';
 	import { fly } from 'svelte/transition';
 	import { getDownloadUrls } from '$lib/downloads.svelte.js';
+	import { darkMode } from '$lib/theme.js';
 
 	let visible = $state(false);
 	const urls = getDownloadUrls();
+	let theme = $state('dark');
+
+	$effect(() => {
+		const unsub = darkMode.subscribe(v => { theme = v ? 'dark' : 'light'; });
+		return unsub;
+	});
 
 	$effect(() => {
 		visible = true;
@@ -56,7 +63,7 @@
 			<div in:fly={{ y: 40, duration: 1000, delay: 500, easing: (t) => 1 - Math.pow(1 - t, 4) }} class="relative mx-auto max-w-4xl">
 				<div class="absolute inset-0 bg-[#0a84ff]/10 rounded-2xl blur-[60px] -z-10"></div>
 				<img
-					src="{base}/screenshots/01-radar-view-dark.png"
+					src="{base}/screenshots/01-radar-view-{theme}.png"
 					alt="FlightDeck Radar View — prioritized inbound signals"
 					class="w-full rounded-2xl screenshot-border shadow-2xl shadow-black/50 screenshot-glow"
 				/>

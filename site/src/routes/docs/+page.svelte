@@ -1,7 +1,14 @@
 <script>
 	import { base } from '$app/paths';
+	import { darkMode } from '$lib/theme.js';
 
 	let activeSection = $state('first-launch');
+	let theme = $state('dark');
+
+	$effect(() => {
+		const unsub = darkMode.subscribe(v => { theme = v ? 'dark' : 'light'; });
+		return unsub;
+	});
 
 	const sections = [
 		{ id: 'first-launch', label: 'First Launch' },
@@ -83,7 +90,7 @@
 			<!-- Dashboard Overview -->
 			<h2 id="dashboard-overview">Dashboard Overview</h2>
 			<img
-				src="{base}/screenshots/01-radar-view-dark.png"
+				src="{base}/screenshots/01-radar-view-{theme}.png"
 				alt="FlightDeck Radar View dashboard"
 				class="screenshot-glow"
 			/>
@@ -97,7 +104,7 @@
 			<!-- Navigation -->
 			<h2 id="navigation">Navigation</h2>
 			<img
-				src="{base}/screenshots/09-topbar-dark.png"
+				src="{base}/screenshots/09-topbar-{theme}.png"
 				alt="FlightDeck topbar"
 			/>
 			<p>The top bar contains three main tabs:</p>
@@ -127,7 +134,7 @@
 			<!-- KPI Summary Bar -->
 			<h2 id="kpi-summary">KPI Summary Bar</h2>
 			<img
-				src="{base}/screenshots/02-summary-strip-dark.png"
+				src="{base}/screenshots/02-summary-strip-{theme}.png"
 				alt="KPI summary bar"
 			/>
 			<p>The KPI bar shows at-a-glance metrics with three severity counters:</p>
@@ -159,7 +166,7 @@
 			<!-- Scanners -->
 			<h2 id="scanners">Scanners</h2>
 			<img
-				src="{base}/screenshots/08-scanner-section-header-dark.png"
+				src="{base}/screenshots/08-scanner-section-header-{theme}.png"
 				alt="Scanner section header"
 			/>
 			<p>
@@ -177,7 +184,7 @@
 
 			<h3>Adding a Scanner</h3>
 			<img
-				src="{base}/screenshots/11-add-task-modal-dark.png"
+				src="{base}/screenshots/11-add-task-modal-{theme}.png"
 				alt="Add scanner modal"
 			/>
 			<p>Click <strong>+ Scanner</strong> at the top of the Radar view. Configure:</p>
@@ -202,7 +209,7 @@
 
 			<h3>Scanner Settings</h3>
 			<img
-				src="{base}/screenshots/10-scanner-settings-modal-dark.png"
+				src="{base}/screenshots/10-scanner-settings-modal-{theme}.png"
 				alt="Scanner settings modal"
 			/>
 			<p>
@@ -213,7 +220,7 @@
 			<!-- Tracked Items -->
 			<h2 id="tracked-items">Tracked Items & Monitoring</h2>
 			<img
-				src="{base}/screenshots/04-tracker-card-updated-dark.png"
+				src="{base}/screenshots/04-tracker-card-updated-{theme}.png"
 				alt="Tracked item with update badge"
 			/>
 			<p>
@@ -247,7 +254,7 @@
 			<!-- Briefings -->
 			<h2 id="briefings">Briefings</h2>
 			<img
-				src="{base}/screenshots/05-briefings-view-dark.png"
+				src="{base}/screenshots/05-briefings-view-{theme}.png"
 				alt="Briefings view"
 				class="screenshot-glow"
 			/>
@@ -276,7 +283,7 @@
 			<!-- History -->
 			<h2 id="history">History</h2>
 			<img
-				src="{base}/screenshots/07-history-view-dark.png"
+				src="{base}/screenshots/07-history-view-{theme}.png"
 				alt="History view"
 			/>
 			<p>

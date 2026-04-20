@@ -1,8 +1,15 @@
 <script>
 	import { base } from '$app/paths';
+	import { darkMode } from '$lib/theme.js';
 
 	let sectionEl = $state(null);
 	let visible = $state(false);
+	let theme = $state('dark');
+
+	$effect(() => {
+		const unsub = darkMode.subscribe(v => { theme = v ? 'dark' : 'light'; });
+		return unsub;
+	});
 
 	$effect(() => {
 		if (!sectionEl) return;
@@ -20,21 +27,21 @@
 			title: 'Scan',
 			tagline: 'See everything. Miss nothing.',
 			description: 'AI-powered scanners continuously monitor your email, Teams chats, meetings, and documents. Every signal surfaces automatically — ranked by urgency.',
-			screenshot: '01-radar-view-dark.png'
+			screenshot: '01-radar-view'
 		},
 		{
 			icon: '🎯',
 			title: 'Track',
 			tagline: 'Set it. Forget it. Get notified.',
 			description: 'Promote any item to active monitoring. FlightDeck watches for meaningful changes on your schedule and sends desktop notifications when something moves.',
-			screenshot: '03-tracker-card-expanded-dark.png'
+			screenshot: '03-tracker-card-expanded'
 		},
 		{
 			icon: '📋',
 			title: 'Brief',
 			tagline: 'Walk into every meeting prepared.',
 			description: 'AI-generated briefings pull context from related emails, chats, and documents. Get a daily overview plus per-meeting prep — automatically.',
-			screenshot: '05-briefings-view-dark.png'
+			screenshot: '05-briefings-view'
 		}
 	];
 </script>
@@ -62,7 +69,7 @@
 					<p class="text-sm text-themed-muted leading-relaxed mb-6">{feature.description}</p>
 					<div class="overflow-hidden rounded-xl screenshot-border">
 						<img
-							src="{base}/screenshots/{feature.screenshot}"
+							src="{base}/screenshots/{feature.screenshot}-{theme}.png"
 							alt="FlightDeck {feature.title}"
 							class="w-full transition-transform duration-500 group-hover:scale-[1.03]"
 						/>
