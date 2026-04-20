@@ -15,19 +15,23 @@
 
 <nav
 	class="fixed top-0 left-0 right-0 z-50 transition-all duration-300 {scrolled
-		? 'bg-[#09090b]/80 backdrop-blur-xl border-b border-white/10 shadow-lg shadow-black/10'
+		? 'nav-scrolled'
 		: 'bg-transparent'}"
 >
 	<div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-		<a href="{base}/" class="flex items-center gap-2.5 text-white no-underline">
-			<span class="text-xl">✈</span>
-			<span class="text-lg font-semibold tracking-tight">FlightDeck</span>
+		<a href="{base}/" class="flex items-center gap-2.5 no-underline">
+			<img src="{base}/icon.png" alt="" class="h-7 w-7" />
+			{#if darkMode}
+				<img src="{base}/flightdeck-title-dark.svg" alt="FlightDeck" class="h-5" />
+			{:else}
+				<img src="{base}/flightdeck-title-light.svg" alt="FlightDeck" class="h-5" />
+			{/if}
 		</a>
 
 		<div class="flex items-center gap-8">
-			<a href="{base}/#features" class="text-sm text-white/60 transition-colors duration-200 hover:text-white no-underline">Features</a>
-			<a href="{base}/docs" class="text-sm text-white/60 transition-colors duration-200 hover:text-white no-underline">Docs</a>
-			<a href="https://github.com/kpoineal/FlightDeck/releases" class="text-sm text-white/60 transition-colors duration-200 hover:text-white no-underline" target="_blank" rel="noopener">Download</a>
+			<a href="{base}/#features" class="text-sm text-themed-muted transition-colors duration-200 hover:text-themed no-underline">Features</a>
+			<a href="{base}/docs" class="text-sm text-themed-muted transition-colors duration-200 hover:text-themed no-underline">Docs</a>
+			<a href="https://github.com/kpoineal/FlightDeck/releases" class="text-sm text-themed-muted transition-colors duration-200 hover:text-themed no-underline" target="_blank" rel="noopener">Download</a>
 			<ThemeToggle bind:darkMode />
 		</div>
 	</div>

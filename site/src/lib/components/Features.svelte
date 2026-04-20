@@ -49,7 +49,7 @@
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
 			{#each features as feature, i}
 				<div
-					class="group rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition-all duration-500 hover:border-white/20 hover:bg-white/[0.06]"
+					class="group rounded-2xl card-themed p-6 transition-all duration-500"
 					class:opacity-0={!visible}
 					class:translate-y-8={!visible}
 					class:opacity-100={visible}
@@ -59,8 +59,8 @@
 					<div class="text-3xl mb-4">{feature.icon}</div>
 					<h3 class="text-xl font-semibold mb-1">{feature.title}</h3>
 					<p class="text-sm text-[#0a84ff] font-medium mb-3">{feature.tagline}</p>
-					<p class="text-sm text-white/50 leading-relaxed mb-6">{feature.description}</p>
-					<div class="overflow-hidden rounded-xl border border-white/5">
+					<p class="text-sm text-themed-muted leading-relaxed mb-6">{feature.description}</p>
+					<div class="overflow-hidden rounded-xl screenshot-border">
 						<img
 							src="{base}/screenshots/{feature.screenshot}"
 							alt="FlightDeck {feature.title}"
