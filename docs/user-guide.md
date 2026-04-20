@@ -114,33 +114,72 @@ The Radar is FlightDeck's primary view. It shows **all your items** — both inb
 
 ### Item Cards
 
-Each item displays three tabs — **Activity** (update timeline), **Overview** (metadata, people, links), and **Monitor** (schedule and signal controls):
+Every item on the Radar — whether freshly discovered or actively monitored — appears as a card. Cards have a **header** strip and **three tabs** that organize all information and controls.
 
-| Activity | Overview | Monitor |
-|----------|----------|---------|
-| ![Activity tab](screenshots/03a-tracker-card-activity-dark.png) | ![Overview tab](screenshots/03b-tracker-card-overview-dark.png) | ![Monitor tab](screenshots/03c-tracker-card-monitor-dark.png) |
+#### Card Header
 
-Each item appears as a card with:
+The header strip across the top of every card contains:
 
-- **Severity badge** — Editable dropdown: `Critical` (red), `Elevated` (yellow), or `Observe` (blue)
-- **Title** — A short descriptive title, editable inline (click to edit)
-- **Summary** — AI-generated description of why this item was surfaced
-- **Suggested next steps** — Actionable recommendations (0–2 concrete actions). On monitored items, clicking a suggestion generates an AI-drafted message.
-- **Source** — Where the signal came from (Email, Chat, Meeting, Doc, etc.) and when
-- **Owner** — Who the item is attributed to (editable inline)
-- **Due date** — When action is needed (editable inline)
-- **People** — Collapsible list of key contacts involved
-- **Links** — Clickable deep links back to the original source materials in M365
-- **Lifecycle badge** — Shows the item's current status: in-progress, blocked, waiting, snoozed, complete, or archived
-
-### Item Actions
-
-Each item card has action buttons including:
-
-- **Track Item** — Enables ongoing monitoring for this item. FlightDeck will periodically re-scan it and notify you of meaningful changes.
-- **Mark as Seen** — Clears the "NEW UPDATE" badge (appears only when there are unseen updates)
+- **Severity dropdown** — Click to change: `Critical` (red), `Elevated` (yellow), or `Observe` (blue). Sets the item's priority level and determines its position in the Radar sort order.
+- **Lifecycle status dropdown** — Click to change: `In Progress`, `Blocked`, `Waiting`, `Snoozed`, `Complete`, or `Archived`. Tracks the item through its lifecycle. Setting an item to `Snoozed` adds a 💤 indicator with a relative countdown (e.g., "💤 2h left") showing when it will un-snooze.
+- **Title** — A short descriptive title, editable inline (click to edit).
+- **Status pills** (right side) — Contextual indicators that appear as needed:
+  - **Paused** — Monitoring is disabled for this item
+  - **NEW** — Item was discovered in the most recent scan and hasn't been seen yet
+  - **UPDATED** (with count) — New changes detected since you last viewed the item (e.g., "UPDATED ×3")
+  - **Relative time pill** — How long ago the last update occurred (e.g., "2h ago")
 - **↗ Pop Out** — Opens the item in a dedicated window with item details on the left and full change history on the right
-- **Delete** — Removes the item
+
+#### Activity Tab (⏱️)
+
+![Activity tab showing update timeline](screenshots/03a-tracker-card-activity-dark.png)
+
+The Activity tab shows a chronological timeline of every change FlightDeck has detected for this item. Each entry in the timeline includes:
+
+- **Timestamp** — When the change was detected
+- **Severity badge** — The severity level at the time of that update
+- **Changes description** — A structured summary of what changed (e.g., "Status: In Progress → Blocked" or "Links: +2 new")
+- **Summary** — An AI-generated narrative of what happened and why it matters
+
+Unseen entries are highlighted with a distinct background so you can immediately spot what's new. Click **Mark as Seen** to clear all unseen highlights and dismiss the NEW/UPDATED badge on the card header.
+
+The card shows up to **3 recent entries** by default. Click the expand control to view the full history.
+
+#### Overview Tab (📋)
+
+![Overview tab showing metadata, due date, and done criteria](screenshots/03b-tracker-card-overview-dark.png)
+
+The Overview tab collects all metadata, context, and actionable information about the item:
+
+- **Suggested next steps** — 0–2 concrete "WHO + WHAT" actions (e.g., "Reply to Sarah with the revised Q3 timeline"). Each step includes a **Draft ↗** button — click it to generate an AI-drafted message you can review, edit, and send.
+- **Source** — Where the signal originated: Email, Chat, Meeting, or Doc.
+- **Due date** — Editable inline. Click to open a date picker and set when action is needed. The AI automatically extracts due dates from temporal language in signals ("by Friday", "due March 1", "end of Q2"), but you can always override or clear the date manually.
+- **Owner** — Editable inline. Who is responsible for this item.
+- **Done when** — Editable inline. A free-text field where you define what "done" looks like for this specific item. For example: "Jordan confirms receipt of the budget spreadsheet" or "Contract signed by both parties." This criteria is automatically included in the monitoring prompt, so FlightDeck's AI knows exactly what resolution looks like and can detect when the item is complete. If you leave this blank, the AI uses its own judgment to assess completion.
+- **People** — Collapsible list of counterparties and key contacts involved in this item.
+- **Evidence links** — Clickable deep links back to source materials in M365, with recency labels showing when each signal was last updated (e.g., "3h ago", "yesterday").
+- **Tracked / Last checked** — Timestamps showing when the item entered tracking and when the monitoring engine last ran a check.
+
+#### Monitor Tab (⚙️)
+
+![Monitor tab showing schedule controls and signal filters](screenshots/03c-tracker-card-monitor-dark.png)
+
+The Monitor tab gives you full control over how and when FlightDeck watches this item:
+
+- **Source scanner** — Which scanner this item belongs to. You can move items between scanners if a different scanner's context is a better fit.
+- **Schedule controls:**
+  - **Enabled** checkbox — Master toggle for monitoring. Unchecking pauses all checks and shows a "Paused" pill on the card header.
+  - **Notifications** checkbox — Whether to send desktop notifications when changes are detected.
+  - **Work hours only** checkbox — Restrict interval-based checks to 8 AM – 5 PM. Only visible when the schedule type is set to Interval.
+  - **Schedule type** dropdown:
+    - **Interval** — Check on a recurring interval: every 15 minutes, 30 minutes, 1 hour, 2 hours, or 4 hours.
+    - **Weekly** — Check on specific days of the week (Mon–Sun) at specific times. Defaults to weekdays at 8:00 AM and 12:00 PM. Click **+ Add** to add more time slots.
+    - **One-time** — Check once at a specific date and time, then automatically disable monitoring.
+  - **Next run** — Shows when the next scheduled check will fire.
+  - **Run check now** — Trigger an immediate check without waiting for the schedule. Useful when you know something has changed and want instant results.
+- **Signal filters** — Toggle which M365 sources to scan for this item: ✉️ Email, 💬 Chat, 📅 Meetings, 📄 Documents. Narrowing signals focuses the check and reduces noise — for example, turn off Documents for a purely email-based thread.
+- **Edit monitoring prompt** — Expandable textarea showing the AI instructions used when checking this item. This prompt is auto-built from the item's title, summary, owner, people, source, and done criteria. You can customize it to add specific context, override defaults, or tune what the AI watches for.
+- **Delete** — Remove this item from tracking entirely.
 
 ### Filter Bar
 
@@ -256,7 +295,7 @@ These prompts are short, focused, and a great first scanner to set up.
 
 > Focus specifically on: any topics, updates, open questions, or unresolved threads involving my direct manager. Include status changes on shared projects, decisions that need alignment, blockers I should raise, and any praise or wins worth mentioning. Group by theme (updates, blockers, asks, wins).
 
-**Settings:** Scheduled, day before your 1:1 · All signal types · Max 8 items
+**Settings:** Weekly, day before your 1:1 · All signal types · Max 8 items
 
 💡 **Tip:** Swap "my direct manager" for a specific name. Duplicate this scanner for each person you have regular 1:1s with.
 
@@ -327,7 +366,7 @@ These prompts use multi-signal filtering, negative instructions, and severity hi
 >
 > Classify as Critical if the incident is active or unresolved. Classify as Elevated for post-incident follow-ups. Do NOT surface routine deployments, feature releases, or low-severity bugs.
 
-**Settings:** Schedule every 30 min · Email + Chat signals · All notifications · Max 10 items · Run on startup
+**Settings:** Schedule every 30 m · Email + Chat signals · All notifications · Max 10 items · Run on startup
 
 💡 **Tip:** Enable "Run on startup" so you immediately know about any incidents that fired overnight.
 
@@ -366,7 +405,7 @@ These prompts use multi-section extraction, structured severity classification, 
 >
 > Classify as Critical if a risk could impact quarterly targets or requires immediate executive attention. Classify as Elevated for opportunities with a time window. For each item, include the source, key people involved, and a one-line recommended action.
 
-**Settings:** Scheduled, 7 AM weekdays · All signal types · Max 15 items · Critical-only notifications
+**Settings:** Weekly, 7 AM weekdays · All signal types · Max 15 items · Critical-only notifications
 
 💡 **Tip:** Schedule this once per morning rather than on an interval — executive-level signals don't need real-time polling, and a daily digest is easier to act on.
 
@@ -437,33 +476,21 @@ Getting the most out of your scanners comes down to writing clear, specific prom
 
 ### Tracked Items & Monitoring
 
-Any item can be promoted to active monitoring. When you click **Track Item**, FlightDeck enables periodic re-scanning for that specific item and notifies you when something meaningful changes.
+Tracking is how you tell FlightDeck "keep watching this." Any item on the Radar can be promoted from a one-time signal to an actively monitored item. Once tracked, FlightDeck periodically re-scans that item's M365 sources and notifies you when something meaningful changes — a status shift, a new reply, an approaching deadline, or resolution of your "done" criteria.
 
 ![Tracker card with NEW badge showing unseen updates and status transitions](screenshots/04-tracker-card-updated-dark.png)
 
-Monitored items show a **"Monitored" badge** and have richer detail:
+**How to track an item:**
 
-- **NEW UPDATE badge** — Appears when FlightDeck detects a meaningful change, with a timestamp
-- **Activity timeline** — Shows the progression of changes over time
-- **Updated timestamp** — When the last meaningful change was detected
-- **Tracking timeline** — When the item was first tracked and last checked
+- **From a scan result** — Click the **Track Item** button on any card. FlightDeck enables monitoring with sensible defaults (interval schedule, all signal types, auto-generated monitoring prompt).
+- **Custom item** — Click the **+** button in any scanner's section header to create a tracked item from scratch. Fill in a title, severity, and monitoring prompt to start watching something specific that scanners haven't discovered yet.
 
-Expand the **▸ Monitoring** section on any item to configure:
+**Tracked item badges:**
 
-- **Enabled** checkbox — Turn monitoring on or off
-- **Notifications** checkbox — Whether to send desktop notifications on changes
-- **Schedule type**:
-  - **Interval** — Check every 15m, 30m, 1h, 2h, or 4h
-  - **Scheduled** — Check on specific days and times
-  - **One-time** — Check once at a specific date/time, then auto-disable
-- **Day selector** — Pick which days of the week to check (for Scheduled mode)
-- **Time slots** — Set specific times; click **+ Add** for more slots
-- **Work Hours** — Restrict interval checks to 8 AM – 5 PM
-- **Run check now** — Manually trigger an immediate check
-- **Signals** — Toggle which M365 sources to scan: 📧 Email, 💬 Chat, 📅 Meetings, 📄 Documents
-- **▸ Edit monitoring prompt** — Customize the AI instructions for this item's checks
+- **NEW** — This item was discovered for the first time in the most recent scan. It hasn't been viewed yet.
+- **UPDATED** (with count) — FlightDeck has detected meaningful changes since you last viewed the item. The count shows how many new updates are waiting (e.g., "UPDATED ×3").
 
-You can also add a custom monitored item directly to a scanner by clicking the **+ button** in that scanner's section header. Fill in a title, severity, and monitoring prompt to start tracking something specific.
+Tracked items use the same three-tab card layout — **Activity** (⏱️), **Overview** (📋), and **Monitor** (⚙️) — documented in detail in the [Item Cards](#item-cards) section above. The Overview tab is where you set **due dates** and **done criteria** that guide monitoring, and the Monitor tab is where you configure schedules, signal filters, and the monitoring prompt.
 
 ### Change History
 
