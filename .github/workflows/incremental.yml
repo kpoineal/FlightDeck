@@ -137,8 +137,10 @@ jobs:
               Write-Host "Deleting old incremental: $($r.tagName)"
               gh release delete $r.tagName --yes
               git push origin :refs/tags/$($r.tagName) 2>$null
+              $global:LASTEXITCODE = 0  # tag may already be gone — not an error
             }
           }
+          exit 0
 
   incremental-mac:
     runs-on: macos-latest
