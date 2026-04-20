@@ -271,7 +271,7 @@
 			</blockquote>
 			<p>
 				<strong>Signals:</strong> Email, Chat, Documents · <strong>Schedule:</strong> <code>every 2h</code><br />
-				💡 <em>Tip:</em> Use <code>max items: 10</code> and <code>dedup: merge</code> to keep the view focused on unique deals.
+				💡 <em>Tip:</em> Use <code>max items: 10</code> and <code>dedup: both</code> to keep the view focused on unique deals.
 			</p>
 
 			<h4>🔴 Advanced</h4>
@@ -297,7 +297,7 @@
 			</blockquote>
 			<p>
 				<strong>Signals:</strong> Email, Chat, Documents · <strong>Schedule:</strong> <code>every 4h</code><br />
-				💡 <em>Tip:</em> Enable <code>notifications: alert</code> for this scanner — dependency risks need fast action.
+				💡 <em>Tip:</em> Enable <code>notifications: all</code> for this scanner — dependency risks need fast action.
 			</p>
 
 			<h4>Prompt Writing Tips</h4>

@@ -256,7 +256,7 @@ These prompts are short, focused, and a great first scanner to set up.
 
 > Focus specifically on: any topics, updates, open questions, or unresolved threads involving my direct manager. Include status changes on shared projects, decisions that need alignment, blockers I should raise, and any praise or wins worth mentioning. Group by theme (updates, blockers, asks, wins).
 
-**Settings:** Scheduled, day before your 1:1 · All signal types · Max 8 items
+**Settings:** Weekly, day before your 1:1 · All signal types · Max 8 items
 
 💡 **Tip:** Swap "my direct manager" for a specific name. Duplicate this scanner for each person you have regular 1:1s with.
 
@@ -327,7 +327,7 @@ These prompts use multi-signal filtering, negative instructions, and severity hi
 >
 > Classify as Critical if the incident is active or unresolved. Classify as Elevated for post-incident follow-ups. Do NOT surface routine deployments, feature releases, or low-severity bugs.
 
-**Settings:** Schedule every 30 min · Email + Chat signals · All notifications · Max 10 items · Run on startup
+**Settings:** Schedule every 30 m · Email + Chat signals · All notifications · Max 10 items · Run on startup
 
 💡 **Tip:** Enable "Run on startup" so you immediately know about any incidents that fired overnight.
 
@@ -366,7 +366,7 @@ These prompts use multi-section extraction, structured severity classification, 
 >
 > Classify as Critical if a risk could impact quarterly targets or requires immediate executive attention. Classify as Elevated for opportunities with a time window. For each item, include the source, key people involved, and a one-line recommended action.
 
-**Settings:** Scheduled, 7 AM weekdays · All signal types · Max 15 items · Critical-only notifications
+**Settings:** Weekly, 7 AM weekdays · All signal types · Max 15 items · Critical-only notifications
 
 💡 **Tip:** Schedule this once per morning rather than on an interval — executive-level signals don't need real-time polling, and a daily digest is easier to act on.
 
