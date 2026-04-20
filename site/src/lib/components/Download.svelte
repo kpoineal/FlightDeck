@@ -1,6 +1,9 @@
 <script>
+	import { getDownloadUrls } from '$lib/downloads.svelte.js';
+
 	let sectionEl = $state(null);
 	let visible = $state(false);
+	const urls = getDownloadUrls();
 
 	$effect(() => {
 		if (!sectionEl) return;
@@ -46,7 +49,7 @@
 					<h3 class="text-sm font-semibold uppercase tracking-wider">macOS</h3>
 				</div>
 				<a
-					href="https://github.com/kpoineal/FlightDeck/releases"
+					href={urls.dmg ?? urls.fallback}
 					class="inline-flex items-center gap-2 text-sm text-[#0a84ff] hover:text-[#64d2ff] transition-colors no-underline"
 					target="_blank"
 					rel="noopener"
@@ -70,7 +73,7 @@
 
 		<div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
 			<a
-				href="https://github.com/kpoineal/FlightDeck/releases"
+				href={urls.msi ?? urls.fallback}
 				class="inline-flex items-center gap-2 rounded-full bg-[#0a84ff] px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#0a84ff]/25 transition-all duration-300 hover:shadow-xl hover:shadow-[#0a84ff]/30 hover:bg-[#0a84ff]/90 no-underline"
 				target="_blank"
 				rel="noopener"

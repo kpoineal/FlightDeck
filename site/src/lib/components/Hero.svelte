@@ -1,8 +1,10 @@
 <script>
 	import { base } from '$app/paths';
 	import { fly } from 'svelte/transition';
+	import { getDownloadUrls } from '$lib/downloads.svelte.js';
 
 	let visible = $state(false);
+	const urls = getDownloadUrls();
 
 	$effect(() => {
 		visible = true;
@@ -31,7 +33,7 @@
 
 			<div in:fly={{ y: 30, duration: 800, delay: 300, easing: (t) => 1 - Math.pow(1 - t, 4) }} class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
 				<a
-					href="https://github.com/kpoineal/FlightDeck/releases"
+					href={urls.msi ?? urls.fallback}
 					class="inline-flex items-center gap-2 rounded-full bg-[#0a84ff] px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#0a84ff]/25 transition-all duration-300 hover:shadow-xl hover:shadow-[#0a84ff]/30 hover:bg-[#0a84ff]/90 no-underline"
 					target="_blank"
 					rel="noopener"
