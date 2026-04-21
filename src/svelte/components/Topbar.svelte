@@ -1,5 +1,5 @@
 <script>
-  import { mode, connected, loading, highlightedItemId, filter, items, scanners, collapsedSections } from '../lib/stores.js';
+  import { mode, connected, loading, highlightedItemId, filter, items, scanners, collapsedSections, activeOperations } from '../lib/stores.js';
   import { setMode } from '../lib/actions.js';
   import SearchOverlay from './SearchOverlay.svelte';
   import iconUrl from '../../icon.png';
@@ -49,8 +49,13 @@
     }
   }
 
-  let statusLabel = $derived($loading ? 'Loading\u2026' : ($connected ? 'Connected' : 'Ready'));
-  let statusClass = $derived($loading ? 'loading' : ($connected ? 'connected' : ''));
+  let activeCount = $derived($activeOperations.size);
+  let statusLabel = $derived(
+    activeCount > 1 ? `${activeCount} active` :
+    activeCount === 1 ? 'Scanning\u2026' :
+    $connected ? 'Connected' : 'Ready'
+  );
+  let statusClass = $derived(activeCount > 0 ? 'loading' : ($connected ? 'connected' : ''));
 </script>
 
 <header class="topbar">

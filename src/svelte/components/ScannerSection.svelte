@@ -1,5 +1,5 @@
 <script>
-  import { density, collapsedSections } from '../lib/stores.js';
+  import { density, collapsedSections, activeOperations } from '../lib/stores.js';
   import { relativeTime, sortBySeverity } from '../lib/utils.js';
   import { toggleSection } from '../lib/actions.js';
   import TrackerCard from './TrackerCard.svelte';
@@ -10,6 +10,7 @@
   let sourceId = $derived(`scanner-${scanner.id}`);
   let collapsed = $derived($collapsedSections.includes(sourceId));
   let enabled = $derived(scanner.enabled !== false);
+  let isScanning = $derived($activeOperations.has(`scanner:${scanner.id}`));
   let isMinimal = $derived($density === 'minimal');
   let sorted = $derived(sortBySeverity(items, true));
 
@@ -92,7 +93,7 @@
 
 <div class="radar-section" class:disabled={!enabled}>
   <!-- Section header -->
-  <div class="radar-section-header {sevBorderClass}" class:disabled={!enabled}
+  <div class="radar-section-header {sevBorderClass}" class:disabled={!enabled} class:scanning={isScanning}
     on:click={() => toggleSection(sourceId)}
     on:keydown={(e) => e.key === 'Enter' && toggleSection(sourceId)}
     role="button" tabindex="0">
@@ -174,6 +175,9 @@
       {#if nextRunLabel}
         <span class="radar-next-run">{nextRunLabel}</span>
       {/if}
+      {#if isScanning}
+        <span class="radar-scanning-label">Scanning…</span>
+      {/if}
     </div>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="radar-section-header-actions" on:click|stopPropagation>
@@ -183,7 +187,8 @@
           <line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/>
         </svg>
       </button>
-      <button class="icon-btn scanner-run-now-btn" title="Run scan now"
+      <button class="icon-btn scanner-run-now-btn" class:running={isScanning} title="Run scan now"
+        disabled={isScanning}
         on:click={() => onscannerrun?.({ scannerId: scanner.id })}>⚡</button>
       <button class="icon-btn" title="{enabled ? 'Pause scanner' : 'Resume scanner'}"
         on:click={() => onscannertoggle?.({ scannerId: scanner.id })}>
