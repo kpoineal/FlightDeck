@@ -1,5 +1,5 @@
 <script>
-  import { scanners, highlightedItemId } from '../lib/stores.js';
+  import { scanners, highlightedItemId, activeOperations } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
@@ -7,6 +7,8 @@
   import EditableField from './EditableField.svelte';
 
   let { item, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow, onfieldedit } = $props();
+
+  let isChecking = $derived($activeOperations.has(`item:${item.id}`));
 
   let activeTab = $state('summary');
   let cardEl = $state(null);
@@ -63,6 +65,7 @@
 <article
   bind:this={cardEl}
   class="tracker-card"
+  class:checking={isChecking}
   class:has-new-update={hasNew}
   class:is-new={isNewItem}
   class:is-updated={hasUpdate}

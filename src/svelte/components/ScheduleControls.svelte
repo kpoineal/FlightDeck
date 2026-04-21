@@ -7,8 +7,11 @@
     ALL_SIGNAL_TYPES,
     SIGNAL_TYPE_OPTIONS,
   } from '../lib/constants.js';
+  import { activeOperations } from '../lib/stores.js';
 
   let { item, onchange, onrunnow } = $props();
+
+  let isChecking = $derived($activeOperations.has(`item:${item.id}`));
 
   let scheduleType = $derived(item.scheduleType === 'one-time' ? 'one-time'
     : item.scheduleType === 'weekly' ? 'weekly'
@@ -65,7 +68,8 @@
       on:change={(e) => emitChange('oneTimeAt', e.target.value)} />
   {/if}
 
-  <button class="small-btn" on:click={() => onrunnow?.({ itemId: item.id })}>Run check now</button>
+  <button class="small-btn" class:is-loading={isChecking} disabled={isChecking}
+    on:click={() => onrunnow?.({ itemId: item.id })}>{isChecking ? 'Checking…' : 'Run check now'}</button>
 </div>
 
 {#if scheduleType === 'weekly'}
