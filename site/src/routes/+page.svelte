@@ -1,5 +1,6 @@
 <script>
 	import Hero from '$lib/components/Hero.svelte';
+	import PoweredBy from '$lib/components/PoweredBy.svelte';
 	import Features from '$lib/components/Features.svelte';
 	import HowItWorks from '$lib/components/HowItWorks.svelte';
 	import Details from '$lib/components/Details.svelte';
@@ -12,6 +13,7 @@
 </svelte:head>
 
 <Hero />
+<PoweredBy />
 <Features />
 <HowItWorks />
 <Details />
