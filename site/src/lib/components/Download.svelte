@@ -1,4 +1,5 @@
 <script>
+	import { base } from '$app/paths';
 	import { getDownloadUrls } from '$lib/downloads.svelte.js';
 
 	let sectionEl = $state(null);
@@ -28,7 +29,8 @@
 		style="transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1)"
 	>
 		<h2 class="text-3xl md:text-5xl font-bold tracking-tight mb-4">Ready for takeoff?</h2>
-		<p class="text-lg text-themed-muted mb-12">Get FlightDeck on your machine in seconds.</p>
+		<p class="text-lg text-themed-muted mb-4">Get FlightDeck on your machine in seconds.</p>
+		<p class="text-sm text-themed-muted mb-8">Before installing, make sure you meet the <a href="{base}/requirements" class="text-[#0a84ff] no-underline hover:text-[#64d2ff] transition-colors">requirements</a>.</p>
 
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
 			<!-- Windows -->
