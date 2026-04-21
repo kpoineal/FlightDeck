@@ -1,6 +1,7 @@
 <script>
   import { scanners, highlightedItemId, activeOperations } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
+  import { useClock } from '../lib/clock.svelte.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
@@ -8,6 +9,7 @@
 
   let { item, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow, onfieldedit } = $props();
 
+  const clock = useClock();
   let isChecking = $derived($activeOperations.has(`item:${item.id}`));
 
   let activeTab = $state('summary');
@@ -44,11 +46,11 @@
   let lastUpdate = $derived(item.lastChangedAt || item.discoveredAt || null);
   let lastUpdateTime = $derived(lastUpdate ? new Date(lastUpdate) : null);
   let lastUpdateStr = $derived(lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null);
-  let rt = $derived(relativeTime(lastUpdate));
+  let rt = $derived(relativeTime(lastUpdate, clock.now));
   let discoveredSource = $derived(item.discoveredAt || item.trackedAt || null);
   let discoveredTime = $derived(discoveredSource ? new Date(discoveredSource) : null);
   let discoveredStr = $derived(discoveredTime && Number.isFinite(discoveredTime.getTime()) ? discoveredTime.toLocaleString() : null);
-  let discoveredRt = $derived(relativeTime(discoveredSource));
+  let discoveredRt = $derived(relativeTime(discoveredSource, clock.now));
   let steps = $derived(Array.isArray(item.suggestedNextSteps) ? item.suggestedNextSteps : []);
   let sevClass = $derived(severityClass(item.severity));
 
@@ -92,7 +94,7 @@
       </select>
       {#if item.lifecycleStatus === 'snoozed'}
         <span class="snooze-until-label" title="Snoozed until {item.snoozeUntil ? safeDate(item.snoozeUntil) : 'next scan'}">
-          💤 {item.snoozeUntil ? (relativeTime(item.snoozeUntil) || safeDate(item.snoozeUntil)) : 'next scan'}
+          💤 {item.snoozeUntil ? (relativeTime(item.snoozeUntil, clock.now) || safeDate(item.snoozeUntil)) : 'next scan'}
         </span>
       {/if}
     </div>

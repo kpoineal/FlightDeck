@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { items } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
+  import { useClock } from '../lib/clock.svelte.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
@@ -14,6 +15,7 @@
 
   let item = $derived($items.find((entry) => entry.id === itemId) || null);
 
+  const clock = useClock();
   $effect(() => { if (item) document.title = item.title || 'Tracked Item'; });
 
   let isTerminalStatus = $derived(item && (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived'));
@@ -24,7 +26,7 @@
   let lastUpdate = $derived(item ? (item.lastChangedAt || item.lastRunAt || null) : null);
   let lastUpdateTime = $derived(lastUpdate ? new Date(lastUpdate) : null);
   let lastUpdateStr = $derived(lastUpdateTime && Number.isFinite(lastUpdateTime.getTime()) ? lastUpdateTime.toLocaleString() : null);
-  let rt = $derived(relativeTime(lastUpdate));
+  let rt = $derived(relativeTime(lastUpdate, clock.now));
   let sevClass = $derived(item ? severityClass(item.severity) : '');
 
   let peoplePanelOpen = $state(true);

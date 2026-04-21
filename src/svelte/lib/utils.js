@@ -426,11 +426,11 @@ export function sortBySeverity(items, useHasNewUpdate = false) {
   });
 }
 
-export function relativeTime(value) {
+export function relativeTime(value, _now = Date.now()) {
   if (!value) return null;
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) return null;
-  const diffMs = Date.now() - parsed.getTime();
+  const diffMs = _now - parsed.getTime();
   if (diffMs < 0) return 'just now';
   const seconds = Math.floor(diffMs / 1000);
   if (seconds < 60) return 'just now';
