@@ -238,4 +238,31 @@
 
 **Decisions captured:** `.squad/decisions/inbox/iceman-add-task-ux.md`
 
+### 2026-04-21 — Requirements Section for Marketing Site
+
+**User request:** Kyle wants a "requirements" section on the marketing/docs site (`site/src/routes/+page.svelte`) that communicates two prerequisites: (1) GitHub Copilot license, (2) WorkIQ CLI. Must be tasteful — honest but not a turnoff.
+
+**Current page flow:** Hero → Features → HowItWorks → Details → Download. No prerequisites mentioned anywhere.
+
+**Key site architecture notes:**
+- SvelteKit site with Tailwind CSS, Inter font, Apple-inspired design language
+- Components: Hero.svelte, Features.svelte, HowItWorks.svelte, Details.svelte, Download.svelte
+- Design tokens in `site/src/app.css` — theme-aware utilities (`.card-themed`, `.text-themed-muted`, etc.)
+- IntersectionObserver pattern for scroll-triggered animations across all section components
+- Accent color: `#0a84ff` (blue), consistent throughout
+
+**Recommendation delivered:**
+- Placement: Between Hero and Features — "Powered By" bridge section
+- Messaging: "Powered by" framing, not "Requires" — positions prerequisites as superpowers
+- Two-card layout with GitHub Copilot + WorkIQ CLI, each with outbound links
+- Compact, non-intimidating — no full-width section, just a tasteful bridge
+- Links to copilot.github.com and WorkIQ install docs
+
+**Key file paths for implementation:**
+- Page: `site/src/routes/+page.svelte`
+- New component: `site/src/lib/components/PoweredBy.svelte` (recommended name)
+- Styles: existing design system utilities sufficient, no new CSS needed
+
+**Decisions captured:** `.squad/decisions/inbox/iceman-requirements-section.md`
+
 <!-- Append learnings here as they are discovered -->

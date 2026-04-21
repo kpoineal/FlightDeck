@@ -14,6 +14,30 @@
 ## Learnings
 <!-- Append learnings below -->
 
+### 2026-04-21 — Requirements Section Proposal for Marketing Site
+- **Task**: Kyle wants a "requirements" area on the marketing site showing two prerequisites: GitHub Copilot license + WorkIQ CLI.
+- **Placement decision**: Between `<Hero />` and `<Features />` — after visitors see what FlightDeck IS, before the feature deep-dive. Kyle said "near the top."
+- **Design decision**: Lightweight two-card layout within a compact section (`max-w-3xl`, `py-16 md:py-20`) — smaller than standard sections to signal a quick informational stop. Uses existing `card-themed`, `text-themed-muted`, accent color, and IntersectionObserver patterns.
+- **Key file**: Proposed `site/src/lib/components/Requirements.svelte` — not yet created, awaiting Kyle's review.
+- **Site structure**: `site/src/routes/+page.svelte` imports Hero, Features, HowItWorks, Details, Download from `$lib/components/`. CSS theme system in `site/src/app.css` uses `html.light` class + CSS variables.
+- **WorkIQ package**: `@microsoft/workiq` — resolved from `src/main/pty-bridge.js`.
+- **Pattern**: Marketing site sections follow: section > container (mx-auto max-w-{size} px-6) > header (uppercase tracking-wider text-[#0a84ff] label + bold heading) > content. All sections use IntersectionObserver with staggered `transition-delay`.
+
+### 2026-04-21 — Nav Icon Alignment & Theme Toggle Overflow Fix
+- **Two bugs fixed** in `site/src/lib/components/Nav.svelte`:
+  1. **Icon/title misalignment**: Icon was `h-7 w-7` (1.75rem) while title SVG was `h-6` (1.5rem). Changed icon to `h-6 w-6 object-contain` so both share the same visual height.
+  2. **Theme toggle clipped off-page**: Right-side nav gap jumped from `gap-3` to `gap-8` at `sm:` breakpoint (640px), pushing the ThemeToggle button past the viewport edge. Changed to `gap-3 sm:gap-4 md:gap-6` for a more gradual responsive scale.
+- **Branch**: `squad/fix-nav-alignment`
+- **Key file**: `site/src/lib/components/Nav.svelte` — only file changed, ThemeToggle.svelte untouched.
+
+### 2026-04-21 — PoweredBy Section Implemented
+- **Task**: Created `PoweredBy.svelte` and wired it into +page.svelte between Hero and Features.
+- **Framing**: "Powered By" (Iceman's recommendation) — reframes prerequisites as strengths, not barriers.
+- **Content correction from Kyle**: WorkIQ CLI ships with FlightDeck (not a separate install). WorkIQ must be enabled in tenant (admin requirement). GitHub Copilot license required.
+- **Component file**: `site/src/lib/components/PoweredBy.svelte`
+- **Design**: Two-card grid (sm:grid-cols-2), `max-w-3xl`, `py-16 md:py-20`, IntersectionObserver scroll-in animation with cubic-bezier(0.16, 1, 0.3, 1), footer text "FlightDeck ships with the WorkIQ CLI built in. Just install and go."
+- **Branch**: `squad/add-powered-by-section`
+
 ### 2026-02-26 — localStorage Leak Fixes
 - **3 localStorage leaks identified and fixed** at The user's request:
   1. **Legacy v1 key never cleaned** (`renderer/state.js`): `loadPersistentState()` read from `LEGACY_STORAGE_KEY` but never removed it. Fixed by calling `localStorage.removeItem(LEGACY_STORAGE_KEY)` after successful migration read.
