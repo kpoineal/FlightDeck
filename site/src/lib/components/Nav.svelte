@@ -22,9 +22,9 @@
 		<a href="{base}/" class="flex shrink-0 items-center gap-2 sm:gap-2.5 no-underline">
 			<img src="{base}/icon.png" alt="" class="h-7 w-7" />
 			{#if darkMode}
-				<img src="{base}/flightdeck-title-dark.svg" alt="FlightDeck" class="h-5" />
+				<img src="{base}/flightdeck-title-dark.svg" alt="FlightDeck" class="h-6" />
 			{:else}
-				<img src="{base}/flightdeck-title-light.svg" alt="FlightDeck" class="h-5" />
+				<img src="{base}/flightdeck-title-light.svg" alt="FlightDeck" class="h-6" />
 			{/if}
 		</a>
 
