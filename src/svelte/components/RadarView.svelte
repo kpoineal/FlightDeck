@@ -1,5 +1,5 @@
 <script>
-  import { filteredItems, scanners, items, coldItems, density, filter, loading } from '../lib/stores.js';
+  import { filteredItems, scanners, items, coldItems, density, filter } from '../lib/stores.js';
   import { setDensity, setFilter, addHistory } from '../lib/actions.js';
   import { sortBySeverity, groupItemsBySource, normalizeExternalUrl, cleanDisplayText, hashString, nowIso, normalizeSeverity } from '../lib/utils.js';
   import { normalizeItem, computeNextRunAt } from '../lib/models/item.js';
@@ -38,13 +38,10 @@
     const scanner = $scanners.find(s => s.id === data.scannerId);
     if (!scanner) return;
 
-    loading.set(true);
     try {
       await runScannerEngine(scanner);
     } catch (err) {
       addHistory('failure', `Scanner ${scanner.name} failed: ${err.message}`);
-    } finally {
-      loading.set(false);
     }
   }
 

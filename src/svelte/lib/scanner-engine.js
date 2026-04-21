@@ -1,6 +1,6 @@
 // ── Scanner background engine (Svelte) ──────────────────────────────
 import { get } from 'svelte/store';
-import { items, scanners, connected } from './stores.js';
+import { items, scanners, connected, activeOperations } from './stores.js';
 import { addHistory } from './actions.js';
 import { savePersistentState } from './persistence.js';
 import { normalizeItem, computeNextRunAt } from './models/item.js';
@@ -90,6 +90,9 @@ async function checkDue() {
 
 
 export async function runScanner(scanner) {
+  const opKey = `scanner:${scanner.id}`;
+  activeOperations.update(ops => { const m = new Map(ops); m.set(opKey, { type: 'scan', id: scanner.id, label: scanner.name, startedAt: Date.now() }); return m; });
+  try {
   const prompt = buildScannerPrompt(scanner, get(items), get(scanners));
   const payload = await runWorkiqJson(
     prompt,
@@ -203,5 +206,8 @@ export async function runScanner(scanner) {
         window.workiq.showDesktopNotification({ title, body, taskId: notifyItems[0].id }).catch(() => {});
       }
     }
+  }
+  } finally {
+    activeOperations.update(ops => { const m = new Map(ops); m.delete(opKey); return m; });
   }
 }
