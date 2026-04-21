@@ -1,6 +1,6 @@
 // ── Task-monitoring background engine (Svelte) ─────────────────────
 import { get } from 'svelte/store';
-import { items, connected } from './stores.js';
+import { items, connected, activeOperations } from './stores.js';
 import { addHistory } from './actions.js';
 import { savePersistentState } from './persistence.js';
 import { computeNextRunAt } from './models/item.js';
@@ -69,6 +69,9 @@ async function checkDueItems() {
 
 
 export async function runItemCheck(item) {
+  const opKey = `item:${item.id}`;
+  activeOperations.update(ops => { const m = new Map(ops); m.set(opKey, { type: 'monitor', id: item.id, label: item.title, startedAt: Date.now() }); return m; });
+  try {
   const prompt = buildMonitorPrompt(item);
   const payload = await runWorkiqJson(
     prompt,
@@ -175,4 +178,7 @@ export async function runItemCheck(item) {
       return updated;
     })
   );
+  } finally {
+    activeOperations.update(ops => { const m = new Map(ops); m.delete(opKey); return m; });
+  }
 }

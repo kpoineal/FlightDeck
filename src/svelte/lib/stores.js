@@ -15,7 +15,12 @@ export const isDemo = writable(false);
 
 // ── UI state stores ──────────────────────────────────────────────────
 export const connected = writable(false);
-export const loading = writable(false);
+
+/** Map of active WorkIQ operations, keyed by type:id (e.g., 'scanner:abc123', 'item:xyz789') */
+export const activeOperations = writable(new Map());
+
+/** Backward-compatible loading flag — true when any operation is active */
+export const loading = derived(activeOperations, ($ops) => $ops.size > 0);
 export const mode = writable('Radar');
 export const density = writable('full');
 export const filter = writable('all');
