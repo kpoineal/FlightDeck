@@ -1,4 +1,6 @@
 <script>
+	import { base } from '$app/paths';
+
 	let sectionEl = $state(null);
 	let visible = $state(false);
 
@@ -81,7 +83,7 @@
 			class:opacity-0={!visible}
 			class:opacity-100={visible}
 		>
-			FlightDeck ships with the WorkIQ CLI built in. Just install and go.
+			FlightDeck ships with the WorkIQ CLI built in. <a href="{base}/requirements" class="text-[#0a84ff] no-underline hover:text-[#64d2ff] transition-colors font-medium">Check the requirements →</a>
 		</p>
 	</div>
 </section>

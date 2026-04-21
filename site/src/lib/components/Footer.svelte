@@ -29,6 +29,7 @@
 				<h4 class="text-xs font-semibold uppercase tracking-wider text-themed-dim mb-4">Resources</h4>
 				<ul class="space-y-2.5">
 					<li><a href="{base}/docs" class="text-sm text-themed-muted hover:text-themed transition-colors no-underline">User Guide</a></li>
+					<li><a href="{base}/requirements" class="text-sm text-themed-muted hover:text-themed transition-colors no-underline">Requirements</a></li>
 					<li><a href="https://github.com/kpoineal/FlightDeck/blob/main/CONTRIBUTING.md" class="text-sm text-themed-muted hover:text-themed transition-colors no-underline" target="_blank" rel="noopener">Contributing</a></li>
 					<li><a href="https://github.com/kpoineal/FlightDeck/issues" class="text-sm text-themed-muted hover:text-themed transition-colors no-underline" target="_blank" rel="noopener">Issues</a></li>
 				</ul>
