@@ -25,7 +25,7 @@
 			title: 'WorkIQ CLI',
 			description: 'Connects FlightDeck to your Microsoft 365 — email, Teams, calendar, and docs. Must be enabled by your tenant admin.',
 			linkText: 'Enable WorkIQ CLI →',
-			linkHref: 'https://www.npmjs.com/package/@microsoft/workiq#admin-setup'
+			linkHref: 'https://github.com/microsoft/work-iq/blob/main/ADMIN-INSTRUCTIONS.md'
 		}
 	];
 </script>
