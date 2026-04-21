@@ -20,7 +20,7 @@
 >
 	<div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
 		<a href="{base}/" class="flex shrink-0 items-center gap-2 sm:gap-2.5 no-underline">
-			<img src="{base}/icon.png" alt="" class="h-7 w-7" />
+			<img src="{base}/icon.png" alt="" class="h-6 w-6 object-contain" />
 			{#if darkMode}
 				<img src="{base}/flightdeck-title-dark.svg" alt="FlightDeck" class="h-6" />
 			{:else}
@@ -28,7 +28,7 @@
 			{/if}
 		</a>
 
-		<div class="flex items-center gap-3 sm:gap-8">
+		<div class="flex items-center gap-3 sm:gap-4 md:gap-6">
 			<a href="{base}/#features" class="text-xs sm:text-sm text-themed-muted transition-colors duration-200 hover:text-themed no-underline">Features</a>
 			<a href="{base}/docs" class="text-xs sm:text-sm text-themed-muted transition-colors duration-200 hover:text-themed no-underline">Docs</a>
 			<a href="https://github.com/kpoineal/FlightDeck/releases" class="text-xs sm:text-sm text-themed-muted transition-colors duration-200 hover:text-themed no-underline" target="_blank" rel="noopener">Download</a>
