@@ -508,6 +508,34 @@
   transform: translateY(-2px);
 }
 
+/* Activity shimmer — item is being checked */
+.tracker-card.checking {
+  border-top: 2px solid transparent;
+  background-image: linear-gradient(var(--bg-inset), var(--bg-inset)),
+    linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  background-size: 100% 100%, 200% 2px;
+  background-position: 0 0, -100% 0;
+  background-repeat: no-repeat;
+  animation: activity-shimmer 1.5s linear infinite;
+}
+.tracker-row-wrapper.checking {
+  border-top: 2px solid transparent;
+  background-image: linear-gradient(var(--bg-inset), var(--bg-inset)),
+    linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  background-size: 100% 100%, 200% 2px;
+  background-position: 0 0, -100% 0;
+  background-repeat: no-repeat;
+  animation: activity-shimmer 1.5s linear infinite;
+}
+@keyframes activity-shimmer {
+  0% { background-position: 0 0, -100% 0; }
+  100% { background-position: 0 0, 200% 0; }
+}
+
 /* ── Popout two-panel layout ── */
 .tracker-card--popout {
   height: 100%;

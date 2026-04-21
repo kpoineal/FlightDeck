@@ -1,5 +1,5 @@
 <script>
-  import { scanners, highlightedItemId } from '../lib/stores.js';
+  import { scanners, highlightedItemId, activeOperations } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
@@ -7,6 +7,8 @@
   import EditableField from './EditableField.svelte';
 
   let { item, expanded = false, onseveritychange, onstatuschange, onpopout, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onrunnow, onrowexpand, onfieldedit } = $props();
+
+  let isChecking = $derived($activeOperations.has(`item:${item.id}`));
 
   let isExpanded = $state(expanded);
   let rowEl = $state(null);
@@ -75,6 +77,7 @@
 <div
   bind:this={rowEl}
   class="tracker-row-wrapper"
+  class:checking={isChecking}
   class:is-new={isNewItem}
   class:is-updated={hasUpdate}
   class:highlighted={showHighlight}
