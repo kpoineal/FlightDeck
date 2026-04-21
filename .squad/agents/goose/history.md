@@ -14,6 +14,14 @@
 ## Learnings
 <!-- Append learnings below -->
 
+### 2026-04-21 — activeOperations Store + Engine Wiring (PR 1 of 2: Visual Activity Indicators)
+- **Task**: Replaced `loading = writable(false)` with `activeOperations = writable(new Map())` and derived `loading` from it. Wired `activeOperations` registration into `scanner-engine.js` (`runScanner`) and `monitor-engine.js` (`runItemCheck`) using try/finally for guaranteed cleanup. Removed manual `loading.set()` calls from `RadarView.svelte`.
+- **Pattern**: `new Map(ops)` required for Svelte reactivity when updating Map stores — Svelte compares by reference.
+- **Entry shape**: `{ type: 'scan'|'monitor', id: string, label: string, startedAt: number }` keyed by `scanner:{id}` or `item:{id}`.
+- **Key files**: `src/svelte/lib/stores.js`, `src/svelte/lib/scanner-engine.js`, `src/svelte/lib/monitor-engine.js`, `src/svelte/components/RadarView.svelte`.
+- **Branch**: `feature/active-operations-store`
+- **Build**: Clean (vite build succeeds). All 68 tests pass. No visual changes — infrastructure only.
+
 ### 2026-04-21 — Requirements Section Proposal for Marketing Site
 - **Task**: Kyle wants a "requirements" area on the marketing site showing two prerequisites: GitHub Copilot license + WorkIQ CLI.
 - **Placement decision**: Between `<Hero />` and `<Features />` — after visitors see what FlightDeck IS, before the feature deep-dive. Kyle said "near the top."
@@ -542,3 +550,16 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
   - Link text: `text-xs sm:text-sm` (smaller on mobile, original on sm+)
 - **Key file**: `site/src/lib/components/Nav.svelte`
 - **Pattern**: Docs site uses Tailwind CSS (via SvelteKit). Mobile-first responsive design — always check that fixed gap/padding values have `sm:` breakpoint variants for mobile.
+
+### 2026-04-21 — Visual Activity Indicators (PR 2 of 2)
+- **Task**: Wired `activeOperations` store into 5 Svelte components to show real-time scanning/checking activity. Added CSS shimmer animation and scanning label.
+- **Components changed**:
+  1. `ScannerSection.svelte` — `scanning` class on header, `running` class + disabled on ⚡ button, "Scanning…" label next to timer (timer stays visible per Kyle's directive).
+  2. `ScheduleControls.svelte` — `is-loading` class + disabled on "Run check now" button, text toggles to "Checking…".
+  3. `TrackerCard.svelte` — `checking` class on article for top-border shimmer.
+  4. `TrackerRow.svelte` — `checking` class on wrapper for top-border shimmer.
+  5. `Topbar.svelte` — status pill shows count when multiple ops active ("3 active"), "Scanning…" for single op, "Connected"/"Ready" when idle.
+- **CSS added**: `.radar-scanning-label` in radar.css (reuses `scan-pulse` keyframes). `.tracker-card.checking` + `.tracker-row-wrapper.checking` + `@keyframes activity-shimmer` in tracking.css (gradient border shimmer).
+- **Pattern**: All existing CSS classes (`scanning`, `running`, `is-loading`) were pre-authored — this PR only wired them into templates. New shimmer uses `background-image` gradient trick for animated top-border without extra DOM elements.
+- **Build**: Clean. All 68 tests pass.
+- **Branch**: `feature/activity-indicators`
