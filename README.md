@@ -86,7 +86,7 @@ Generate AI-powered briefings for your upcoming meetings. Each briefing surfaces
 | **Node.js** | v18 or later ([download](https://nodejs.org/)) |
 | **WorkIQ CLI** | `npm i -g @microsoft/workiq` — installed globally |
 | **Microsoft Copilot license** | Required by WorkIQ for M365 data access |
-| **Tenant admin consent** | Your organization must [grant WorkIQ access](https://www.npmjs.com/package/@microsoft/workiq#admin-setup) to M365 signals |
+| **Tenant admin consent** | Your organization must [grant WorkIQ access](https://github.com/microsoft/work-iq/blob/main/ADMIN-INSTRUCTIONS.md) to M365 signals |
 
 ---
 
@@ -301,7 +301,7 @@ npm test
 | UI framework | [Svelte](https://svelte.dev/) 5 |
 | Build tool | [Vite](https://vite.dev/) 8 |
 | Terminal bridge | [node-pty](https://github.com/microsoft/node-pty) |
-| AI backend | [WorkIQ CLI](https://www.npmjs.com/package/@microsoft/workiq) (Microsoft Copilot) |
+| AI backend | [WorkIQ CLI](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/workiq-overview) (Microsoft Copilot) |
 | Persistence | [electron-store](https://github.com/sindresorhus/electron-store) |
 | Tests | Node.js built-in `node:test` |
 | Screenshots | [Playwright](https://playwright.dev/) |

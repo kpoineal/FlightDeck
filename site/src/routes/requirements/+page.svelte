@@ -110,7 +110,7 @@
 					<h3 class="text-xl font-semibold mb-2">WorkIQ CLI (Tenant Enablement)</h3>
 					<p class="text-sm text-themed-muted leading-relaxed mb-4">WorkIQ connects FlightDeck to your Microsoft 365 — email, Teams, calendar, and docs. Your tenant admin must grant WorkIQ access to M365 signals.</p>
 					<a
-						href="https://www.npmjs.com/package/@microsoft/workiq#admin-setup"
+						href="https://github.com/microsoft/work-iq/blob/main/ADMIN-INSTRUCTIONS.md"
 						target="_blank"
 						rel="noopener"
 						class="text-sm font-medium text-[#0a84ff] no-underline hover:text-[#64d2ff] transition-colors"
