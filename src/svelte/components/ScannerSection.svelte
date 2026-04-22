@@ -1,12 +1,14 @@
 <script>
   import { density, collapsedSections, activeOperations } from '../lib/stores.js';
   import { relativeTime, sortBySeverity } from '../lib/utils.js';
+  import { useClock } from '../lib/clock.svelte.js';
   import { toggleSection } from '../lib/actions.js';
   import TrackerCard from './TrackerCard.svelte';
   import TrackerRow from './TrackerRow.svelte';
 
   let { scanner, items = [], onadditem, onscannerrun, onscannertoggle, onscannersettings, onpopout, onseveritychange, onstatuschange, onmarkseen, ondelete, ondraftstep, onschedulechange, onpromptchange, onmovescanner, onrunnow, onfieldedit } = $props();
 
+  const clock = useClock();
   let sourceId = $derived(`scanner-${scanner.id}`);
   let collapsed = $derived($collapsedSections.includes(sourceId));
   let enabled = $derived(scanner.enabled !== false);
@@ -170,7 +172,7 @@
           role="button" tabindex="0">&times;</span>
       {/if}
       {#if latestActivity > 0}
-        <span class="radar-last-activity">{relativeTime(latestActivity) || ''}</span>
+        <span class="radar-last-activity">{relativeTime(latestActivity, clock.now) || ''}</span>
       {/if}
       {#if nextRunLabel}
         <span class="radar-next-run">{nextRunLabel}</span>
