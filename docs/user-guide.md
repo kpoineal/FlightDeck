@@ -521,6 +521,20 @@ Every item has a lifecycle status that reflects its current state:
 
 Lifecycle transitions can happen automatically based on AI analysis (e.g., an item marked "resolved" by the AI is auto-completed) or manually via item actions.
 
+### Automatic Status Detection
+
+FlightDeck doesn't just track items — it triages them for you. Each time the monitoring AI checks an item, it analyzes the latest signals and automatically updates the lifecycle status based on what it finds:
+
+- **Blocked** — If the AI detects language like "stalled," "blocked," or "waiting on a dependency," the item moves from In Progress to Blocked.
+- **Waiting** — If signals indicate the ball is in someone else's court — "pending review," "awaiting response" — the status shifts to Waiting.
+- **Complete** — When the AI sees "resolved," "completed," or "closed" — or when your **Done when** criteria are met — the item is marked Complete, monitoring is automatically disabled, and a completion timestamp is recorded.
+
+You can always override a status manually, but in most cases FlightDeck handles it before you even check. The **triage progress bar** on the dashboard shows how many of your active items have been reviewed, so you can tell at a glance whether anything still needs your attention.
+
+### Done Criteria
+
+The **Done when** field on the Overview tab lets you define what "finished" looks like for each item — for example, *"Jordan confirms receipt of the budget spreadsheet"* or *"Contract signed by both parties."* This text is automatically woven into every monitoring prompt, so the AI actively watches for signals that match your criteria and marks the item complete when they appear.
+
 ---
 
 

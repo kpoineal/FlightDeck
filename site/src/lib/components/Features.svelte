@@ -33,7 +33,7 @@
 			icon: '🎯',
 			title: 'Track',
 			tagline: 'Set it. Forget it. Get notified.',
-			description: 'Promote any item to active monitoring. FlightDeck watches for meaningful changes on your schedule and sends desktop notifications when something moves.',
+			description: 'Promote any item to active monitoring. FlightDeck watches for meaningful changes, auto-detects when items become blocked or complete, and sends desktop notifications when something moves.',
 			screenshot: '03-tracker-card-expanded'
 		},
 		{
