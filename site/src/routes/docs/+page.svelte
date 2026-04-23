@@ -406,6 +406,33 @@
 				</tbody>
 			</table>
 
+			<h3>Automatic Status Detection</h3>
+			<p>
+				FlightDeck doesn't just track items — it <strong>triages them for you</strong>.
+				Each time the monitoring AI checks an item, it analyzes the latest signals and
+				automatically updates the lifecycle status based on what it finds:
+			</p>
+			<ul>
+				<li><strong>Blocked</strong> — If the AI detects language like "stalled," "blocked," or "waiting on a dependency," the item moves from In Progress to Blocked</li>
+				<li><strong>Waiting</strong> — If signals indicate the ball is in someone else's court — "pending review," "awaiting response" — the status shifts to Waiting</li>
+				<li><strong>Complete</strong> — When the AI sees "resolved," "completed," or "closed" — or when your <strong>Done when</strong> criteria are met — the item is marked Complete, monitoring is automatically disabled, and a completion timestamp is recorded</li>
+			</ul>
+			<p>
+				You can always override a status manually, but in most cases FlightDeck handles
+				it before you even check. The <strong>triage progress bar</strong> on the dashboard
+				shows how many of your active items have been reviewed, so you can tell at a glance
+				whether anything still needs your attention.
+			</p>
+
+			<h3>Done Criteria</h3>
+			<p>
+				The <strong>Done when</strong> field on the Overview tab lets you define what "finished" looks like
+				for each item — for example, <em>"Jordan confirms receipt of the budget spreadsheet"</em> or
+				<em>"Contract signed by both parties."</em> This text is automatically woven into every
+				monitoring prompt, so the AI actively watches for signals that match your criteria
+				and marks the item complete when they appear.
+			</p>
+
 			<!-- Briefings -->
 			<h2 id="briefings">Briefings</h2>
 			<img

@@ -29,6 +29,12 @@
 			reverse: false
 		},
 		{
+			title: 'Automatic Status Tracking',
+			description: 'FlightDeck continuously triages your items — automatically detecting when something becomes blocked, is waiting on someone else, or is complete. Define "done" criteria and the AI watches for the signals that match, updating status and disabling monitoring when the job is finished.',
+			screenshot: '04-tracker-card-updated',
+			reverse: true
+		},
+		{
 			title: 'Full History',
 			description: 'Every scan, every recommendation, every system event — timestamped and searchable. The complete audit trail of your work signals, always available.',
 			screenshot: '07-history-view',
