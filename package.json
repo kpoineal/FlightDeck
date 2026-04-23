@@ -68,7 +68,7 @@
     "vite": "^8.0.8"
   },
   "dependencies": {
-    "@microsoft/workiq": "^0.4.0",
+    "@microsoft/workiq": "^0.4.1",
     "electron-store": "^11.0.2",
     "node-pty": "1.1.0"
   }
