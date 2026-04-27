@@ -114,13 +114,12 @@
 			<h2 class="text-xs font-semibold uppercase tracking-widest text-[#0a84ff] mb-6">AI processing</h2>
 			<div class="rounded-2xl card-themed p-6 space-y-4">
 				<p class="text-themed-muted leading-relaxed">
-					FlightDeck uses AI to generate briefings, prioritize items, and scan for actionable work. When you configure an
-					AI provider (such as OpenAI or Azure OpenAI), prompts containing relevant context from your tracked items are sent
-					to that provider's API.
+					FlightDeck uses AI to generate briefings, prioritize items, and scan for actionable work. AI features are powered
+					by the <strong class="text-themed">WorkIQ CLI</strong>, which uses GitHub Copilot as its underlying model.
 				</p>
 				<p class="text-themed-muted leading-relaxed">
-					Your AI API key is stored locally on your machine. FlightDeck communicates directly with your chosen AI provider —
-					no data passes through any FlightDeck-operated infrastructure.
+					FlightDeck does not store API keys, connect to third-party AI services, or use any LLMs outside of GitHub Copilot.
+					All AI interactions are handled through your existing GitHub Copilot subscription.
 				</p>
 			</div>
 		</section>
