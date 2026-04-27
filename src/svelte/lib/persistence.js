@@ -332,6 +332,19 @@ export async function loadPersistentState(isDemo = false) {
     collapsedSections.set(Array.isArray(parsed.collapsedSections) ? parsed.collapsedSections : []);
 
     if (parsed.connected === true) {
+      // Re-validate that EULA is still accepted before restoring connected state.
+      // Set connected optimistically; scanner-engine will reset if EULA check fails.
+      if (window.workiq && typeof window.workiq.acceptEula === 'function') {
+        window.workiq.acceptEula().then((result) => {
+          if (!result.success) {
+            connected.set(false);
+            savePersistentState();
+          }
+        }).catch(() => {
+          connected.set(false);
+          savePersistentState();
+        });
+      }
       connected.set(true);
     }
 
