@@ -496,6 +496,14 @@
 
 /* ── Minimal (row) density ── */
 
+/* ── Drag-and-drop target ── */
+.radar-section.drag-over {
+  outline: 2px dashed var(--accent, #0a84ff);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent, #0a84ff) 8%, transparent);
+  transition: outline 0.15s ease, background 0.15s ease;
+}
+
 /* ── Responsive ── */
 @media (max-width: 860px) {
   .radar-section-items { grid-template-columns: 1fr; }

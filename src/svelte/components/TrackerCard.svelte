@@ -32,6 +32,8 @@
 
   let showHighlight = $derived(isHighlighted && hasAnimated);
   let promptPanelOpen = $state(false);
+  let isDragging = $state(false);
+  let canDrag = $state(false);
 
   let isTerminalStatus = $derived(item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived');
   let isNewItem = $derived(!isTerminalStatus && item.isNew === true);
@@ -62,6 +64,17 @@
   );
 
   function setTab(tab) { activeTab = tab; }
+
+  function handleDragStart(e) {
+    isDragging = true;
+    e.dataTransfer.setData('text/plain', item.id);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDragEnd() {
+    isDragging = false;
+    canDrag = false;
+  }
 </script>
 
 <article
@@ -71,8 +84,12 @@
   class:has-new-update={hasNew}
   class:is-new={isNewItem}
   class:is-updated={hasUpdate}
+  class:is-dragging={isDragging}
   class:highlighted={showHighlight}
   class:snoozed-card={item.lifecycleStatus === 'snoozed'}
+  draggable={!isTerminalStatus && canDrag}
+  on:dragstart={handleDragStart}
+  on:dragend={handleDragEnd}
   data-tracker-id={item.id}
   data-item-severity={item.severity || 'Observe'}
   data-item-status={item.lifecycleStatus || 'in-progress'}
@@ -80,6 +97,12 @@
 >
   <div class="tracker-head">
     <div class="tracker-head-left">
+      {#if !isTerminalStatus}
+        <span class="drag-handle"
+          on:pointerenter={() => { canDrag = true; }}
+          on:pointerleave={() => { canDrag = false; }}
+          aria-hidden="true">⠿</span>
+      {/if}
       <select class="severity-select {sevClass}" value={item.severity}
         on:change={(e) => onseveritychange?.({ itemId: item.id, value: e.target.value })}>
         <option value="Critical">Critical</option>

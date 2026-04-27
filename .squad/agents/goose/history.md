@@ -603,3 +603,14 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Key files**: `ScannerForm.svelte`, `scanner.js`, `modal.css`, `scanner.css`.
 - **Pattern**: Default collapsed state for edit mode reduces cognitive load — users editing a scanner don't need to see all fields at once. Expand for new scanners where all fields are relevant.
 - **a11y**: Used existing project pattern (`<!-- svelte-ignore a11y-click-events-have-key-events -->`) for div click handlers, consistent with `ScannerSettingsModal.svelte`.
+
+### 2026-04-27 — Drag-and-Drop Between Scanner Sections (DEC-102)
+- **Task**: Implemented HTML5 Drag and Drop to move TrackerCards/TrackerRows between ScannerSections.
+- **Architecture**: TrackerCard + TrackerRow = drag sources with `⠿` grip handle; ScannerSection = drop target. No library — native HTML5 DnD, Chromium-only in Electron.
+- **Drag handle pattern**: `pointerenter`/`pointerleave` on grip toggles `canDrag` state, which controls `draggable` attribute on the container element. Avoids conflicting with selects/buttons. Drag is disabled for terminal-status items.
+- **Event syntax constraint**: Svelte compiler forbids mixing `on:click` (legacy) and `onclick` (new) event syntax in the same component. Since existing codebase uses `on:` syntax throughout, all new drag handlers also use `on:dragstart`, `on:drop`, etc. for consistency.
+- **Drop target edge cases**: `ondragleave` uses `e.currentTarget.contains(e.relatedTarget)` guard to prevent false clears from child element bubbling. Collapsed sections auto-expand after 300ms hover via setTimeout. Inline filters clear on drop so the moved card is visible.
+- **History + toast**: RadarView's `handleMoveScanner` now skips no-op same-scanner drops, logs to history, and shows a confirmation toast via `showToast`.
+- **Key files**: `TrackerCard.svelte`, `TrackerRow.svelte`, `ScannerSection.svelte`, `RadarView.svelte`, `tracking.css`, `radar.css`.
+- **Build**: Clean. All 68 tests pass.
+- **Branch**: `feature/drag-drop-scanners`
