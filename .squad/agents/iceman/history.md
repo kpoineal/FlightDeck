@@ -93,6 +93,20 @@
 
 **What changed:**
 - Rewrote README.md from scrappy POC doc to polished open-source README.
+
+### 2026-04-27 — Time-Based Scanner Filtering Analysis
+
+**Context:** Kyle asked about adding time-based filter/sort to scanner sections in radar view.
+
+**Key findings from codebase:**
+- `ScannerSection.svelte` already has inline filter state (`inlineFilter`) supporting severity, status, new, updated. Filter is toggle-based (click to activate, click again to clear). Auto-clears when zero results.
+- `sortBySeverity()` in `utils.js` is the current sort — new/updated items first, then severity rank. This is the only sort axis.
+- Items carry rich timestamp data: `discoveredAt`, `trackedAt`, `lastRunAt`, `lastChangedAt`, `completedAt`, `snoozeUntil`, `dueAt`, `nextRunAt`, plus `updateHistory[]` with per-entry timestamps.
+- Scanners themselves have `lastRunAt` and `nextRunAt`.
+- `relativeTime()` and `signalRecencyLabel()` already exist in utils.js for human-readable time formatting.
+- The `latestActivity` derived value already computes the most recent timestamp per scanner section.
+
+**Recommendation delivered:** Sort toggle (recently updated / last scanned) + due-soon filter pill + stale item visual indicator. Additive to existing filters — no replacement. P1 priority.
 - Added centered logo (`src/icon.png`) + tagline + shield badges (License, Node.js, Electron, Build, Changelog).
 - Added proper Table of Contents with anchor links.
 - Replaced verbose Problem/Solution section with a punchy one-paragraph elevator pitch at the top.
@@ -264,5 +278,26 @@
 - Styles: existing design system utilities sufficient, no new CSS needed
 
 **Decisions captured:** `.squad/decisions/inbox/iceman-requirements-section.md`
+
+### 2026-04-27 — Staleness Threshold Product Recommendation
+
+**User request:** Kyle asked "How long before an item is considered stale? Should this be configurable?"
+
+**Context:** Scanner filtering scope confirmed — Recently Updated sort, Due Soon filter pill, and Stale Items visual indicator. The earlier discussion proposed "items not scanned in >2× their schedule interval show a stale indicator."
+
+**Recommendation delivered:**
+- **Schedule-relative heuristic:** 2× interval (with 1h floor, 48h ceiling) for interval items; missed-slot + 4h grace for weekly; 4h after `oneTimeAt` for one-time; never stale for disabled/no-schedule items.
+- **Not configurable in v1.** The 2× multiplier already adapts to user-chosen frequency. Per-scanner config adds UI complexity for marginal benefit. Global config is worse — wrong for both 15m and weekly items simultaneously.
+- **Follow-up lever (v2):** Per-item "snooze stale badge" toggle if users report false positives. Not a numeric threshold picker.
+- **Implementation shape:** `isStale(item)` pure function in `models/item.js`, amber/yellow visual indicator (not red), tooltip with last-check time and expected interval.
+- **Constants:** `STALE_MULTIPLIER = 2`, `STALE_FLOOR_MS = 3600000`, `STALE_CEILING_MS = 172800000`, `STALE_GRACE_MS = 14400000` in `constants.js`.
+
+**Key data model observations:**
+- `lastRunAt`, `scheduleType`, `scheduleValue`, `nextRunAt`, `oneTimeAt`, `monitorEnabled` — all fields needed for staleness already exist on items.
+- `computeNextRunAt()` in `models/item.js` handles all schedule types — staleness logic can reuse `intervalValueToMinutes()` and work alongside existing scheduling.
+- Interval options range from 15m to 4h. With 2× multiplier: staleness triggers between 1h (floor) and 8h.
+- Weekly items use `weeklyDays` + `weeklyTimes` with `computeNextWeeklyRun()` — staleness naturally keys off `nextRunAt`.
+
+**Decisions captured:** `.squad/decisions/inbox/iceman-staleness-threshold.md`
 
 <!-- Append learnings here as they are discovered -->

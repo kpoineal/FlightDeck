@@ -426,6 +426,14 @@ export function sortBySeverity(items, useHasNewUpdate = false) {
   });
 }
 
+export function sortByRecent(items) {
+  return [...items].sort((a, b) => {
+    const tsA = new Date(a.lastChangedAt || a.lastRunAt || a.discoveredAt || 0).getTime() || 0;
+    const tsB = new Date(b.lastChangedAt || b.lastRunAt || b.discoveredAt || 0).getTime() || 0;
+    return tsB - tsA;
+  });
+}
+
 export function relativeTime(value, _now = Date.now()) {
   if (!value) return null;
   const parsed = new Date(value);

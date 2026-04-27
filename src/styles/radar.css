@@ -60,6 +60,7 @@
   gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
+  position: relative;
 }
 .radar-section-icon { font-size: 1rem; }
 .radar-section-name { font-weight: 600; font-size: 0.9rem; color: var(--text); }
@@ -249,6 +250,57 @@
   font-weight: 600;
   white-space: nowrap;
   animation: scan-pulse 1.5s ease-in-out infinite;
+}
+
+/* Sort toggle */
+.radar-sort-toggle {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+  position: relative;
+}
+.radar-sort-toggle:hover,
+.radar-sort-toggle:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+
+/* Sort dropdown */
+.radar-sort-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-surface, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  min-width: 140px;
+  padding: 4px 0;
+}
+.radar-sort-option {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 0.7rem;
+  color: var(--text-secondary, var(--text-muted));
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.radar-sort-option:hover {
+  background: var(--bg-hover, var(--bg-inset));
+  color: var(--text);
+}
+.radar-sort-option.active {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .radar-section-collapse { transition: transform 0.2s ease; }

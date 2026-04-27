@@ -1,8 +1,9 @@
 <script>
-  import { density, collapsedSections, activeOperations } from '../lib/stores.js';
-  import { relativeTime, sortBySeverity } from '../lib/utils.js';
+  import { density, collapsedSections, activeOperations, scannerSortPrefs } from '../lib/stores.js';
+  import { relativeTime, sortBySeverity, sortByRecent } from '../lib/utils.js';
   import { useClock } from '../lib/clock.svelte.js';
   import { toggleSection } from '../lib/actions.js';
+  import { savePersistentState } from '../lib/persistence.js';
   import TrackerCard from './TrackerCard.svelte';
   import TrackerRow from './TrackerRow.svelte';
 
@@ -14,7 +15,34 @@
   let enabled = $derived(scanner.enabled !== false);
   let isScanning = $derived($activeOperations.has(`scanner:${scanner.id}`));
   let isMinimal = $derived($density === 'minimal');
-  let sorted = $derived(sortBySeverity(items, true));
+  let sortMode = $derived($scannerSortPrefs[scanner.id] || 'severity');
+  let sorted = $derived(sortMode === 'recent' ? sortByRecent(items) : sortBySeverity(items, true));
+
+  // Sort dropdown state
+  let sortDropdownOpen = $state(false);
+
+  function setSortMode(mode) {
+    $scannerSortPrefs = { ...$scannerSortPrefs, [scanner.id]: mode };
+    sortDropdownOpen = false;
+    savePersistentState();
+  }
+
+  function handleSortToggleClick(e) {
+    e.stopPropagation();
+    sortDropdownOpen = !sortDropdownOpen;
+  }
+
+  function handleSortToggleKeydown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      sortDropdownOpen = !sortDropdownOpen;
+    }
+  }
+
+  function handleWindowClick() {
+    if (sortDropdownOpen) sortDropdownOpen = false;
+  }
 
   // Inline filter state
   let inlineFilter = $state(null);
@@ -92,6 +120,8 @@
     return inlineFilter && inlineFilter.type === type && inlineFilter.value === value;
   }
 </script>
+
+<svelte:window on:click={handleWindowClick} />
 
 <div class="radar-section" class:disabled={!enabled}>
   <!-- Section header -->
@@ -179,6 +209,24 @@
       {/if}
       {#if isScanning}
         <span class="radar-scanning-label">Scanning…</span>
+      {/if}
+      <span class="radar-sort-toggle" title="Change sort order"
+        on:click={handleSortToggleClick}
+        on:keydown={handleSortToggleKeydown}
+        role="button" tabindex="0">
+        sort: {sortMode === 'recent' ? 'recent' : 'severity'} ▾
+      </span>
+      {#if sortDropdownOpen}
+        <div class="radar-sort-dropdown" on:click|stopPropagation>
+          <button class="radar-sort-option" class:active={sortMode === 'severity'}
+            on:click={() => setSortMode('severity')}>
+            {sortMode === 'severity' ? '✓ ' : ''}Severity
+          </button>
+          <button class="radar-sort-option" class:active={sortMode === 'recent'}
+            on:click={() => setSortMode('recent')}>
+            {sortMode === 'recent' ? '✓ ' : ''}Recently Updated
+          </button>
+        </div>
       {/if}
     </div>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
