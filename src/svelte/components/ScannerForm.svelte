@@ -28,7 +28,6 @@
   let crossScannerDedup = $state(isEdit ? scanner.crossScannerDedup !== false : true);
   let autoMonitorSeverityThreshold = $state((isEdit && scanner.autoMonitorSeverityThreshold) || 'all');
   let maxItemsPerScan = $state(isEdit ? (scanner.maxItemsPerScan || 10) : 10);
-  let runOnStartup = $state(isEdit ? scanner.runOnStartup === true : false);
   let missedRunPolicy = $state((isEdit && scanner.missedRunPolicy) || 'run-once');
   let dedupStrategy = $state((isEdit && scanner.dedupStrategy) || 'evidence-url');
   let excludeKeywords = $state(isEdit && Array.isArray(scanner.excludeKeywords) ? scanner.excludeKeywords.join(', ') : '');
@@ -46,6 +45,10 @@
   let defaultMonitorWeeklyDays = $state(isEdit && Array.isArray(scanner.defaultMonitorWeeklyDays) ? [...scanner.defaultMonitorWeeklyDays] : [...DEFAULT_WEEKLY_DAYS]);
   let defaultMonitorWeeklyTimes = $state(isEdit && Array.isArray(scanner.defaultMonitorWeeklyTimes) ? [...scanner.defaultMonitorWeeklyTimes] : [...DEFAULT_WEEKLY_TIMES]);
 
+  let optionsOpen = $state(!isEdit);
+  let monitoringDefaultsOpen = $state(!isEdit);
+  let lifecycleOpen = $state(!isEdit);
+
   function collectValues() {
     return {
       name: name.trim(),
@@ -59,7 +62,6 @@
       crossScannerDedup,
       autoMonitorSeverityThreshold,
       maxItemsPerScan: Number(maxItemsPerScan) || 10,
-      runOnStartup,
       missedRunPolicy,
       dedupStrategy,
       excludeKeywords: excludeKeywords.split(',').map(s => s.trim()).filter(Boolean),
@@ -161,7 +163,12 @@
     </div>
   </div>
 
-  <div class="scanner-form-section-label">Options</div>
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="scanner-form-section-label collapsible" on:click={() => optionsOpen = !optionsOpen}>
+    <span class="section-chevron">{optionsOpen ? '▾' : '▸'}</span> Options
+  </div>
+  {#if optionsOpen}
   <div class="scanner-form-row scanner-form-options">
     <div class="scanner-form-field">
       <label class="scanner-form-label" title="Which Microsoft 365 signal types to scan: email, chat, meetings, or documents">Signal Types</label>
@@ -213,10 +220,15 @@
     <label class="scanner-toggle-label" title="Automatically start monitoring newly discovered items so you get ongoing updates"><input type="checkbox" bind:checked={autoMonitorNewItems} /> Auto-monitor new items</label>
     <label class="scanner-toggle-label" title="Only run this scanner during business hours (Mon–Fri, 8am–6pm local time)"><input type="checkbox" bind:checked={workHoursOnly} /> Work hours only</label>
     <label class="scanner-toggle-label" title="Prevent the same item from appearing in multiple scanners by checking across all scanner results"><input type="checkbox" bind:checked={crossScannerDedup} /> Cross-scanner dedup</label>
-    <label class="scanner-toggle-label" title="Run this scanner immediately when FlightDeck opens, in addition to its regular schedule"><input type="checkbox" bind:checked={runOnStartup} /> Run on startup</label>
   </div>
+  {/if}
 
-  <div class="scanner-form-section-label">Monitoring Defaults</div>
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="scanner-form-section-label collapsible" on:click={() => monitoringDefaultsOpen = !monitoringDefaultsOpen}>
+    <span class="section-chevron">{monitoringDefaultsOpen ? '▾' : '▸'}</span> Monitoring Defaults
+  </div>
+  {#if monitoringDefaultsOpen}
   <div class="scanner-form-row scanner-form-options">
     <div class="scanner-form-field">
       <label class="scanner-form-label" title="Minimum severity required for auto-monitoring: monitor everything, only Critical, or Elevated and above">Auto-monitor threshold</label>
@@ -306,8 +318,14 @@
     <label class="scanner-toggle-label" title="Only run monitoring checks during business hours for items from this scanner"><input type="checkbox" bind:checked={defaultMonitorWorkHoursOnly} /> Work hours only</label>
     <label class="scanner-toggle-label" title="Show desktop notifications when monitored items have meaningful changes"><input type="checkbox" bind:checked={defaultMonitorNotifyEnabled} /> Notify on changes</label>
   </div>
+  {/if}
 
-  <div class="scanner-form-section-label">Lifecycle</div>
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="scanner-form-section-label collapsible" on:click={() => lifecycleOpen = !lifecycleOpen}>
+    <span class="section-chevron">{lifecycleOpen ? '▾' : '▸'}</span> Lifecycle
+  </div>
+  {#if lifecycleOpen}
   <div class="scanner-form-row scanner-form-options">
     <div class="scanner-form-field">
       <label class="scanner-form-label" title="Automatically archive items after this many days with no new activity (0 = disabled)">Auto-archive after (days)</label>
@@ -322,6 +340,7 @@
       <input class="tracking-input" type="text" placeholder="newsletter, digest, all-hands" bind:value={excludeKeywords} />
     </div>
   </div>
+  {/if}
 
   <div class="scanner-form-actions">
     <button class="small-btn primary" on:click={() => onsave?.(collectValues())}>

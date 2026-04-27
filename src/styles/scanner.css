@@ -49,6 +49,21 @@
   padding-bottom: 2px;
   border-bottom: 1px solid var(--border-card);
 }
+.scanner-form-section-label.collapsible {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.15s ease;
+}
+.scanner-form-section-label.collapsible:hover {
+  color: var(--text);
+}
+.section-chevron {
+  font-size: 0.7rem;
+  display: inline-block;
+}
 .scanner-form-options {
   align-items: flex-start;
 }
