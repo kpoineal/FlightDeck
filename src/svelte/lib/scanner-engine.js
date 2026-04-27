@@ -162,10 +162,10 @@ export async function runScanner(scanner) {
   );
 
   // Record discovered titles in scanner's recentTitles for cross-move dedup
-  const newRecentEntries = filtered.map((i) => ({
-    title: cleanDisplayText(i.title || '').toLowerCase(),
-    at: nowIso(),
-  }));
+  const existingRecentSet = new Set(recentTitles.map((e) => e.title));
+  const newRecentEntries = filtered
+    .map((i) => ({ title: cleanDisplayText(i.title || '').toLowerCase(), at: nowIso() }))
+    .filter((e) => !existingRecentSet.has(e.title));
   const updatedRecentTitles = [...recentTitles, ...newRecentEntries];
 
   // Auto-monitor if scanner has autoMonitorNewItems
