@@ -49,6 +49,50 @@
   // Accordion: track which row is expanded (only one at a time)
   let expandedRowId = $state(null);
 
+  // Drag-and-drop target state
+  let isDragOver = $state(false);
+  let dragExpandTimer = $state(null);
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault();
+    isDragOver = true;
+    if (collapsed && !dragExpandTimer) {
+      dragExpandTimer = setTimeout(() => {
+        if (collapsed) toggleSection(sourceId);
+        dragExpandTimer = null;
+      }, 300);
+    }
+  }
+
+  function handleDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      isDragOver = false;
+      if (dragExpandTimer) {
+        clearTimeout(dragExpandTimer);
+        dragExpandTimer = null;
+      }
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    isDragOver = false;
+    if (dragExpandTimer) {
+      clearTimeout(dragExpandTimer);
+      dragExpandTimer = null;
+    }
+    const itemId = e.dataTransfer.getData('text/plain');
+    if (!itemId) return;
+    if (collapsed) toggleSection(sourceId);
+    inlineFilter = null;
+    onmovescanner?.({ itemId, scannerId: scanner.id });
+  }
+
   function handleRowExpand(data) {
     expandedRowId = data.itemId;
   }
@@ -123,7 +167,11 @@
 
 <svelte:window on:click={handleWindowClick} />
 
-<div class="radar-section" class:disabled={!enabled}>
+<div class="radar-section" class:disabled={!enabled} class:drag-over={isDragOver}
+  on:dragover={handleDragOver}
+  on:dragenter={handleDragEnter}
+  on:dragleave={handleDragLeave}
+  on:drop={handleDrop}>
   <!-- Section header -->
   <div class="radar-section-header {sevBorderClass}" class:disabled={!enabled} class:scanning={isScanning}
     on:click={() => toggleSection(sourceId)}

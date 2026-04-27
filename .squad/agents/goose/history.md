@@ -14,6 +14,15 @@
 ## Learnings
 <!-- Append learnings below -->
 
+### 2026-04-27 — Drag-and-Drop Between Scanners Brainstorm
+- **Task**: Brainstormed drag-and-drop for moving TrackerCards between ScannerSections in RadarView.
+- **Recommendation**: HTML5 Drag and Drop API (no library) — Electron is Chromium-only, zero cross-browser issues, and `svelte-dnd-action` has uncertain Svelte 5 runes compatibility.
+- **Key insight**: `handleMoveScanner` in RadarView already does exactly what a drop handler needs (`items.update()` to change `scannerId` + `savePersistentState()`). No data-layer changes required — DnD is purely a UI interaction layer.
+- **Architecture**: TrackerCard/TrackerRow = drag source (`draggable="true"` + `dataTransfer.setData('text/plain', item.id)`). ScannerSection = drop target (`ondragover/ondrop`). Drag handle (`⠿`) on card to avoid conflicting with selects/buttons/tabs.
+- **Edge cases identified**: `ondragleave` bubbling needs `.contains(relatedTarget)` guard; collapsed sections should auto-expand on 300ms hover or on drop; inline filters should clear on drop so the card is visible; TrackerRow is missing `onmovescanner` prop (needs wiring).
+- **Effort**: S-M (Small-Medium). ~3 hours total. Complexity driven by dragleave bubbling, collapsed auto-expand timer, and drag handle placement to avoid interaction conflicts.
+- **Decision doc**: `.squad/decisions/inbox/goose-drag-drop-brainstorm.md`
+
 ### 2026-04-21 — activeOperations Store + Engine Wiring (PR 1 of 2: Visual Activity Indicators)
 - **Task**: Replaced `loading = writable(false)` with `activeOperations = writable(new Map())` and derived `loading` from it. Wired `activeOperations` registration into `scanner-engine.js` (`runScanner`) and `monitor-engine.js` (`runItemCheck`) using try/finally for guaranteed cleanup. Removed manual `loading.set()` calls from `RadarView.svelte`.
 - **Pattern**: `new Map(ops)` required for Svelte reactivity when updating Map stores — Svelte compares by reference.
@@ -594,3 +603,14 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Key files**: `ScannerForm.svelte`, `scanner.js`, `modal.css`, `scanner.css`.
 - **Pattern**: Default collapsed state for edit mode reduces cognitive load — users editing a scanner don't need to see all fields at once. Expand for new scanners where all fields are relevant.
 - **a11y**: Used existing project pattern (`<!-- svelte-ignore a11y-click-events-have-key-events -->`) for div click handlers, consistent with `ScannerSettingsModal.svelte`.
+
+### 2026-04-27 — Drag-and-Drop Between Scanner Sections (DEC-102)
+- **Task**: Implemented HTML5 Drag and Drop to move TrackerCards/TrackerRows between ScannerSections.
+- **Architecture**: TrackerCard + TrackerRow = drag sources with `⠿` grip handle; ScannerSection = drop target. No library — native HTML5 DnD, Chromium-only in Electron.
+- **Drag handle pattern**: `pointerenter`/`pointerleave` on grip toggles `canDrag` state, which controls `draggable` attribute on the container element. Avoids conflicting with selects/buttons. Drag is disabled for terminal-status items.
+- **Event syntax constraint**: Svelte compiler forbids mixing `on:click` (legacy) and `onclick` (new) event syntax in the same component. Since existing codebase uses `on:` syntax throughout, all new drag handlers also use `on:dragstart`, `on:drop`, etc. for consistency.
+- **Drop target edge cases**: `ondragleave` uses `e.currentTarget.contains(e.relatedTarget)` guard to prevent false clears from child element bubbling. Collapsed sections auto-expand after 300ms hover via setTimeout. Inline filters clear on drop so the moved card is visible.
+- **History + toast**: RadarView's `handleMoveScanner` now skips no-op same-scanner drops, logs to history, and shows a confirmation toast via `showToast`.
+- **Key files**: `TrackerCard.svelte`, `TrackerRow.svelte`, `ScannerSection.svelte`, `RadarView.svelte`, `tracking.css`, `radar.css`.
+- **Build**: Clean. All 68 tests pass.
+- **Branch**: `feature/drag-drop-scanners`

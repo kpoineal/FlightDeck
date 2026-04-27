@@ -136,6 +136,13 @@ export async function runScanner(scanner) {
       })
     : capped;
 
+  // Prune recentTitles older than 24h
+  const RECENT_TITLE_TTL_MS = 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - RECENT_TITLE_TTL_MS;
+  const recentTitles = (scanner.recentTitles || []).filter(
+    (entry) => new Date(entry.at).getTime() > cutoff
+  );
+
   // Dedup against existing items
   const currentItems = get(items);
   const existingIds = new Set(currentItems.map((i) => i.id));
@@ -144,9 +151,22 @@ export async function runScanner(scanner) {
       .filter((i) => i.scannerId === scanner.id)
       .map((i) => cleanDisplayText(i.title || '').toLowerCase())
   );
+
+  // Add recent titles to dedup set
+  for (const entry of recentTitles) {
+    existingTitles.add(entry.title);
+  }
+
   const unique = filtered.filter(
     (i) => !existingIds.has(i.id) && !existingTitles.has(cleanDisplayText(i.title || '').toLowerCase())
   );
+
+  // Record discovered titles in scanner's recentTitles for cross-move dedup
+  const existingRecentSet = new Set(recentTitles.map((e) => e.title));
+  const newRecentEntries = filtered
+    .map((i) => ({ title: cleanDisplayText(i.title || '').toLowerCase(), at: nowIso() }))
+    .filter((e) => !existingRecentSet.has(e.title));
+  const updatedRecentTitles = [...recentTitles, ...newRecentEntries];
 
   // Auto-monitor if scanner has autoMonitorNewItems
   if (scanner.autoMonitorNewItems && unique.length) {
@@ -184,6 +204,7 @@ export async function runScanner(scanner) {
         nextRunAt: s.scheduleType === 'one-time' ? null : computeScannerNextRunAt({ ...s, lastRunAt: updatedLastRunAt }),
         itemCount: get(items).filter((i) => i.scannerId === s.id).length,
         enabled: s.scheduleType === 'one-time' ? false : s.enabled,
+        recentTitles: updatedRecentTitles,
       };
     })
   );

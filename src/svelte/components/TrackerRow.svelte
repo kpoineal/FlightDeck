@@ -36,14 +36,28 @@
   let promptPanelOpen = $state(false);
   let peopleOpen = $state(true);
   let linksOpen = $state(true);
+  let isDragging = $state(false);
+  let canDrag = $state(false);
 
   function handleRowClick(e) {
     // Don't toggle if clicking interactive elements
     if (e.target.closest('select') || e.target.closest('input') ||
-        e.target.closest('label') || e.target.closest('button')) return;
+        e.target.closest('label') || e.target.closest('button') ||
+        e.target.closest('.drag-handle')) return;
     isExpanded = !isExpanded;
     // Notify parent for accordion behavior
     if (isExpanded) onrowexpand?.({ itemId: item.id });
+  }
+
+  function handleDragStart(e) {
+    isDragging = true;
+    e.dataTransfer.setData('text/plain', item.id);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDragEnd() {
+    isDragging = false;
+    canDrag = false;
   }
 
   // Accordion: collapse when another row expands
@@ -82,8 +96,12 @@
   class:checking={isChecking}
   class:is-new={isNewItem}
   class:is-updated={hasUpdate}
+  class:is-dragging={isDragging}
   class:highlighted={showHighlight}
   class:snoozed-card={item.lifecycleStatus === 'snoozed'}
+  draggable={!isTerminalStatus && canDrag}
+  on:dragstart={handleDragStart}
+  on:dragend={handleDragEnd}
   data-tracker-id={item.id}
   data-item-severity={item.severity || 'Observe'}
   data-item-status={item.lifecycleStatus || 'in-progress'}
@@ -94,6 +112,12 @@
     on:click={handleRowClick}
     role="button" tabindex="0"
     on:keydown={(e) => e.key === 'Enter' && handleRowClick(e)}>
+    {#if !isTerminalStatus}
+      <span class="drag-handle"
+        on:pointerenter={() => { canDrag = true; }}
+        on:pointerleave={() => { canDrag = false; }}
+        aria-hidden="true">⠿</span>
+    {/if}
     <select class="severity-select {sevClass}" value={item.severity}
       on:change={(e) => onseveritychange?.({ itemId: item.id, value: e.target.value })}
       on:click|stopPropagation>

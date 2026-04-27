@@ -1548,3 +1548,226 @@
 **Minimum viable setup (Phase 0):** Install `vite` + `@sveltejs/vite-plugin-svelte` + `svelte` as dev deps. Create `vite.config.js` targeting renderer. Create single `HistoryView.svelte`. Mount into existing `#viewHistory` div. Validate: HMR, CSP, Electron IPC (`window.workiq`) from Svelte.
 
 **Source:** `.squad/decisions/inbox/maverick-svelte-revised.md`
+
+---
+
+## DEC-086: Separate "New" vs "Updated" Visual Treatment
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-17 | **Status:** Implemented
+**What:** Split the combined `hasNew` boolean into two independent display paths: `isNewItem` (green "NEW" badge + green "Discovered:" bar) for first-time scanner discoveries, and `hasUpdate` (amber "UPDATED" badge + amber "Updated:" bar) for monitor-detected changes. Both shown when both flags are true. CSS glow: green `is-new`, amber `is-updated`, blended when both. Design tokens: `--color-success` (green), `--color-elevated` (amber). Rendering/display only — no data model changes.
+**Why:** Previously `isNew` and `hasNewUpdate` were collapsed into a single `hasNew`, producing identical green "NEW" badges for both new items and updated items. Wrong timestamps on new cards (`lastChangedAt` is null for new items) and no way for users to distinguish discoveries from changes.
+**Source:** `.squad/decisions/inbox/goose-new-vs-updated.md`
+
+---
+
+## DEC-087: New vs Updated Badge Separation — Test Coverage
+
+**Author:** Merlin (Tester) | **Date:** 2026-04-17 | **Status:** Verified
+**What:** Added 33 tests across 2 new suites to `test/renderer-tracking-renderers.test.js` verifying the DEC-086 badge separation. All 626 tests pass (622 + 4 skipped). Covers card view, row view, CSS classes, timestamp bars, terminal status suppression, Mark as Seen visibility, and unseen count display.
+**Why:** Regression protection for the new badge separation behavior.
+**Source:** `.squad/decisions/inbox/merlin-new-vs-updated-tests.md`
+
+---
+
+## DEC-088: Fix --color-new Light Mode Inconsistency
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-20 | **Status:** Implemented
+**What:** Changed `--color-new` in `html[data-theme="light"]` from `#007aff` (blue) to `#a855f7` (purple) to match the media query light block and dark mode's purple intent. One-line CSS change. PR #91 → Fixes #90.
+**Why:** The explicit light-mode block in tokens.css had drifted to blue while the media query block was correct purple. "New" item indicators appeared blue when user explicitly selects light theme.
+**Source:** `.squad/decisions/inbox/goose-light-mode-color.md`
+
+---
+
+## DEC-089: Fix Incremental Cleanup Exit Code Propagation
+
+**Author:** Jester (DevOps) | **Date:** 2026-04-20 | **Status:** Implemented
+**What:** Fixed "Cleanup old incrementals" step in `.github/workflows/incremental.yml`. Added `$global:LASTEXITCODE = 0` after each tag push and `exit 0` at end of script to prevent `git push origin :refs/tags/...` non-zero exit code from leaking.
+**Why:** Run #24654922912 failed at cleanup even though all builds, tests, signing, and release creation succeeded. Cleanup is best-effort.
+**Source:** `.squad/decisions/inbox/jester-incremental-cleanup-fix.md`
+
+---
+
+## DEC-090: Docs Site Scaffolded
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-20 | **Status:** Implemented
+**What:** Built SvelteKit static marketing + docs site in `site/`. Stack: SvelteKit 2, adapter-static, Tailwind CSS v4, Vite 8. Dark-mode-first, Apple-inspired design. Pages: Landing (`/`), Docs (`/docs`), 404 fallback.
+**Key decisions:** Tailwind v4 `@theme {}` in app.css (no config file). `@tailwindcss/vite` plugin. `paths.base = '/FlightDeck'` for GitHub Pages. Scroll animations via IntersectionObserver + CSS transitions. Prerendering enabled. Content hardcoded — MDsveX deferred.
+**Source:** `.squad/decisions/inbox/goose-docs-site.md`
+
+---
+
+## DEC-091: Docs Site Mobile Nav Fix
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-20 | **Status:** Implemented
+**What:** Fixed mobile layout issue where FlightDeck icon overlapped "Features" nav link. Added responsive Tailwind breakpoints to Nav.svelte — tighter gaps/text/padding on mobile scaling up at `sm:` breakpoint. Added `shrink-0` on logo link.
+**Why:** Kyle reported icon "mushed" with features link on mobile.
+**Source:** `.squad/decisions/inbox/goose-mobile-icon-fix.md`
+
+---
+
+## DEC-092: Requirements "Powered By" Section — Marketing Site (consolidated)
+
+**Author:** Iceman (Product Owner), Goose (Frontend Dev) | **Date:** 2026-04-21 | **Status:** Implemented
+**What:** Added "Powered By" requirements section to the marketing site communicating two prerequisites (GitHub Copilot license, WorkIQ CLI tenant enablement) without download-funnel friction. Placed between Hero and Features as a compact bridge section. Two-card horizontal layout using `.card-themed` tokens. "Powered by" framing (not "Requires"). Goose implemented as `PoweredBy.svelte` in `+page.svelte`. Footer clarifies WorkIQ CLI ships built-in.
+**Why:** Users need to know about prerequisites before downloading, but messaging shouldn't read like a warning label. "Powered by" signals ecosystem membership. Placement after Hero means visitors see what FlightDeck IS before learning what they NEED.
+**Source:** `.squad/decisions/inbox/iceman-requirements-section.md`, `.squad/decisions/inbox/goose-requirements-section.md`, `.squad/decisions/inbox/goose-powered-by-section.md`
+
+---
+
+## DEC-093: Requirements Page Created
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-21 | **Status:** Implemented
+**What:** Created dedicated `/requirements` route on the marketing site with platform support, license/access requirements, build-from-source software prereqs, and Demo Mode callout. Cross-links wired from PoweredBy footer, Download subtitle, and Footer resources column.
+**Why:** Kyle approved Iceman's recommendation to give requirements their own page rather than just the inline PoweredBy section.
+**Source:** `.squad/decisions/inbox/goose-requirements-page.md`
+
+---
+
+## DEC-094: Nav Alignment and Overflow Fixes
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-21 | **Status:** Implemented
+**What:** Matched icon height to title SVG (`h-6 w-6` instead of `h-7 w-7`), reduced right-side nav gaps from `sm:gap-8` to `sm:gap-4 md:gap-6` to prevent theme toggle clipping. Surgical CSS-only fix in Nav.svelte.
+**Why:** User-reported visual bugs.
+**Source:** `.squad/decisions/inbox/goose-nav-fixes.md`
+
+---
+
+## DEC-095: activeOperations Store Replaces Writable Loading Flag
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-21 | **Status:** Implemented
+**What:** `loading` is now a derived store (`$ops.size > 0`) from `activeOperations` (a `writable(new Map())`). Scanner and monitor engines register/clear operations via try/finally. All `loading.set()` call sites removed. PR 1 of 2 for visual activity indicators — no visual changes yet.
+**Why:** Enables per-operation tracking for future activity indicators while preserving backward-compatible global `loading` behavior.
+**Source:** `.squad/decisions/inbox/goose-active-operations-store.md`
+
+---
+
+## DEC-096: Scanner Filtering — Scope Narrowed to Sort Only
+
+**Author:** Kyle (via Copilot) | **Date:** 2026-04-27 | **Status:** Directive
+**What:** Build only the sort toggle for scanner cards (Recently Updated sort). Due Soon filter pill and Stale indicator are deferred — not in scope for now.
+**Why:** Kyle concerned about UI overload. Starting with the lowest-risk, zero-visual-addition feature (sort replaces existing count element).
+**Supersedes:** Original 3-feature scope (Recently Updated sort + Due Soon filter pill + Stale items indicator).
+**Source:** `.squad/decisions/inbox/copilot-directive-2026-04-27-sort-only.md`
+
+---
+
+## DEC-097: Time-Based Scanner Filtering — Product Analysis + Feasibility (consolidated)
+
+**Author:** Iceman (Product Owner), Goose (Frontend Dev) | **Date:** 2026-04-27 | **Status:** Discussion (narrowed by DEC-096)
+**What:** Product analysis and frontend feasibility for time-based filter/sort options in scanner sections. Two-phase approach:
+- **Phase 1 (S):** Sort toggle — "Recently Updated" / "Severity" cycle — replaces static `(N)` count with interactive `12▾sev` indicator. Zero net visual addition. `sortBySeverity` replaced by configurable sort in ScannerSection. Key files: `ScannerSection.svelte`, `utils.js`.
+- **Phase 2 (deferred per DEC-096):** "Due Soon" filter pill (conditional, only when items have `dueAt` within 48h). Stale indicator (card-level only, `opacity: 0.75` + 💤 label — NOT a header pill). Staleness = schedule-relative with 2× multiplier, 1h floor, 48h ceiling.
+**Data dependency:** `lastChangedAt` for "last activity," `discoveredAt` always populated, scanner `lastRunAt` for "last scanned."
+**Why:** Existing filters answer "what kind" — time-based sorting answers "what changed recently." All timestamps already exist. P1 priority.
+**Source:** `.squad/decisions/inbox/iceman-scanner-filtering-discussion.md`, `.squad/decisions/inbox/goose-scanner-time-filtering.md`
+
+---
+
+## DEC-098: Scanner Section UI Audit — Clutter-Conscious Feature Integration
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-27 | **Status:** Proposal
+**What:** Detailed UI audit of ScannerSection header (up to 14 inline elements + 5 action buttons in worst case). Feature integration proposals:
+- **Sort toggle (Feature A):** Replace `(N)` count with clickable `12▾sev` / `12▾new`. Zero net visual addition. Reuses `.radar-section-count` position.
+- **Due Soon pill (Feature B):** Conditional pill after status badges, `⏰ 2 due soon` in orange. Zero clutter for scanners without due dates. Follows existing conditional badge pattern.
+- **Stale indicator (Feature C):** Card/row-level only (NOT header). `opacity: 0.75` + `💤 stale` label. Occupies same slot as NEW/UPDATED badges (mutually exclusive). No header change.
+**Clutter mitigation:** Sort replaces existing element; Due Soon is conditional; Stale stays at card level with reduced opacity. Both density modes (card + row) are safe.
+**Source:** `.squad/decisions/inbox/goose-filtering-ui-detail.md`
+
+---
+
+## DEC-099: Staleness Threshold — Product Recommendation
+
+**Author:** Iceman (Product Owner) | **Date:** 2026-04-27 | **Status:** Proposal
+**What:** Schedule-relative staleness with global default, not configurable in v1. Logic: interval items → stale after 2× `scheduleValue` (min 1h, max 48h); weekly → missed next slot + 4h grace; one-time → 4h after `oneTimeAt`; no schedule → never stale. Implemented as pure `isStale(item)` function. Visual: muted amber indicator on card (not red). Tooltip: "Last checked {timeAgo} — expected every {interval}."
+**Why:** Users don't know what threshold they want. Schedule-relative approach is already adaptive. Per-scanner config adds complexity for a feature most users never touch. Hardcode multiplier/floor/ceiling as constants — easy to tune later.
+**Source:** `.squad/decisions/inbox/iceman-staleness-threshold.md`
+
+---
+
+## DEC-100: Scanner Form Collapsible Sections Default State
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-27 | **Status:** Implemented
+**What:** Collapsible form sections default to collapsed in edit mode, expanded in new-item mode (`$state(!isEdit)`). Applied to Options, Monitoring Defaults, and Lifecycle sections in `ScannerForm.svelte`.
+**Why:** Reduces visual noise in the most common interaction (tweaking an existing scanner).
+**Source:** `.squad/decisions/inbox/goose-scanner-form-ux.md`
+
+---
+
+## DEC-101: Remove Dead runOnStartup Field
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-27 | **Status:** Implemented
+**What:** Removed `runOnStartup` from scanner form, `collectValues()` output, and `normalizeScannerDefinition()` model. Field was stored but never consumed by scanner engine. Existing persisted data retaining the field is harmless.
+**Why:** Dead code removal. Field created UI clutter with no functional effect.
+**Source:** `.squad/decisions/inbox/goose-scanner-form-ux.md`
+
+---
+
+## DEC-102: Drag-and-Drop Between Scanners — Brainstorm (consolidated)
+
+**Author:** Iceman (Product Owner), Goose (Frontend Dev), Maverick (Lead) | **Date:** 2026-04-27 | **Status:** Brainstorm | **Priority:** P2 | **Requested by:** Kyle Poineal
+
+### Problem
+The current "Move to scanner" dropdown is a 5-step interaction buried in TrackerCard's Monitor tab. Users don't discover it. Drag-and-drop is the universal spatial metaphor for reorganization and matches FlightDeck's kanban-like scanner column layout.
+
+### Product Analysis (Iceman)
+**Use cases:** (1) Morning triage reassignment, (2) Reorganizing after creating a new scanner, (3) Correcting AI scanner misclassification, (4) Priority escalation via scanner proximity, (5) Cleaning up after filter changes. DnD is primary for triage; dropdown remains as precise fallback for collapsed/offscreen targets. Single-item drag only in v1 — multi-select deferred.
+
+**UX requirements:** Drag ghost (40-60% opacity), source placeholder (dotted outline), drop zone highlighting (soft border/tint), collapsed sections accept drops (auto-expand briefly), minimum drag distance threshold (8-10px), undo toast with 5-8s timeout. Accessibility: keyboard equivalent or rely on dropdown as a11y fallback; `aria-grabbed`/`aria-dropeffect` attributes.
+
+### Frontend Approach (Goose)
+**Recommendation: HTML5 Drag and Drop API.** Zero deps, Chromium-only (Electron), ~80-120 lines across 3 components. `svelte-dnd-action` rejected (Svelte 5 runes compat risk, over-engineered). `@dnd-kit` rejected (React).
+
+**Component changes:**
+- `TrackerCard.svelte` / `TrackerRow.svelte`: `draggable="true"`, `ondragstart` (set `dataTransfer` with `itemId`), `ondragend`. Drag handle: `⠿` grip dots.
+- `ScannerSection.svelte`: `ondragover` (preventDefault), `ondrop` (read `dataTransfer`, fire `onmovescanner`), `ondragenter`/`ondragleave` for highlight. CSS: `outline: 2px dashed var(--accent)` + `color-mix(in srgb, var(--accent) 8%, transparent)`.
+- `RadarView.svelte`: `draggedItemId` + `dropTargetScannerId` in component state (props or Svelte context). Existing `handleMoveScanner` handles the mutation — no store changes.
+
+**Effort:** S-M.
+
+### Architecture Review (Maverick)
+**Critical risk: Re-discovery duplicates.** Scanner-engine dedup is scoped per-scanner (`currentItems.filter(i => i.scannerId === scanner.id)`). If item X is dragged from Scanner A → B, Scanner A's next run won't see it in its scoped title set → duplicate created.
+
+**Recommended fix:** Add `manuallyAssigned: boolean` to item model. Scanner-engine checks global items with `manuallyAssigned === true` during dedup. Surgical — doesn't change behavior for non-moved items.
+
+**State management:** Component-level drag state (`$state()`), store-level drop effects (existing `handleMoveScanner` + `savePersistentState()`). Defer store mutation to `dragend`, never during `dragover` (prevents mid-drag animation interruption from background monitor checks).
+
+**Undo:** Minimal single-action undo via component `$state`. Toast: "Moved to Scanner B. [Undo]" clearing after 8s. No undo stack. Matches app simplicity — no undo exists for delete/status/severity today.
+
+**Multi-select:** v2. No multi-select exists anywhere in FlightDeck today. Single-item drag is already a major UX win.
+
+**History logging:** Add `addHistory('action', 'Moved "Item Title" from Scanner A → Scanner B')` inside `handleMoveScanner`.
+
+**Source:** `.squad/decisions/inbox/iceman-drag-drop-brainstorm.md`, `.squad/decisions/inbox/goose-drag-drop-brainstorm.md`, `.squad/decisions/inbox/maverick-drag-drop-brainstorm.md`
+
+---
+
+## DEC-103: Per-Scanner recentTitles Dedup (consolidated)
+
+**Author:** Maverick (Lead), Viper (Backend Dev) | **Date:** 2026-04-27 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Problem:** Scanner-engine dedup scopes title checks to `items.filter(i => i.scannerId === scanner.id)`. Moving item X from Scanner A → Scanner B causes Scanner A to re-discover X as "new" on its next run.
+
+**Decision:** Kyle's `recentTitles` approach over Maverick's `manuallyAssigned` flag. Each scanner maintains a `recentTitles: [{title, at}]` array with 24h TTL. After discovery, cleaned titles are appended. On next run, Scanner A checks `recentTitles` and skips moved items. Entries older than 24h are pruned at scan start.
+
+**Key details:**
+- Title normalization: `cleanDisplayText(title).toLowerCase()` — matches existing dedup set construction.
+- Persistence: Free — lives on scanner object, flows through `savePersistentState()`.
+- Model validation: `normalizeScannerDefinition` validates `{ title: string, at: string }` shape; malformed entries dropped on load.
+- Size bounded by `maxItemsPerScan` × runs/day. At 2h interval = ~120 entries/day max.
+- 24h TTL gap is acceptable — signals usually age out of LLM results by then.
+
+**Files changed:** `src/svelte/lib/scanner-engine.js`, `src/svelte/lib/models/scanner.js`.
+
+**Source:** `.squad/decisions/inbox/maverick-recent-titles-dedup.md`, `.squad/decisions/inbox/viper-recent-titles-impl.md`
+
+---
+
+## DEC-104: Drag-and-Drop Event Syntax — Svelte 4 `on:` Style
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-27 | **Status:** Implemented
+
+**Decision:** Used Svelte 4 `on:dragstart`/`on:drop` event syntax instead of Svelte 5 `ondragstart`/`ondrop` for all new drag-and-drop handlers. The Svelte compiler enforces that a single component cannot mix legacy and new event handler syntax, and all existing components already use `on:event` throughout.
+
+**Implication:** When the codebase migrates to Svelte 5 event syntax, all drag-and-drop handlers in TrackerCard, TrackerRow, and ScannerSection should be converted alongside existing handlers in a single pass.
+
+**Source:** `.squad/decisions/inbox/goose-drag-drop-impl.md`

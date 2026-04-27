@@ -300,4 +300,29 @@
 
 **Decisions captured:** `.squad/decisions/inbox/iceman-staleness-threshold.md`
 
+### 2026-04-27 — Drag-and-Drop Between Scanners Brainstorm
+
+**User request:** Kyle asked to brainstorm on drag-and-drop between scanner sections in the radar view.
+
+**Current state assessed:**
+- "Move to scanner" exists as a `<select>` dropdown in TrackerCard's Monitor tab — functional but buried (5-step interaction for a 1-concept action).
+- `handleMoveScanner()` in RadarView.svelte already handles the state mutation (`item.scannerId` update + persist).
+- ScannerSection.svelte renders collapsible grouped sections with rich headers (severity dots, filters, sort). Both card and minimal/list density modes.
+- No drag-and-drop exists anywhere in the app currently.
+
+**Key product decisions:**
+- **P2 priority** — the dropdown works; this is convenience/polish, not missing capability. Higher-priority items (Command Bar, Notification Center, Trends) should ship first.
+- **Single-item drag only in v1** — multi-select drag deferred. Serial single-item moves are still significantly faster than the dropdown workflow.
+- **Drop on collapsed headers must work** — collapsed sections are valid drop targets with brief auto-expand confirmation.
+- **Toast + Undo required** — no undo system exists in FlightDeck; a 5-second undo toast is essential for accidental drop recovery.
+- **Drag handle for minimal density** — list rows need a grip icon; card view can drag from header area.
+- **Filtered view tolerance** — if target section's inline filter hides the dropped item, toast notifies user. Move isn't blocked.
+- **Sequencing:** (1) Toast+Undo infra first, (2) DnD for card density, (3) extend to list density.
+
+**5 use cases documented:** Morning triage, new scanner reorganization, AI misclassification correction, priority escalation, post-filter cleanup.
+
+**16 acceptance criteria written** covering core DnD, edge cases (collapsed, filtered, empty, distance threshold), feedback/undo, and accessibility.
+
+**Decisions captured:** `.squad/decisions/inbox/iceman-drag-drop-brainstorm.md`
+
 <!-- Append learnings here as they are discovered -->

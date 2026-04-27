@@ -10,6 +10,7 @@
   import ScannerSection from './ScannerSection.svelte';
   import AddTaskModal from './AddTaskModal.svelte';
   import ScannerSettingsModal from './ScannerSettingsModal.svelte';
+  import { showToast } from './Toast.svelte';
 
   let sorted = $derived(sortBySeverity($filteredItems, true));
   let groups = $derived(groupItemsBySource(sorted, $scanners));
@@ -134,9 +135,14 @@
   }
 
   function handleMoveScanner(data) {
+    const item = $items.find(i => i.id === data.itemId);
+    if (!item || item.scannerId === data.scannerId) return;
+    const targetScanner = $scanners.find(s => s.id === data.scannerId);
     items.update(($items) => $items.map(i =>
       i.id === data.itemId ? { ...i, scannerId: data.scannerId } : i
     ));
+    addHistory('action', `Moved "${item.title}" to ${targetScanner?.name || 'scanner'}`);
+    showToast(`Moved to ${targetScanner?.name || 'scanner'}`, { icon: '📦' });
     savePersistentState();
   }
 
