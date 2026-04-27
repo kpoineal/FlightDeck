@@ -66,7 +66,7 @@
       <span class="version-badge visible">v{version}</span>
     {/if}
     {#if updateAvailable && !updateDismissed}
-      <span class="update-indicator">
+      <span class="update-indicator visible">
         <span class="update-dot"></span>
         <span class="update-tooltip">
           <span>{updateText}</span>
