@@ -32,6 +32,7 @@
 					<li><a href="{base}/requirements" class="text-sm text-themed-muted hover:text-themed transition-colors no-underline">Requirements</a></li>
 					<li><a href="https://github.com/kpoineal/FlightDeck/blob/main/CONTRIBUTING.md" class="text-sm text-themed-muted hover:text-themed transition-colors no-underline" target="_blank" rel="noopener">Contributing</a></li>
 					<li><a href="https://github.com/kpoineal/FlightDeck/issues" class="text-sm text-themed-muted hover:text-themed transition-colors no-underline" target="_blank" rel="noopener">Issues</a></li>
+					<li><a href="{base}/privacy" class="text-sm text-themed-muted hover:text-themed transition-colors no-underline">Privacy</a></li>
 				</ul>
 			</div>
 		</div>
