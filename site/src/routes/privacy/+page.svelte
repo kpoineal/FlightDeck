@@ -89,15 +89,17 @@
 			<h2 class="text-xs font-semibold uppercase tracking-widest text-[#0a84ff] mb-6">Microsoft 365 connection</h2>
 			<div class="rounded-2xl card-themed p-6 space-y-4">
 				<p class="text-themed-muted leading-relaxed">
-					When you connect FlightDeck to Microsoft 365, it authenticates directly with Microsoft's identity platform using
-					OAuth 2.0. FlightDeck uses delegated permissions to read your emails, calendar events, and chat messages on your behalf.
+					FlightDeck connects to Microsoft 365 through the <strong class="text-themed">WorkIQ CLI</strong>.
+					FlightDeck itself does not ask for your credentials, manage authentication, or handle tokens directly.
 				</p>
 				<p class="text-themed-muted leading-relaxed">
-					Your Microsoft 365 credentials are never seen or stored by FlightDeck. Authentication tokens are managed by
-					Microsoft's libraries and stored locally in your system's secure credential storage.
+					All authentication and Microsoft Graph API access is handled entirely by the WorkIQ CLI, which authenticates
+					with Microsoft's identity platform using OAuth 2.0 and delegated permissions to read your emails, calendar events,
+					and chat messages on your behalf.
 				</p>
 				<p class="text-themed-muted leading-relaxed">
-					Data retrieved from Microsoft 365 is processed locally on your device and is never transmitted to any third party.
+					Your Microsoft 365 credentials are never seen or stored by FlightDeck. Data retrieved from Microsoft 365 is
+					processed locally on your device and is never transmitted to any third party.
 				</p>
 			</div>
 		</section>
