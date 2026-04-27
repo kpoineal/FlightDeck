@@ -389,3 +389,27 @@
 **Decision written to:** `.squad/decisions/inbox/maverick-svelte-revised.md`
 
 **Decision written to:** `.squad/decisions/inbox/maverick-svelte-assessment.md`
+
+### 2026-04-27 — Drag-and-Drop Between Scanners (Architectural Review)
+
+**Context:** Kyle wants to brainstorm drag-and-drop for moving cards between scanner groups in Radar view. Currently, items move between scanners via a dropdown in TrackerCard's Monitor tab (`handleMoveScanner` in RadarView).
+
+**Critical design gap found — scanner-engine dedup is scanner-scoped:**
+- `scanner-engine.js` ~L144 dedupes by title only within `items.filter(i => i.scannerId === scanner.id)`. If a user drags an item from Scanner A → Scanner B, Scanner A's next run will **not** see it in its scope and will re-create a duplicate.
+- Fix: add `manuallyAssigned` flag to item model. Scanner-engine should also check globally for title matches on items with `manuallyAssigned === true`.
+
+**Architecture decisions:**
+- Drag state (which card is dragged, drop target highlight) stays **component-local** in RadarView — no store pollution for transient UI state.
+- Drop execution reuses existing `handleMoveScanner` — mechanically identical to the dropdown.
+- Undo: single-action "last move" memory with transient toast, NOT a full action stack.
+- Multi-select drag: v2, not v1. No multi-select exists anywhere in the app today.
+- Existing dropdown move remains as accessible fallback (HTML5 drag-and-drop has poor screen-reader support).
+- No new module — drag event handlers (~40 lines) distributed across ScannerSection + TrackerCard.
+
+**Key risk: popout view.** Popout reads item state via IPC. Verify it doesn't cache scanner grouping locally — if it does, a move in the main window could desync.
+
+**Performance:** Moving one item triggers `items.update()` → `filteredItems` → `groupItemsBySource()`. This is already the cost of any item mutation. No new perf concern.
+
+**NOT recommended:** sortable reordering within a scanner (conflicts with sort prefs), dragging between different views (different data models).
+
+**Decision written to:** `.squad/decisions/inbox/maverick-drag-drop-brainstorm.md`

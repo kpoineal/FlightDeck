@@ -1,0 +1,16 @@
+chore(squad): merge drag-drop brainstorm + 18 inbox entries into decisions.md
+
+- Orchestration log: 2026-04-27T-brainstorm-drag-drop.md
+- Session log: 2026-04-27T-brainstorm-drag-drop.md
+- Merged DEC-086 through DEC-102 into decisions.md
+  - DEC-086/087: New vs Updated badge separation + tests
+  - DEC-088: Light mode color fix
+  - DEC-089: Incremental cleanup exit code fix
+  - DEC-090/091: Docs site + mobile nav fix
+  - DEC-092/093/094: Requirements/PoweredBy section + page + nav fixes
+  - DEC-095: activeOperations store
+  - DEC-096: Scanner filtering scope narrowed to sort only
+  - DEC-097/098/099: Time-based filtering analysis + UI audit + staleness
+  - DEC-100/101: Scanner form UX + dead field removal
+  - DEC-102: Drag-and-drop brainstorm (consolidated Iceman+Goose+Maverick)
+- Moved 22 inbox files to inbox/merged/
