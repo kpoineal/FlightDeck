@@ -585,3 +585,12 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Key files audited**: `ScannerSection.svelte`, `TrackerCard.svelte`, `TrackerRow.svelte`, `radar.css`, `tracking.css`, `tokens.css`.
 - **Phase recommendation**: Sort first (zero risk), Due Soon second (follows existing badge pattern), Stale third (most design judgment).
 - **Decision document**: `.squad/decisions/inbox/goose-filtering-ui-detail.md`
+
+### 2026-04-27 — Scanner Settings Modal UX Improvements (3 changes)
+- **Task**: Three scanner settings modal changes — remove dead `runOnStartup` field, position modal below topbar, make Options/Monitoring Defaults/Lifecycle sections collapsible.
+- **TASK 1 — Remove runOnStartup**: Removed `runOnStartup` state variable, `collectValues()` return field, toggle checkbox from `ScannerForm.svelte`, and `runOnStartup` normalization from `scanner.js` model. Existing persisted data is left untouched (harmless dead field).
+- **TASK 2 — Modal positioning**: Changed `.modal` in `modal.css` from `align-items: center` to `flex-start` with `padding: 72px 16px 16px` to clear the sticky topbar (z-index 100 vs modal z-index 99). Added `max-height: calc(100vh - 96px)` and `overflow-y: auto` to `.modal-card` for scroll on overflow.
+- **TASK 3 — Collapsible sections**: Added `$state` booleans (`optionsOpen`, `monitoringDefaultsOpen`, `lifecycleOpen`) defaulting to `!isEdit` (expanded for new scanner, collapsed for edit). Section labels became clickable `<div class="collapsible">` with chevron indicators (▸/▾). Content wrapped in `{#if}` blocks. Added `.collapsible` and `.section-chevron` CSS to `scanner.css`.
+- **Key files**: `ScannerForm.svelte`, `scanner.js`, `modal.css`, `scanner.css`.
+- **Pattern**: Default collapsed state for edit mode reduces cognitive load — users editing a scanner don't need to see all fields at once. Expand for new scanners where all fields are relevant.
+- **a11y**: Used existing project pattern (`<!-- svelte-ignore a11y-click-events-have-key-events -->`) for div click handlers, consistent with `ScannerSettingsModal.svelte`.
