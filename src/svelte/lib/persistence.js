@@ -13,6 +13,7 @@ import {
   density,
   filter,
   collapsedSections,
+  scannerSortPrefs,
 } from './stores.js';
 import {
   STORAGE_KEY,
@@ -330,6 +331,11 @@ export async function loadPersistentState(isDemo = false) {
     filter.set((rawFilter === 'all' || rawFilter === 'archived') ? rawFilter : 'all');
 
     collapsedSections.set(Array.isArray(parsed.collapsedSections) ? parsed.collapsedSections : []);
+    scannerSortPrefs.set(
+      parsed.scannerSortPrefs && typeof parsed.scannerSortPrefs === 'object'
+        ? parsed.scannerSortPrefs
+        : {}
+    );
 
     if (parsed.connected === true) {
       // Re-validate that EULA is still accepted before restoring connected state.
@@ -477,6 +483,7 @@ export async function savePersistentState(isDemo = false) {
     density: currentDensity,
     filter: get(filter),
     collapsedSections: get(collapsedSections),
+    scannerSortPrefs: get(scannerSortPrefs),
     trackingDensity: currentDensity,
     radarDensity: currentDensity,
   };

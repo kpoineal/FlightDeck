@@ -25,6 +25,7 @@ export const mode = writable('Radar');
 export const density = writable('full');
 export const filter = writable('all');
 export const collapsedSections = writable([]);
+export const scannerSortPrefs = writable({});
 export const expandedBriefingMeetingIds = writable([]);
 
 // ── Navigation / highlight stores ────────────────────────────────────

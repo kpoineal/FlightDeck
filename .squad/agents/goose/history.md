@@ -563,3 +563,25 @@ enderTrackingMode() card template. Removed ${originBadge} from .tracker-head-rig
 - **Pattern**: All existing CSS classes (`scanning`, `running`, `is-loading`) were pre-authored — this PR only wired them into templates. New shimmer uses `background-image` gradient trick for animated top-border without extra DOM elements.
 - **Build**: Clean. All 68 tests pass.
 - **Branch**: `feature/activity-indicators`
+
+### 2026-04-27 — Scanner Time-Based Filtering Feasibility Analysis
+- **Task**: Kyle requested a frontend feasibility discussion on adding time-based filter/sort to scanner sections.
+- **Existing pattern**: `ScannerSection.svelte` uses `inlineFilter = { type, value }` state with clickable chip badges in the header. One filter active at a time, auto-clears on zero results. Sorting is separate via `sortBySeverity()`.
+- **Data availability**: `lastChangedAt` is the strongest candidate for "last activity" — reliably populated, falls back to `updateHistory[0].timestamp`. `discoveredAt` always set. `lastRunAt` and `nextRunAt` only populated for monitor-enabled items.
+- **Proposed phasing**:
+  - Phase 1 (S-size): Time filter chips ("Recent", "Today", "Stale") — additive to existing chip row, ~80 lines.
+  - Phase 2 (M-size): Sort selector dropdown (Severity / Last Updated / Last Scanned / Newest) — new control type, ~120 lines.
+- **Key insight**: Filter and sort are independent concerns. The existing `filteredItems` derived chain (`sorted → filter`) means adding a configurable sort just swaps the first step.
+- **Key files**: `ScannerSection.svelte`, `utils.js`, `stores.js`, `radar.css`.
+
+### 2026-04-27 — Scanner Section Clutter-Conscious UI Audit (Three Features)
+- **Task**: Kyle approved three features (Recently Updated sort, Due Soon filter, Stale indicator) but expressed concern about UI overload. Conducted full visual element inventory and proposed clutter-conscious integration approach.
+- **Current header density**: Up to 13 conditional inline elements + 5 action buttons in `.radar-section-header-left` and `.radar-section-header-actions`. Header already uses `flex-wrap: wrap` and can spill to 2 lines when narrow.
+- **Key findings**:
+  - Sort toggle: **zero net visual addition** — replace static `(N)` count with interactive `12▾sev` toggle that cycles between severity-first and recent-first sort.
+  - Due Soon pill: **conditional** — `⏰ N due` badge only appears when items have `dueAt` within 48h. Most scanners show zero change. Same pattern as existing blocked/waiting badges.
+  - Stale indicator: **card/row-level only** — NOT a header pill. Reduced opacity (0.75) + `💤 stale` label in `.tracker-head-right` where NEW/UPDATED badges live. Mutually exclusive with those badges.
+- **Clutter mitigation**: Sort replaces existing element (net zero). Due Soon is conditional (zero for most scanners). Stale is card-level (no header change). Net worst case: +1 header pill on scanners with due dates.
+- **Key files audited**: `ScannerSection.svelte`, `TrackerCard.svelte`, `TrackerRow.svelte`, `radar.css`, `tracking.css`, `tokens.css`.
+- **Phase recommendation**: Sort first (zero risk), Due Soon second (follows existing badge pattern), Stale third (most design judgment).
+- **Decision document**: `.squad/decisions/inbox/goose-filtering-ui-detail.md`
