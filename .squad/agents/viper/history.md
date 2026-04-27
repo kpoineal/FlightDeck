@@ -261,3 +261,20 @@
 - **Task**: Investigated whether radar/tracker items fail to migrate when upgrading from v1.0.4 to v1.1.0.
 - **Outcome**: Research completed (silent success — response lost). Findings contributed to overall root cause analysis. Root cause was in renderer state.js, not in backend data migration.
 - **Cross-ref**: Goose found the root cause (`loadPersistentState` early return), coordinator applied fix. See DEC-083.
+
+### 2026-04-27 — Per-Scanner recentTitles Dedup with 24h TTL
+
+**Problem:** When an item is dragged from Scanner A to Scanner B (scannerId changes), Scanner A's next run would re-discover the title as new because the existing dedup only checked items scoped to `i.scannerId === scanner.id`.
+
+**Solution:** Each scanner now maintains a `recentTitles` array of `{ title, at }` entries. On each scan run, entries older than 24h are pruned, remaining entries are added to the `existingTitles` dedup set, and all filtered (post-cap, post-exclude) item titles are appended. The array persists via the existing `savePersistentState()` path since it lives on the scanner object.
+
+**Implementation details:**
+- `scanner-engine.js` (`runScanner`): ~15 lines added — prune stale entries, merge into dedup set, record new entries from `filtered`, write `updatedRecentTitles` into the scanner metadata update block.
+- `models/scanner.js` (`normalizeScannerDefinition`): 3 lines — validates and normalizes `recentTitles` on load (filters for `{ title: string, at: string }` shape).
+- Title normalization uses `cleanDisplayText(title).toLowerCase()` to match existing dedup logic.
+- Records from `filtered` (not `unique`) — captures all titles the scanner attempted, even those deduped by ID, preventing re-discovery from any path.
+- TTL constant `RECENT_TITLE_TTL_MS = 86400000` (24h) is function-scoped in `runScanner`.
+
+**Key file paths:**
+- Engine: `src/svelte/lib/scanner-engine.js`
+- Model: `src/svelte/lib/models/scanner.js`
