@@ -10,7 +10,7 @@
   display: none;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 72px 16px 16px;
   z-index: 99;
   animation: fadeIn 0.2s ease;
 }
@@ -27,6 +27,8 @@
   flex-direction: column;
   gap: 16px;
   box-shadow: var(--shadow);
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
   transform: scale(0.95);
   animation: modalPop 0.3s cubic-bezier(0.2, 0, 0, 1) forwards;
 }

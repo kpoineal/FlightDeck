@@ -39,7 +39,6 @@ export function normalizeScannerDefinition(raw) {
     crossScannerDedup: raw?.crossScannerDedup !== false,
     autoMonitorSeverityThreshold: SEVERITY_THRESHOLD_OPTIONS.some((o) => o.value === raw?.autoMonitorSeverityThreshold) ? raw.autoMonitorSeverityThreshold : 'all',
     maxItemsPerScan: Number.isFinite(Number(raw?.maxItemsPerScan)) && Number(raw.maxItemsPerScan) >= 1 && Number(raw.maxItemsPerScan) <= 25 ? Number(raw.maxItemsPerScan) : 10,
-    runOnStartup: raw?.runOnStartup === true,
     missedRunPolicy: MISSED_RUN_POLICY_OPTIONS.some((o) => o.value === raw?.missedRunPolicy) ? raw.missedRunPolicy : 'skip',
     dedupStrategy: DEDUP_STRATEGY_OPTIONS.some((o) => o.value === raw?.dedupStrategy) ? raw.dedupStrategy : 'both',
     excludeKeywords: Array.isArray(raw?.excludeKeywords) ? raw.excludeKeywords.filter((v) => typeof v === 'string' && v.trim()) : [],
