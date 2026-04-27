@@ -62,6 +62,9 @@ export function normalizeScannerDefinition(raw) {
     lastRunAt: raw?.lastRunAt || null,
     nextRunAt: raw?.nextRunAt || null,
     itemCount: Number(raw?.itemCount) || 0,
+    recentTitles: Array.isArray(raw?.recentTitles) ? raw.recentTitles.filter(
+      (e) => e && typeof e.title === 'string' && typeof e.at === 'string'
+    ) : [],
   };
 }
 
