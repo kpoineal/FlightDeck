@@ -115,11 +115,11 @@
 			<div class="rounded-2xl card-themed p-6 space-y-4">
 				<p class="text-themed-muted leading-relaxed">
 					FlightDeck uses AI to generate briefings, prioritize items, and scan for actionable work. AI features are powered
-					by the <strong class="text-themed">WorkIQ CLI</strong>, which uses GitHub Copilot as its underlying model.
+					by the <strong class="text-themed">WorkIQ CLI</strong>, which uses Copilot as its backend.
 				</p>
 				<p class="text-themed-muted leading-relaxed">
-					FlightDeck does not store API keys, connect to third-party AI services, or use any LLMs outside of GitHub Copilot.
-					All AI interactions are handled through your existing GitHub Copilot subscription.
+					FlightDeck does not store API keys or connect to third-party AI services.
+					All AI interactions are handled through your existing Copilot subscription.
 				</p>
 			</div>
 		</section>
