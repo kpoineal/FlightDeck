@@ -1738,3 +1738,36 @@ The current "Move to scanner" dropdown is a 5-step interaction buried in Tracker
 **History logging:** Add `addHistory('action', 'Moved "Item Title" from Scanner A → Scanner B')` inside `handleMoveScanner`.
 
 **Source:** `.squad/decisions/inbox/iceman-drag-drop-brainstorm.md`, `.squad/decisions/inbox/goose-drag-drop-brainstorm.md`, `.squad/decisions/inbox/maverick-drag-drop-brainstorm.md`
+
+---
+
+## DEC-103: Per-Scanner recentTitles Dedup (consolidated)
+
+**Author:** Maverick (Lead), Viper (Backend Dev) | **Date:** 2026-04-27 | **Status:** Implemented | **Requested by:** Kyle Poineal
+
+**Problem:** Scanner-engine dedup scopes title checks to `items.filter(i => i.scannerId === scanner.id)`. Moving item X from Scanner A → Scanner B causes Scanner A to re-discover X as "new" on its next run.
+
+**Decision:** Kyle's `recentTitles` approach over Maverick's `manuallyAssigned` flag. Each scanner maintains a `recentTitles: [{title, at}]` array with 24h TTL. After discovery, cleaned titles are appended. On next run, Scanner A checks `recentTitles` and skips moved items. Entries older than 24h are pruned at scan start.
+
+**Key details:**
+- Title normalization: `cleanDisplayText(title).toLowerCase()` — matches existing dedup set construction.
+- Persistence: Free — lives on scanner object, flows through `savePersistentState()`.
+- Model validation: `normalizeScannerDefinition` validates `{ title: string, at: string }` shape; malformed entries dropped on load.
+- Size bounded by `maxItemsPerScan` × runs/day. At 2h interval = ~120 entries/day max.
+- 24h TTL gap is acceptable — signals usually age out of LLM results by then.
+
+**Files changed:** `src/svelte/lib/scanner-engine.js`, `src/svelte/lib/models/scanner.js`.
+
+**Source:** `.squad/decisions/inbox/maverick-recent-titles-dedup.md`, `.squad/decisions/inbox/viper-recent-titles-impl.md`
+
+---
+
+## DEC-104: Drag-and-Drop Event Syntax — Svelte 4 `on:` Style
+
+**Author:** Goose (Frontend Dev) | **Date:** 2026-04-27 | **Status:** Implemented
+
+**Decision:** Used Svelte 4 `on:dragstart`/`on:drop` event syntax instead of Svelte 5 `ondragstart`/`ondrop` for all new drag-and-drop handlers. The Svelte compiler enforces that a single component cannot mix legacy and new event handler syntax, and all existing components already use `on:event` throughout.
+
+**Implication:** When the codebase migrates to Svelte 5 event syntax, all drag-and-drop handlers in TrackerCard, TrackerRow, and ScannerSection should be converted alongside existing handlers in a single pass.
+
+**Source:** `.squad/decisions/inbox/goose-drag-drop-impl.md`
