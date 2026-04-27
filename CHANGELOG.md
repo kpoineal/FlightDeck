@@ -4,6 +4,39 @@ All notable changes to FlightDeck will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-04-27
+
+### Fixed
+
+- **EULA connection validation** — Validates WorkIQ EULA acceptance before setting connected state, preventing false-positive connections after MSI reinstall (#111).
+- **Stale relative time labels** — Refresh relative time labels every 60s to prevent stale "2 hours ago" display (#107).
+- **WorkIQ documentation links** — Updated WorkIQ links to MSLearn and GitHub admin instructions (#103).
+- **Nav title alignment** — Fixed SVG clipping and icon/text vertical alignment in topbar (#97).
+- **Light mode color consistency** — Aligned `--color-new` to purple in explicit light theme (#91).
+- **Docs site light mode** — Full light mode support across docs site, branding, and favicon (#86, #87, #88).
+- **Copilot naming** — Corrected Copilot naming and sparkle icon on docs site (#101).
+- **Scanner example settings** — Corrected invalid scanner setting values in examples (#94).
+- **Incremental build cleanup** — Prevented cleanup step from failing incremental build (#83).
+- **Mobile nav spacing** — Responsive mobile nav spacing on docs site (#95).
+
+### Added
+
+- **Visual activity indicators** — Spinner animations and pulse effects for scanner/tracker operations with per-item/scanner loading state (#104, #106).
+- **Documentation site** — SvelteKit marketing/documentation site with direct MSI/DMG download links via GitHub API (#84, #85).
+- **Requirements page** — Cross-linked requirements page with Copilot and WorkIQ CLI info (#100, #102).
+- **Theme-aware screenshots** — Light mode visitors see light-mode screenshots (#89).
+- **Scanner prompt examples** — 10 prompt examples with writing tips and detailed tracker card tab documentation (#93, #94).
+
+### Changed
+
+- **Dependency bumps** — @microsoft/workiq 0.4.1 (#109).
+
+### Documentation
+
+- Auto-triage and status detection features added to docs site (#108).
+- Updated screenshots after badge color fix (#92).
+- Replaced old screenshots in user guide with automated captures (#79).
+
 ## [1.2.0] - 2026-04-17
 
 ### Added — Svelte Migration
