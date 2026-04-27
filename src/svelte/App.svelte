@@ -217,9 +217,13 @@
     unsubscribers.forEach((unsub) => unsub());
   });
 
-  function handleEnable() {
-    if (window.workiq && typeof window.workiq.enable === 'function') {
-      window.workiq.enable();
+  async function handleEnable() {
+    if (window.workiq && typeof window.workiq.acceptEula === 'function') {
+      const result = await window.workiq.acceptEula();
+      if (!result.success) {
+        addHistory('failure', `WorkIQ EULA not accepted: ${result.error || 'unknown error'}`);
+        return;
+      }
     }
     connected.set(true);
     startScannerEngine();

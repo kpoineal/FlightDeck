@@ -70,6 +70,17 @@ async function checkDue() {
         await runScanner(scanner);
       } catch (err) {
         logError('scanner', `Scanner "${scanner.name}" failed: ${err.message}`, { scannerId: scanner.id });
+
+        // If EULA is not accepted or launcher missing, disconnect so the banner reappears
+        const msg = err.message || '';
+        if (msg.includes('EULA not accepted') || msg.includes('launcher not found')) {
+          connected.set(false);
+          stopScannerEngine();
+          addHistory('failure', `Scanner ${scanner.name}: ${msg}`, { scannerId: scanner.id });
+          savePersistentState();
+          return;
+        }
+
         // Update scanner timestamps on failure and log
         scanners.update(($s) =>
           $s.map((s) =>
