@@ -888,6 +888,9 @@
   row-gap: 6px;
   line-height: 1.4;
 }
+.tracker-meta-wide {
+  flex: 1 1 100%;
+}
 .tracker-timestamp {
   font-size: 0.75rem;
   color: var(--text-dim);
