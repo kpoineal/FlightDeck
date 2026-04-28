@@ -191,7 +191,7 @@
           <span>Source: {item.sourceType || 'Signal'}</span>
           <span>Due: <EditableField field="dueAt" value={item.dueAt} itemId={item.id} placeholder="Set due date" onchange={onfieldedit} /></span>
           <span>Owner: <EditableField field="owner" value={item.owner} itemId={item.id} placeholder="Set owner" onchange={onfieldedit} /></span>
-          <span>Done when: <EditableField field="doneCriteria" value={item.doneCriteria} itemId={item.id} placeholder="Set done criteria" onchange={onfieldedit} /></span>
+          <span class="tracker-meta-wide">Done when: <EditableField field="doneCriteria" value={item.doneCriteria} itemId={item.id} placeholder="Set done criteria" onchange={onfieldedit} /></span>
         </div>
         <div class="tracker-timestamp">
           Tracked: {safeDate(item.trackedAt, 'Unknown')} &middot; Last checked: {safeDate(item.lastRunAt, 'Never')}
