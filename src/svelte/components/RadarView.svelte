@@ -228,11 +228,16 @@
     }
   });
 
-  // ── Auto-scroll while dragging near viewport edges ──────────────
+  // ── Auto-scroll while dragging near viewport edges + wheel ──────
   const EDGE_ZONE = 60;   // px from viewport edge to trigger scroll
   const SCROLL_SPEED = 12; // px per frame at full proximity
   let scrollRaf = null;
   let scrollDelta = 0;
+  let dragging = false;
+
+  function handleDragStartGlobal() {
+    dragging = true;
+  }
 
   function handleDragOverScroll(e) {
     const y = e.clientY;
@@ -251,6 +256,11 @@
     }
   }
 
+  function handleWheelDuringDrag(e) {
+    if (!dragging) return;
+    document.documentElement.scrollTop += e.deltaY;
+  }
+
   function startAutoScroll() {
     if (scrollRaf) return;
     (function tick() {
@@ -267,17 +277,22 @@
   }
 
   function handleDragEndScroll() {
+    dragging = false;
     stopAutoScroll();
   }
 
   $effect(() => {
+    window.addEventListener('dragstart', handleDragStartGlobal);
     window.addEventListener('dragover', handleDragOverScroll);
     window.addEventListener('dragend', handleDragEndScroll);
     window.addEventListener('drop', handleDragEndScroll);
+    window.addEventListener('wheel', handleWheelDuringDrag, { passive: true });
     return () => {
+      window.removeEventListener('dragstart', handleDragStartGlobal);
       window.removeEventListener('dragover', handleDragOverScroll);
       window.removeEventListener('dragend', handleDragEndScroll);
       window.removeEventListener('drop', handleDragEndScroll);
+      window.removeEventListener('wheel', handleWheelDuringDrag);
       stopAutoScroll();
     };
   });
