@@ -42,11 +42,20 @@
   function handleRowClick(e) {
     // Don't toggle if clicking interactive elements
     if (e.target.closest('select') || e.target.closest('input') ||
-        e.target.closest('label') || e.target.closest('button') ||
-        e.target.closest('.drag-handle')) return;
+        e.target.closest('label') || e.target.closest('button')) return;
     isExpanded = !isExpanded;
     // Notify parent for accordion behavior
     if (isExpanded) onrowexpand?.({ itemId: item.id });
+  }
+
+  function handleRowPointerDown(e) {
+    if (isTerminalStatus) return;
+    if (e.target.closest('select, button, input, label, a, .tracker-new-badge, .tracker-updated-badge')) return;
+    canDrag = true;
+  }
+
+  function handleRowPointerUp() {
+    canDrag = false;
   }
 
   function handleDragStart(e) {
@@ -109,15 +118,13 @@
 >
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="tracker-row" class:has-new-update={hasNew} class:expanded={isExpanded}
+    class:drag-zone={!isTerminalStatus}
     on:click={handleRowClick}
+    on:pointerdown={handleRowPointerDown}
+    on:pointerup={handleRowPointerUp}
+    on:pointerleave={handleRowPointerUp}
     role="button" tabindex="0"
     on:keydown={(e) => e.key === 'Enter' && handleRowClick(e)}>
-    {#if !isTerminalStatus}
-      <span class="drag-handle"
-        on:pointerenter={() => { canDrag = true; }}
-        on:pointerleave={() => { canDrag = false; }}
-        aria-hidden="true">⠿</span>
-    {/if}
     <select class="severity-select {sevClass}" value={item.severity}
       on:change={(e) => onseveritychange?.({ itemId: item.id, value: e.target.value })}
       on:click|stopPropagation>
