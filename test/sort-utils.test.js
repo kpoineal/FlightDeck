@@ -3,13 +3,14 @@
 const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 
-let sortByRecent, sortBySeverity, severityRankValue;
+let sortByRecent, sortBySeverity, severityRankValue, sortByCompleted;
 
 before(async () => {
   const utils = await import('../src/svelte/lib/utils.js');
   sortByRecent = utils.sortByRecent;
   sortBySeverity = utils.sortBySeverity;
   severityRankValue = utils.severityRankValue;
+  sortByCompleted = utils.sortByCompleted;
 });
 
 /* ------------------------------------------------------------------ */
@@ -139,4 +140,38 @@ describe('severityRankValue()', () => {
   it('returns 1 for Elevated', () => assert.equal(severityRankValue('Elevated'), 1));
   it('returns 2 for Observe', () => assert.equal(severityRankValue('Observe'), 2));
   it('returns 2 for unknown severity', () => assert.equal(severityRankValue('unknown'), 2));
+});
+
+/* ------------------------------------------------------------------ */
+/*  sortByCompleted()                                                  */
+/* ------------------------------------------------------------------ */
+describe('sortByCompleted()', () => {
+  it('sorts by completedAt descending', () => {
+    const items = [
+      { id: 'old', completedAt: '2026-04-01T00:00:00Z' },
+      { id: 'new', completedAt: '2026-04-20T00:00:00Z' },
+    ];
+    const result = sortByCompleted(items);
+    assert.deepStrictEqual(result.map(i => i.id), ['new', 'old']);
+  });
+
+  it('falls back to lastChangedAt when completedAt is missing', () => {
+    const items = [
+      { id: 'a', lastChangedAt: '2026-04-10T00:00:00Z' },
+      { id: 'b', completedAt: '2026-04-20T00:00:00Z' },
+      { id: 'c' },
+    ];
+    const result = sortByCompleted(items);
+    assert.deepStrictEqual(result.map(i => i.id), ['b', 'a', 'c']);
+  });
+
+  it('returns empty array for empty input', () => {
+    assert.deepStrictEqual(sortByCompleted([]), []);
+  });
+
+  it('does not mutate the original array', () => {
+    const items = [{ id: 'a', completedAt: '2026-04-01T00:00:00Z' }];
+    const result = sortByCompleted(items);
+    assert.notStrictEqual(result, items);
+  });
 });
