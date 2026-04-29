@@ -65,6 +65,16 @@
 
   function setTab(tab) { activeTab = tab; }
 
+  function handleHeadPointerDown(e) {
+    if (isTerminalStatus) return;
+    if (e.target.closest('select, button, input, a, .tracker-new-badge, .tracker-updated-badge')) return;
+    canDrag = true;
+  }
+
+  function handleHeadPointerUp() {
+    canDrag = false;
+  }
+
   function handleDragStart(e) {
     isDragging = true;
     e.dataTransfer.setData('text/plain', item.id);
@@ -95,14 +105,13 @@
   data-item-status={item.lifecycleStatus || 'in-progress'}
   data-item-new={hasNew ? 'true' : 'false'}
 >
-  <div class="tracker-head">
+  <div class="tracker-head"
+    class:drag-zone={!isTerminalStatus}
+    on:pointerdown={handleHeadPointerDown}
+    on:pointerup={handleHeadPointerUp}
+    on:pointerleave={handleHeadPointerUp}
+  >
     <div class="tracker-head-left">
-      {#if !isTerminalStatus}
-        <span class="drag-handle"
-          on:pointerenter={() => { canDrag = true; }}
-          on:pointerleave={() => { canDrag = false; }}
-          aria-hidden="true">⠿</span>
-      {/if}
       <select class="severity-select {sevClass}" value={item.severity}
         on:change={(e) => onseveritychange?.({ itemId: item.id, value: e.target.value })}>
         <option value="Critical">Critical</option>

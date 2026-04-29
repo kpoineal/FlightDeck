@@ -227,6 +227,75 @@
       coldItems.set([]);
     }
   });
+
+  // ── Auto-scroll while dragging near viewport edges + wheel ──────
+  const EDGE_ZONE = 60;   // px from viewport edge to trigger scroll
+  const SCROLL_SPEED = 12; // px per frame at full proximity
+  let scrollRaf = null;
+  let scrollDelta = 0;
+  let dragging = false;
+
+  function handleDragStartGlobal() {
+    dragging = true;
+  }
+
+  function handleDragOverScroll(e) {
+    const y = e.clientY;
+    const vh = window.innerHeight;
+
+    if (y < EDGE_ZONE) {
+      const intensity = 1 - y / EDGE_ZONE;
+      scrollDelta = -SCROLL_SPEED * intensity;
+      startAutoScroll();
+    } else if (y > vh - EDGE_ZONE) {
+      const intensity = 1 - (vh - y) / EDGE_ZONE;
+      scrollDelta = SCROLL_SPEED * intensity;
+      startAutoScroll();
+    } else {
+      stopAutoScroll();
+    }
+  }
+
+  function handleWheelDuringDrag(e) {
+    if (!dragging) return;
+    document.documentElement.scrollTop += e.deltaY;
+  }
+
+  function startAutoScroll() {
+    if (scrollRaf) return;
+    (function tick() {
+      document.documentElement.scrollTop += scrollDelta;
+      scrollRaf = requestAnimationFrame(tick);
+    })();
+  }
+
+  function stopAutoScroll() {
+    if (scrollRaf) {
+      cancelAnimationFrame(scrollRaf);
+      scrollRaf = null;
+    }
+  }
+
+  function handleDragEndScroll() {
+    dragging = false;
+    stopAutoScroll();
+  }
+
+  $effect(() => {
+    window.addEventListener('dragstart', handleDragStartGlobal);
+    window.addEventListener('dragover', handleDragOverScroll);
+    window.addEventListener('dragend', handleDragEndScroll);
+    window.addEventListener('drop', handleDragEndScroll);
+    window.addEventListener('wheel', handleWheelDuringDrag, { passive: true });
+    return () => {
+      window.removeEventListener('dragstart', handleDragStartGlobal);
+      window.removeEventListener('dragover', handleDragOverScroll);
+      window.removeEventListener('dragend', handleDragEndScroll);
+      window.removeEventListener('drop', handleDragEndScroll);
+      window.removeEventListener('wheel', handleWheelDuringDrag);
+      stopAutoScroll();
+    };
+  });
 </script>
 
 <section class="mode-view active">

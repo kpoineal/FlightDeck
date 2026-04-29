@@ -1731,9 +1731,14 @@ html[data-theme="light"] .at-event:hover .at-card {
 }
 
 /* ── Drag-and-drop ── */
-.drag-handle { cursor: grab; opacity: 0.3; user-select: none; font-size: 0.85em; padding: 0 4px; }
-.drag-handle:hover { opacity: 0.7; }
-.drag-handle:active { cursor: grabbing; }
+.drag-zone { cursor: grab; user-select: none; }
+.drag-zone select,
+.drag-zone button,
+.drag-zone .tracker-new-badge,
+.drag-zone .tracker-updated-badge,
+.drag-zone .pill { cursor: default; }
+.drag-zone button { cursor: pointer; }
+.tracker-card.is-dragging .drag-zone { cursor: grabbing; }
 .tracker-card.is-dragging,
 .tracker-row-wrapper.is-dragging { opacity: 0.4; }
 
