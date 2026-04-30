@@ -138,9 +138,17 @@
     const item = $items.find(i => i.id === data.itemId);
     if (!item || item.scannerId === data.scannerId) return;
     const targetScanner = $scanners.find(s => s.id === data.scannerId);
+
+    // Preserve scroll position across the re-render caused by group changes
+    const scrollY = document.documentElement.scrollTop;
     items.update(($items) => $items.map(i =>
       i.id === data.itemId ? { ...i, scannerId: data.scannerId } : i
     ));
+    // Restore scroll after Svelte re-renders the groups
+    requestAnimationFrame(() => {
+      document.documentElement.scrollTop = scrollY;
+    });
+
     addHistory('action', `Moved "${item.title}" to ${targetScanner?.name || 'scanner'}`);
     showToast(`Moved to ${targetScanner?.name || 'scanner'}`, { icon: '📦' });
     savePersistentState();

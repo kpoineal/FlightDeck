@@ -93,8 +93,10 @@
     }
     const itemId = e.dataTransfer.getData('text/plain');
     if (!itemId) return;
+    // Expand collapsed target so user sees the card land
     if (collapsed) toggleSection(sourceId);
-    inlineFilter = null;
+    // Only clear inline filter if one is active (avoids unnecessary re-render)
+    if (inlineFilter) inlineFilter = null;
     onmovescanner?.({ itemId, scannerId: scanner.id });
   }
 
