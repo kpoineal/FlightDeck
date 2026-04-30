@@ -1,6 +1,6 @@
 <script>
-  import { density, collapsedSections, activeOperations, scannerSortPrefs } from '../lib/stores.js';
-  import { relativeTime, sortBySeverity, sortByRecent } from '../lib/utils.js';
+  import { density, collapsedSections, activeOperations, scannerSortPrefs, filter } from '../lib/stores.js';
+  import { relativeTime, sortBySeverity, sortByRecent, sortByCompleted } from '../lib/utils.js';
   import { useClock } from '../lib/clock.svelte.js';
   import { toggleSection } from '../lib/actions.js';
   import { savePersistentState } from '../lib/persistence.js';
@@ -15,8 +15,13 @@
   let enabled = $derived(scanner.enabled !== false);
   let isScanning = $derived($activeOperations.has(`scanner:${scanner.id}`));
   let isMinimal = $derived($density === 'minimal');
-  let sortMode = $derived($scannerSortPrefs[scanner.id] || 'severity');
-  let sorted = $derived(sortMode === 'recent' ? sortByRecent(items) : sortBySeverity(items, true));
+  let isArchived = $derived($filter === 'archived');
+  let sortMode = $derived($scannerSortPrefs[scanner.id] || (isArchived ? 'completed' : 'severity'));
+  let sorted = $derived(
+    sortMode === 'completed' ? sortByCompleted(items) :
+    sortMode === 'recent' ? sortByRecent(items) :
+    sortBySeverity(items, true)
+  );
 
   // Sort dropdown state
   let sortDropdownOpen = $state(false);
@@ -262,7 +267,7 @@
         on:click={handleSortToggleClick}
         on:keydown={handleSortToggleKeydown}
         role="button" tabindex="0">
-        sort: {sortMode === 'recent' ? 'recent' : 'severity'} ▾
+        sort: {sortMode === 'completed' ? 'completed' : sortMode === 'recent' ? 'recent' : 'severity'} ▾
       </span>
       {#if sortDropdownOpen}
         <div class="radar-sort-dropdown" on:click|stopPropagation>
@@ -274,6 +279,12 @@
             on:click={() => setSortMode('recent')}>
             {sortMode === 'recent' ? '✓ ' : ''}Recently Updated
           </button>
+          {#if isArchived}
+            <button class="radar-sort-option" class:active={sortMode === 'completed'}
+              on:click={() => setSortMode('completed')}>
+              {sortMode === 'completed' ? '✓ ' : ''}Date Completed
+            </button>
+          {/if}
         </div>
       {/if}
     </div>

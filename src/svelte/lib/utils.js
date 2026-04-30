@@ -434,6 +434,14 @@ export function sortByRecent(items) {
   });
 }
 
+export function sortByCompleted(items) {
+  return [...items].sort((a, b) => {
+    const tsA = new Date(a.completedAt || a.lastChangedAt || 0).getTime() || 0;
+    const tsB = new Date(b.completedAt || b.lastChangedAt || 0).getTime() || 0;
+    return tsB - tsA;
+  });
+}
+
 export function relativeTime(value, _now = Date.now()) {
   if (!value) return null;
   const parsed = new Date(value);
