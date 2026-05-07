@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import { mode, connected, history as historyStore, isDemo } from './lib/stores.js';
-  import { loadPersistentState, savePersistentState, seedDemoFixture } from './lib/persistence.js';
+  import { loadPersistentState, savePersistentState, seedDemoFixture, pruneStaleBriefings } from './lib/persistence.js';
   import { items, scanners, meetings, meetingsLastFetched, briefingsByMeetingId, briefingSeenAt,
     density, filter, collapsedSections, highlightedItemId } from './lib/stores.js';
   import { addHistory } from './lib/actions.js';
@@ -89,6 +89,7 @@
             endAt: item.endAt || null,
             organizer,
             joinUrl: normalizeExternalUrl(item.joinUrl || ''),
+            summary: cleanDisplayText(item.summary || ''),
             startTime,
           };
         })
@@ -106,6 +107,24 @@
 
   // Store subscriptions for auto-save
   const unsubscribers = [];
+
+  // Track the last day we checked to avoid redundant refreshes on repeated focus events
+  let lastDayChecked = new Date().toDateString();
+
+  function handleDayChangeCheck() {
+    if (!$connected || get(isDemo)) return;
+    const today = new Date().toDateString();
+    if (today === lastDayChecked) {
+      // Same day — still try to refresh if meetings are stale (>1 hour)
+      fetchMeetings();
+      return;
+    }
+    // Day changed — force refresh meetings and prune old briefings
+    lastDayChecked = today;
+    pruneStaleBriefings();
+    fetchMeetings(true);
+    addHistory('scan', 'New day detected — refreshing meetings');
+  }
 
   onMount(async () => {
     initTheme();
@@ -171,6 +190,21 @@
         loadPersistentState();
       });
     }
+
+    // Listen for app resume (window focus, system wake) to refresh stale meetings
+    if (window.workiq && typeof window.workiq.onAppResumed === 'function') {
+      const unsubResume = window.workiq.onAppResumed(() => {
+        handleDayChangeCheck();
+      });
+      unsubscribers.push(unsubResume);
+    }
+
+    // Also detect day change when tab/window regains visibility (backup for non-IPC cases)
+    const handleVisibility = () => {
+      if (!document.hidden) handleDayChangeCheck();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    unsubscribers.push(() => document.removeEventListener('visibilitychange', handleVisibility));
 
     // Listen for desktop notification clicks → navigate to item
     if (window.workiq && typeof window.workiq.onNotificationClicked === 'function') {
@@ -256,7 +290,7 @@
     {#if $mode === 'Radar'}
       <RadarView />
     {:else if $mode === 'Briefings'}
-      <BriefingsView />
+      <BriefingsView onrefresh={() => fetchMeetings(true)} />
     {:else if $mode === 'History'}
       <HistoryView history={$historyStore} />
     {/if}

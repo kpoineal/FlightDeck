@@ -48,6 +48,12 @@ contextBridge.exposeInMainWorld('workiq', {
     ipcRenderer.on(IPC_CHANNELS.TRACKER_STATE_SYNC, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.TRACKER_STATE_SYNC, listener);
   },
+  onAppResumed: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, reason) => callback(reason);
+    ipcRenderer.on(IPC_CHANNELS.APP_RESUMED, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.APP_RESUMED, listener);
+  },
   onNotificationClicked: (callback) => {
     if (typeof callback !== 'function') {
       return () => {};

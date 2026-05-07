@@ -77,3 +77,15 @@ Unified the prompt system so all scanners (including the former "default radar")
 - Chose dedup-then-append for all scanners. The dedup pipeline achieves the same "no duplicates" goal more predictably, and existing items preserve their user edits. If we ever want "content refresh" behavior, it can be added as a scanner option later.
 
 **Test impact:** 8 test failures in `renderer-prompts.test.js` (6) and `renderer-delete-scanner.test.js` (2) — all reference removed radar-specific functions/behavior. Merlin owns test updates.
+
+### 2026-05-05 — Meeting summary field in TODAY_MEETINGS_PROMPT
+
+Added a `summary` field to the meetings fetch prompt schema. Key prompt design choices:
+
+- **Guidance placement:** Summary instructions go BEFORE the constraints block — positions them as a primary task, not an afterthought. Keeps the schema at the bottom as reference.
+- **Signal enumeration:** Explicitly listed concrete signal sources (invite body, email threads, recurring patterns) to steer the model toward evidence-based summaries rather than title-parroting or hallucination.
+- **Anti-hallucination guardrail:** "If no context beyond the title is available, state that plainly" — direct instruction with example phrasing. Positive framing ("state that plainly") outperforms negative framing ("do NOT make things up") for LLM compliance.
+- **Schema nullability:** `"string or null"` keeps backward compatibility — the field is optional if the AI can't produce one.
+- **Scope discipline:** This is a fetch prompt, not a briefing prompt. Summary guidance is 4 lines, not a paragraph. The heavy analysis stays in `buildMeetingBriefingPrompt()`.
+
+**Downstream integration needed:** `App.svelte` line ~89 mapping currently drops the `summary` field. Goose needs to thread `item.summary` through the processed meeting object and display it in `MeetingCard.svelte` (likely in the subtitle area when no briefing exists).

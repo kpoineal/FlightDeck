@@ -1,7 +1,7 @@
 <script>
   import { safeDate, sanitizeBriefingText } from '../lib/utils.js';
 
-  let { briefing = null, unseen = false, ongenerate } = $props();
+  let { briefing = null, unseen = false, generating = false, ongenerate } = $props();
 
   let hasBriefing = $derived(!!briefing);
 
@@ -26,8 +26,11 @@
     <div class="card-body">
       <div class="empty">No day briefing generated yet. Synthesize your meetings, tracked items, and radar signals into one summary.</div>
       <div class="action-row">
-        <button class="small-btn primary" on:click={handleGenerate}>Generate My Day</button>
+        <button class="small-btn primary" class:is-loading={generating} disabled={generating} on:click={handleGenerate}>{generating ? 'Generating...' : 'Generate My Day'}</button>
       </div>
+      {#if generating}
+        <div class="generating-status">Generating your day briefing…</div>
+      {/if}
     </div>
   </details>
 {:else}
@@ -41,8 +44,11 @@
     </summary>
     <div class="card-body">
       <div class="action-row">
-        <button class="small-btn primary" on:click={handleGenerate}>Regenerate My Day</button>
+        <button class="small-btn primary" class:is-loading={generating} disabled={generating} on:click={handleGenerate}>{generating ? 'Generating...' : 'Regenerate My Day'}</button>
       </div>
+      {#if generating}
+        <div class="generating-status">Generating your day briefing…</div>
+      {/if}
       <div class="evidence-box">
         <h3>{sanitizeBriefingText(briefing.headline || 'Your day at a glance')}</h3>
         <div class="panel-sub">Generated: {safeDate(briefing.generatedAt, 'Unknown')}</div>
@@ -127,3 +133,22 @@
     </div>
   </details>
 {/if}
+
+<style>
+  .generating-status {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 0.5rem 0;
+    animation: badgePulse 2s ease-in-out infinite;
+  }
+
+  .day-briefing-card {
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    border-color: color-mix(in srgb, var(--accent) 20%, var(--border-card));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 3%, var(--bg-inset)) 0%, var(--bg-inset) 60%);
+  }
+  .day-briefing-card:hover {
+    box-shadow: var(--shadow-hover);
+  }
+</style>

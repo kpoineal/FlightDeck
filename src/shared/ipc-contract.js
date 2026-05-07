@@ -19,6 +19,7 @@ const IPC_CHANNELS = {
   STORE_GET_COLD_ITEMS: 'store-get-cold-items',
   STORE_SET_COLD_ITEMS: 'store-set-cold-items',
   CHECK_FOR_UPDATES: 'check-for-updates',
+  APP_RESUMED: 'app-resumed',
 };
 
 module.exports = {

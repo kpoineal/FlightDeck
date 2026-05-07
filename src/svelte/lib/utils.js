@@ -97,6 +97,20 @@ export function cleanDisplayText(value) {
   return normalizeSpacingArtifacts(text);
 }
 
+/** Format time for compact display: "10:30 AM", "in 15 min", "now", "ended". */
+export function shortTime(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return '';
+  const now = Date.now();
+  const diff = d.getTime() - now;
+  const mins = Math.round(diff / 60000);
+  if (mins <= -60) return 'ended';
+  if (mins < 0) return 'now';
+  if (mins <= 30) return `in ${mins} min`;
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
 /** Normalize a raw URL string to a sanitized https/http URL or null. */
 export function normalizeExternalUrl(value) {
   if (!value) return null;

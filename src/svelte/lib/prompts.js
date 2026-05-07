@@ -72,6 +72,8 @@ function buildPreviousSummariesContext(item) {
 
 export const TODAY_MEETINGS_PROMPT = `List my upcoming meetings for today from Microsoft 365 context.
 
+For each meeting, include a brief one-sentence summary of what the meeting is about.
+
 Constraints:
 - Include only meetings starting later today in my local timezone.
 - Keep response focused and concise.
@@ -87,7 +89,8 @@ Schema:
       "startAt": "ISO-8601 timestamp",
       "endAt": "ISO-8601 timestamp or null",
       "organizer": "string",
-      "joinUrl": "https URL or null"
+      "joinUrl": "https URL or null",
+      "summary": "string — brief one-sentence summary of the meeting"
     }
   ]
 }`;
