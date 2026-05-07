@@ -9,8 +9,21 @@
   import DayBriefingCard from './DayBriefingCard.svelte';
   import MeetingCard from './MeetingCard.svelte';
 
+  let { onrefresh } = $props();
+
   let dayGenerating = $state(false);
   let meetingGeneratingId = $state(null);
+  let refreshing = $state(false);
+
+  async function handleRefresh() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await onrefresh?.();
+    } finally {
+      refreshing = false;
+    }
+  }
 
   let dayBriefing = $derived($briefingsByMeetingId[DAY_BRIEFING_KEY] || null);
   let dayBriefingUnseen = $derived(isDayBriefingUnseen(dayBriefing, $briefingSeenAt));
@@ -215,12 +228,20 @@
 </script>
 
 <div class="panel panel--full">
-  <h2>Briefings</h2>
-  <div class="panel-sub">Upcoming meetings today; expand one and generate a focused briefing</div>
+  <div class="briefings-header">
+    <div>
+      <h2>Briefings</h2>
+      <div class="panel-sub">Upcoming meetings today; expand one and generate a focused briefing</div>
+    </div>
+    <button class="small-btn" class:is-loading={refreshing} disabled={refreshing} on:click={handleRefresh}>
+      {refreshing ? 'Refreshing...' : '↻ Refresh Meetings'}
+    </button>
+  </div>
 
   <DayBriefingCard
     briefing={dayBriefing}
     unseen={dayBriefingUnseen}
+    generating={dayGenerating}
     ongenerate={handleDayGenerate}
   />
 
@@ -231,6 +252,7 @@
         briefing={getBriefing(meeting.id)}
         unseen={isMeetingBriefingUnseen(meeting.id, getBriefing(meeting.id), $briefingSeenAt)}
         expanded={$expandedBriefingMeetingIds.includes(meeting.id)}
+        generating={meetingGeneratingId === meeting.id}
         ongenerate={handleMeetingGenerate}
         ontoggle={handleMeetingToggle}
       />
@@ -239,3 +261,13 @@
     <div class="empty">No upcoming meetings for today. Click Refresh to reload.</div>
   {/if}
 </div>
+
+<style>
+  .briefings-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 4px;
+  }
+</style>

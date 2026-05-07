@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, powerMonitor } = require('electron');
 const path = require('path');
 const {
   log,
@@ -30,6 +30,8 @@ const popoutWindows = new Set();
 
 // Register IPC handlers — pass getter for mainWindow since it's set after createWindow()
 registerIpcHandlers(() => mainWindow, popoutWindows);
+
+const { IPC_CHANNELS } = require('../shared/ipc-contract');
 
 function createWindow() {
   const savedState = loadWindowState(app);
@@ -146,6 +148,20 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     createWindow();
     createTray();
+
+    // Notify renderer when window gains focus (e.g. returning after overnight)
+    app.on('browser-window-focus', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_CHANNELS.APP_RESUMED, 'focus');
+      }
+    });
+
+    // Notify renderer when system wakes from sleep/suspend
+    powerMonitor.on('resume', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_CHANNELS.APP_RESUMED, 'resume');
+      }
+    });
   });
 }
 

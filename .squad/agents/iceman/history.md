@@ -325,4 +325,40 @@
 
 **Decisions captured:** `.squad/decisions/inbox/iceman-drag-drop-brainstorm.md`
 
+### 2026-05-04 — Briefings UX Product Review
+
+**User request:** Kyle shared a screenshot of the Briefings pane and asked for UX improvement ideas across 10 evaluation dimensions: first-impression impact, time urgency, prep confidence, batch workflow, glanceability, staleness, contextual actions, smart prioritization, post-meeting follow-through, and delight factors.
+
+**Current UI state assessed (Svelte rewrite):**
+- `BriefingsView.svelte` — top-level panel with DayBriefingCard + MeetingCard loop. Sort: unseen first → unbriefed → chronological.
+- `MeetingCard.svelte` — `<details>` card with collapsed `<summary>` showing only status pill + title. Expanded shows time, organizer, join link, generate button, BriefingContent.
+- `DayBriefingCard.svelte` — two states (empty/populated), always open. Renders headline, priorities, prep meetings, risks, time blocks, follow-ups, sources.
+- `SummaryStrip.svelte` — status bar adapts for Briefings mode: unbriefed/briefed counts, progress bar, meeting total.
+- `BriefingContent.svelte` — renders meeting briefing sections (key updates, decisions, risks, talk track, follow-ups, sources).
+- Generation flow: `meetingGeneratingId` mutex serializes generation. `dayGenerating` flag for day briefing.
+- Status indicators recently added (Goose, 2026-05-04): `is-loading` CSS, `badgePulse` animation, "Generating..." text swap.
+
+**15 improvements proposed across 10 categories:**
+- 5 must-haves: time+organizer on collapsed cards (5a), countdown chips (2a), join button on collapsed (7a), headline-forward day briefing (1a), "Brief All" button (4a)
+- 8 should-haves: briefing headline preview (5b), auto-expand next meeting (2b), stale badge (6a), readiness indicator (3a), progress ring (1b), post-meeting transitions (9a), generation skeleton (10a), prep importance (8a)
+- 5 nice-to-haves: past-meeting fade (2c), time grouping (10b), copy briefing (7b), focus mode (8b), auto-brief (4b), quality score (3b), completion celebration (10c)
+
+**Key product principles established:**
+1. "The collapsed card is the product" — value without expansion
+2. Time is the primary axis
+3. Generated ≠ Ready
+4. Morning workflow has a cadence (open → scan → brief all → review → join)
+5. Aviation metaphor should be functional, not decorative
+
+**4-phase execution roadmap:** (1) Rich collapsed cards, (2) Morning autopilot, (3) Intelligence layer, (4) Polish & flow.
+
+**Key architecture notes for implementation:**
+- Brief All: chain `meetingGeneratingId` assignments through unbriefed meeting list. Serial queue, progress counter.
+- Countdown timer: 1-minute reactive interval, recalculate `relativeTime()` from `meeting.startAt`. Color thresholds: <15min red, <1h orange, else neutral.
+- Collapsed card enrichment: modify `MeetingCard.svelte` `<summary>` — add `safeDate(meeting.startAt)`, `meeting.organizer`, and conditional join icon.
+- Stale detection: compare `briefing.generatedAt` to start of today. Prior-day = stale.
+- Post-meeting phase: compare `meeting.startAt` to `Date.now()`. If past, swap generate label and promote follow-ups.
+
+**Decisions captured:** `.squad/decisions/inbox/iceman-briefings-ux-review.md`
+
 <!-- Append learnings here as they are discovered -->

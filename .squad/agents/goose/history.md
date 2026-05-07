@@ -79,6 +79,37 @@
 - **Key files**: `styles/tokens.css`, `styles/layout.css`, `styles/components.css`, `styles/radar.css`, `styles/tracking.css`, `styles/search.css`, `styles/modal.css`.
 - **Pattern**: Used CSS variables for border-radius and blur to maintain consistency across components. Added subtle hover and active states for interactive elements.
 
+### 2026-05-04 — Briefing Generation Status Indicators
+- **Task**: Added visual feedback for "Generate My Day" and "Generate Briefing" buttons during AI generation.
+- **Changes**: Passed `generating` prop from BriefingsView to DayBriefingCard and MeetingCard. Both card components now show `is-loading` spinner, disabled state, "Generating..." text, and a pulsing status message while generation is in progress.
+- **Pattern**: Existing `dayGenerating` and `meetingGeneratingId` state in BriefingsView already tracked generation status — just needed to be threaded through as props. Used existing `.is-loading` CSS class from `components.css` and `badgePulse` keyframes for the status message animation.
+- **Key files**: `src/svelte/components/BriefingsView.svelte`, `src/svelte/components/DayBriefingCard.svelte`, `src/svelte/components/MeetingCard.svelte`.
+
+### 2026-05-04 — Briefings UX Review & Improvement Proposals
+- **Task**: Reviewed Briefings pane UI and proposed 10 concrete UX improvements based on screenshot analysis and source code audit.
+- **Key findings**: (1) Meeting time not visible in collapsed state — the most critical missing info. (2) No temporal grouping (past/now/upcoming). (3) No batch "Generate All" operation. (4) SummaryStrip repurposes Radar severity colors for briefings, which is conceptually confusing. (5) Empty state for Day Briefing is functional but not inviting.
+- **Top 5 quick wins (all S-sized)**: Show meeting time in collapsed state, "Starting Soon" urgency indicator, richer empty state, headline preview for briefed cards, organizer in collapsed state.
+- **Architecture insight**: `SummaryStrip.svelte` already has `isBriefings` branching — extending it for a briefing-specific summary is straightforward. Meeting data has `startAt` available but only surfaced inside the expanded card-body `.meta` row.
+- **Decision doc**: `.squad/decisions/inbox/goose-briefings-ux-review.md`
+
+### 2026-05-04 — MeetingCard Rewrite (Card-Style + shortTime)
+
+### 2026-05-05 — Meeting Summary Field Wiring
+- **Task**: Wired new `summary` field from meeting data through App.svelte processing into MeetingCard display.
+- **Changes**: (1) Added `summary: cleanDisplayText(item.summary || '')` to `fetchMeetings()` in App.svelte. (2) Updated MeetingCard subtitle to show `meeting.summary` when no briefing headline exists. (3) Added "Quick Preview" expanded view with summary, label, and hint text when no briefing generated. (4) Added CSS for `.meeting-card__preview` section.
+- **Key files**: `src/svelte/App.svelte`, `src/svelte/components/MeetingCard.svelte`.
+- **Branch**: `feature/briefing-meeting-cards`
+
+### 2026-05-04 — MeetingCard Rewrite (Card-Style + shortTime)
+- **Task**: Rewrote `MeetingCard.svelte` from `<details>/<summary>` to a div-based card with button-toggle expand/collapse. Added `shortTime()` utility to `src/svelte/lib/utils.js`.
+- **shortTime utility**: Returns "ended" (>60min ago), "now" (0–59min ago), "in X min" (≤30min future), or locale-formatted time (>30min future).
+- **Key design changes**: Status pill shows "New" for unseen; collapsed header: pill + title + shortTime + organizer + Join + chevron; urgency styling when ≤15min; briefing headline preview when collapsed.
+- **Accessibility**: Header is `<button>` with `aria-expanded`/`aria-controls`, content is `role="region"` with `aria-labelledby`.
+- **Prop contract unchanged**: Parent (`BriefingsView.svelte`) requires zero changes.
+- **CSS**: Component-scoped `.meeting-card` replaces global `.list-card`. Uses existing tokens.
+- **Build**: Clean.
+- **Key files**: `src/svelte/components/MeetingCard.svelte`, `src/svelte/lib/utils.js`.
+
 ### 2026-02-26 — Light Mode Re-envisioning & Design System Overhaul
 - **Goal**: Fix washed-out light mode and elevate both themes to Apple/macOS Sequoia quality.
 - **tokens.css overhaul**: 
