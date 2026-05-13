@@ -22,11 +22,19 @@ jobs:
       - name: Resolve tag
         id: tag
         shell: pwsh
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $tag = "${{ inputs.tag }}"
+          if ($env:EVENT_NAME -eq "workflow_dispatch") {
+            $tag = $env:INPUT_TAG
           } else {
-            $tag = "${{ github.ref_name }}"
+            $tag = $env:REF_NAME
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            Write-Error "Invalid tag format: '$tag'. Expected vMAJOR.MINOR.PATCH (e.g. v1.0.0)."
+            exit 1
           }
           $version = $tag -replace '^v', ''
           "tag=$tag" | Out-File -Append $env:GITHUB_OUTPUT
@@ -107,15 +115,25 @@ jobs:
   release-mac:
     runs-on: macos-latest
     needs: release
+    permissions:
+      contents: write
 
     steps:
       - name: Resolve tag
         id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            tag="${{ inputs.tag }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$INPUT_TAG"
           else
-            tag="${{ github.ref_name }}"
+            tag="$REF_NAME"
+          fi
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag format: '$tag'. Expected vMAJOR.MINOR.PATCH (e.g. v1.0.0)."
+            exit 1
           fi
           version="${tag#v}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -172,7 +190,13 @@ jobs:
         if: always()
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
           security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          # Overwrite cert file before deletion as defense-in-depth
+          if [ -f "$CERT_PATH" ]; then
+            dd if=/dev/urandom of="$CERT_PATH" bs=1k count=$(du -k "$CERT_PATH" | cut -f1) conv=notrunc 2>/dev/null || true
+            rm -f "$CERT_PATH"
+          fi
 
       - name: Upload macOS artifact to GitHub Release
         env:

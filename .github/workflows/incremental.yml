@@ -145,6 +145,8 @@ jobs:
   incremental-mac:
     runs-on: macos-latest
     needs: incremental
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -220,7 +222,13 @@ jobs:
         if: always()
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
           security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          # Overwrite cert file before deletion as defense-in-depth
+          if [ -f "$CERT_PATH" ]; then
+            dd if=/dev/urandom of="$CERT_PATH" bs=1k count=$(du -k "$CERT_PATH" | cut -f1) conv=notrunc 2>/dev/null || true
+            rm -f "$CERT_PATH"
+          fi
 
       - name: Upload macOS artifact to pre-release
         if: steps.changes.outputs.skip != 'true'
