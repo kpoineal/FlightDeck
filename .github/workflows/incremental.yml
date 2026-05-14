@@ -189,11 +189,15 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
 
-      - name: Build macOS DMG (signed, not notarized)
-        # Incremental builds are signed but skip Apple notarization to save
-        # 1-5 min per build. Testers can right-click → Open to bypass Gatekeeper.
-        # Stable releases are fully signed AND notarized.
-        run: npx electron-builder --mac dmg --publish never --config.mac.notarize=false
+      - name: Build macOS DMG (signed and notarized)
+        if: steps.changes.outputs.skip != 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # Incremental builds are signed and notarized so testers can open the
+        # DMG without Gatekeeper warnings. Notarization adds 1-5 min per build.
+        run: npx electron-builder --mac dmg --publish never
 
       - name: Clean up keychain
         if: always()
