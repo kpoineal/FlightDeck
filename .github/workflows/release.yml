@@ -22,11 +22,19 @@ jobs:
       - name: Resolve tag
         id: tag
         shell: pwsh
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $tag = "${{ inputs.tag }}"
+          if ($env:EVENT_NAME -eq "workflow_dispatch") {
+            $tag = $env:INPUT_TAG
           } else {
-            $tag = "${{ github.ref_name }}"
+            $tag = $env:REF_NAME
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            Write-Error "Invalid tag format: '$tag'. Expected vMAJOR.MINOR.PATCH (e.g. v1.0.0)."
+            exit 1
           }
           $version = $tag -replace '^v', ''
           "tag=$tag" | Out-File -Append $env:GITHUB_OUTPUT
@@ -107,15 +115,25 @@ jobs:
   release-mac:
     runs-on: macos-latest
     needs: release
+    permissions:
+      contents: write
 
     steps:
       - name: Resolve tag
         id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            tag="${{ inputs.tag }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$INPUT_TAG"
           else
-            tag="${{ github.ref_name }}"
+            tag="$REF_NAME"
+          fi
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag format: '$tag'. Expected vMAJOR.MINOR.PATCH (e.g. v1.0.0)."
+            exit 1
           fi
           version="${tag#v}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -146,8 +164,39 @@ jobs:
       - name: Run tests
         run: node --test test/*.test.js
 
+      - name: Import Apple certificate
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
       - name: Build macOS DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --mac dmg --publish never
+
+      - name: Clean up keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          # Overwrite cert file before deletion as defense-in-depth
+          if [ -f "$CERT_PATH" ]; then
+            dd if=/dev/urandom of="$CERT_PATH" bs=1k count=$(du -k "$CERT_PATH" | cut -f1) conv=notrunc 2>/dev/null || true
+            rm -f "$CERT_PATH"
+          fi
 
       - name: Upload macOS artifact to GitHub Release
         env:

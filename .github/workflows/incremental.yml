@@ -145,6 +145,8 @@ jobs:
   incremental-mac:
     runs-on: macos-latest
     needs: incremental
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -192,9 +194,40 @@ jobs:
         if: steps.changes.outputs.skip != 'true'
         run: node --test test/*.test.js
 
-      - name: Build macOS DMG
+      - name: Import Apple certificate
         if: steps.changes.outputs.skip != 'true'
-        run: npx electron-builder --mac dmg --publish never
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+      - name: Build macOS DMG (signed, not notarized)
+        if: steps.changes.outputs.skip != 'true'
+        # Incremental builds are signed but skip Apple notarization to save
+        # 1-5 min per build. Testers can right-click → Open to bypass Gatekeeper.
+        # Stable releases are fully signed AND notarized.
+        run: npx electron-builder --mac dmg --publish never --config.mac.notarize=false
+
+      - name: Clean up keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          # Overwrite cert file before deletion as defense-in-depth
+          if [ -f "$CERT_PATH" ]; then
+            dd if=/dev/urandom of="$CERT_PATH" bs=1k count=$(du -k "$CERT_PATH" | cut -f1) conv=notrunc 2>/dev/null || true
+            rm -f "$CERT_PATH"
+          fi
 
       - name: Upload macOS artifact to pre-release
         if: steps.changes.outputs.skip != 'true'
