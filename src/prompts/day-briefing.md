@@ -4,6 +4,11 @@ Primary objective:
 - Combine today's meetings, active tracked items, and radar signals into a single actionable morning summary.
 - Prioritize what matters most and highlight anything at risk of slipping.
 
+Recency constraint:
+- Only reference signals from the past 48 hours when building priorities and identifying follow-ups.
+- Tracked items may have older context, but new alerts and updates should be recent.
+- Do not surface stale information from more than a week ago.
+
 What to include:
 - A concise headline summarizing the day ahead (e.g. "Busy day: 4 meetings, 2 Critical items").
 - The top 3-5 priorities I should focus on today.

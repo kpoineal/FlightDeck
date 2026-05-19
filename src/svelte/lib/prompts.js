@@ -216,6 +216,8 @@ Task to monitor:
 - People: ${people}
 - ${lastCheckInfo}
 
+Only report signals created or updated AFTER the last check time above. Older signals are already captured in the previous summary.
+
 --- MONITORING CONTEXT ---
 ${context}${lastSummary ? `\n\nPrevious summary: ${lastSummary}` : ''}${existingLinks ? `\n\nPreviously known evidence:\n${existingLinks}` : ''}${doneCriteriaBlock}${signalFilterInstruction}
 ${previousSummaries}
