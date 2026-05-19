@@ -2,15 +2,14 @@ Analyze my recent Microsoft 365 work signals (email, Teams chats, meetings, and 
 Identify what requires attention now and classify each as Critical, Elevated, or Observe.
 
 Return grounded recommendations with explainability and citations.
-Only include items relevant to active work from the last 2 weeks (expand up to 4 weeks only if needed for context). 
+Only include items with signals created or updated since {lastRunAt}. Do not report older items.
 Include inline citations for every referenced source.
 Include 5-15 items.
 
 Also include a commitments ledger in the same response.
 Ledger recency rules:
 - Prioritize current, time-sensitive work.
-- Use last 7 days by default.
-- Expand to at most 14 days only if still clearly active (open owner, pending next step, unresolved blocker).
+- Only include commitments with signals since {lastRunAt}.
 - Exclude stale/closed items.
 
 Due date extraction rules:
