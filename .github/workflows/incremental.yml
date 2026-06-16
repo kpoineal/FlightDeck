@@ -44,7 +44,7 @@ jobs:
             "skip=false" | Out-File -Append $env:GITHUB_OUTPUT
           }
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         if: steps.changes.outputs.skip != 'true'
         with:
           node-version: 22
@@ -158,7 +158,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
 
