@@ -82,3 +82,7 @@
 ### 2026-09-04 — Preserve Tracked Squad State
 - `.squad/**` is tracked team state and must not be deleted or ignored wholesale; `.gitignore` should retain only the selective runtime-artifact rules from the protected branch.
 - When repairing a branch that deleted `.squad` from its index, restore both index and worktree from the protected ref, then verify the correction diff contains no application paths before committing.
+
+### 2026-09-04 — Team-Wide Squad Model Preference
+- `.squad/config.json` uses `defaultModel: gpt-5.6-luna` and `defaultReasoningEffort: high` for every Squad agent; agent-specific model overrides must not supersede this preference.
+- The focused parsed-JSON assertion passed with exit code 0. No commit was created.
