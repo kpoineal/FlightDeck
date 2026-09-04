@@ -13,7 +13,7 @@
     DEFAULT_SCANNER_PROMPT,
   } from '../lib/constants.js';
 
-  let { scanner = null, onsave, onrunnow, oncancel } = $props();
+  let { scanner = null, canRun = true, runDisabledReason = '', onsave, onrunnow, oncancel } = $props();
 
   let isEdit = $derived(scanner != null);
 
@@ -347,7 +347,8 @@
       {isEdit ? 'Update Scanner' : 'Create Scanner'}
     </button>
     {#if isEdit}
-      <button class="small-btn" on:click={() => onrunnow?.()}>Run Now</button>
+      <button class="small-btn" disabled={!canRun} title={!canRun ? runDisabledReason : 'Run this scanner now'}
+        on:click={() => onrunnow?.()}>Run Now</button>
     {/if}
     <button class="small-btn" on:click={() => oncancel?.()}>Cancel</button>
   </div>

@@ -1,7 +1,7 @@
 <script>
-  import { items, history, scanners, meetings, highlightedItemId, mode, filter, collapsedSections } from '../../lib/stores.js';
+  import { items, history, meetings } from '../../lib/stores.js';
   import { normalizeSeverity } from '../../lib/utils.js';
-  import { get } from 'svelte/store';
+  import { navigateToRadarItem } from '../../lib/radar-navigation.js';
 
   let now = $state(new Date());
   let timer = $state(null);
@@ -107,30 +107,15 @@
     return `${Math.floor(diff / 86_400_000)}d ago`;
   }
 
-  function dotColor(severity) {
-    if (severity === 'Critical') return 'var(--color-critical, #ff453a)';
-    if (severity === 'Elevated') return 'var(--color-elevated, #ff9f0a)';
-    return 'var(--color-observe, #0a84ff)';
+  function dotClass(severity) {
+    if (severity === 'Critical') return 'ticker-dot--critical';
+    if (severity === 'Elevated') return 'ticker-dot--elevated';
+    return 'ticker-dot--observe';
   }
 
   function clickStory(story) {
     if (story.itemId) {
-      filter.set('all');
-      mode.set('Radar');
-
-      // Expand the scanner section containing this item
-      const targetItem = get(items).find(i => i.id === story.itemId);
-      if (targetItem && targetItem.scannerId) {
-        const sectionId = `scanner-${targetItem.scannerId}`;
-        const allSectionIds = get(scanners).map(s => `scanner-${s.id}`);
-        collapsedSections.set(allSectionIds.filter(id => id !== sectionId));
-      }
-
-      // Delay highlight to let DOM update after section expansion
-      setTimeout(() => {
-        highlightedItemId.set(story.itemId);
-        setTimeout(() => highlightedItemId.set(null), 4000);
-      }, 100);
+      void navigateToRadarItem(story.itemId);
     }
   }
 </script>
@@ -156,7 +141,7 @@
             class:ticker-story--updated={story.isUpdated}
             onclick={() => clickStory(story)}
           >
-            <span class="ticker-dot" style="background: {dotColor(story.severity)}"></span>
+            <span class="ticker-dot {dotClass(story.severity)}"></span>
             {#if story.isNew}<span class="ticker-new-badge">NEW</span>{/if}
             {#if story.isUpdated}<span class="ticker-updated-badge">UPDATED</span>{/if}
             <span class="ticker-text">{story.text}</span>
@@ -173,7 +158,7 @@
             onclick={() => clickStory(story)}
             aria-hidden="true"
           >
-            <span class="ticker-dot" style="background: {dotColor(story.severity)}"></span>
+            <span class="ticker-dot {dotClass(story.severity)}"></span>
             {#if story.isNew}<span class="ticker-new-badge">NEW</span>{/if}
             {#if story.isUpdated}<span class="ticker-updated-badge">UPDATED</span>{/if}
             <span class="ticker-text">{story.text}</span>
@@ -243,6 +228,9 @@
     border-radius: 50%;
     flex-shrink: 0;
   }
+  .ticker-dot--critical { background: var(--color-critical); }
+  .ticker-dot--elevated { background: var(--color-elevated); }
+  .ticker-dot--observe { background: var(--color-observe); }
   .ticker-text {
     max-width: 320px;
     overflow: hidden;

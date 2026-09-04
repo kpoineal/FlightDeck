@@ -279,7 +279,6 @@ export async function runWorkiqJson(prompt, validator, label, { maxRetries = 1, 
 
     const result = await window.workiq.ask(prompt);
     const raw = result.success ? result.answer : result.error;
-    console.log(`[flightdeck] ${label} raw response (attempt ${attempt + 1}):`, raw);
 
     // Detect EULA gate: WorkIQ returns EULA text instead of data
     if (looksLikeEulaPrompt(raw)) {

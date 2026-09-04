@@ -24,6 +24,25 @@
     return 'at-event--observe';
   }
 
+  function actionEventText(entry) {
+    if (entry.channel === 'outlook-draft' && entry.event === 'succeeded') {
+      return 'Outlook draft saved in Outlook Drafts. Nothing was sent.';
+    }
+    if (entry.channel === 'outlook-draft' && entry.event === 'failed') {
+      return `Outlook draft was not created (${entry.code || 'CREATE_FAILED'}).`;
+    }
+    if (entry.channel === 'teams' && entry.event === 'succeeded') {
+      return 'Teams message sent with a matching receipt.';
+    }
+    if (entry.channel === 'teams' && entry.code === 'CANCELLED') {
+      return 'Teams send cancelled before dispatch. No request was dispatched.';
+    }
+    if (entry.channel === 'teams' && entry.code === 'SEND_UNCONFIRMED') {
+      return 'Teams send could not be confirmed. Check Teams before trying again.';
+    }
+    return entry.summary || 'Action proposal updated';
+  }
+
   function timelineRelativeLabel(isoStr) {
     if (!isoStr) return '';
     const d = new Date(isoStr);
@@ -52,9 +71,10 @@
 {#if entries.length > 0}
   <div class="activity-timeline">
     {#each slicedEntries as e, i}
+      {@const isAction = e.kind === 'action'}
       {@const label = severityLabel(e.severity)}
       {@const timeLabel = timelineRelativeLabel(e.timestamp)}
-      {@const colorClass = severityColorClass(e.severity)}
+      {@const colorClass = isAction ? 'at-event--action' : severityColorClass(e.severity)}
       {@const isNewest = i === 0}
       {@const isLast = i === (showingAll ? entries.length : slicedEntries.length) - 1}
       {@const isUnseen = !isTerminal && e.seen === false}
@@ -66,7 +86,7 @@
         class="at-event {colorClass}"
         class:at-event--newest={isNewest}
         class:at-event--unseen={isUnseen}
-        style="--at-delay: {i * 30}ms"
+        data-testid={isAction ? 'action-timeline-entry' : undefined}
       >
         <div class="at-track">
           <div class="at-node">
@@ -80,15 +100,19 @@
         <div class="at-card">
           <div class="at-card-head">
             <span class="at-time">{timeLabel}</span>
-            {#if !isNewest}
+            {#if isAction}
+              <span class="at-action-kind">Action</span>
+            {:else if !isNewest}
               <span class="at-severity pill severity-{curSeverity}">{label}</span>
             {/if}
-            {#if sevChanged}
+            {#if !isAction && sevChanged}
               <span class="at-transition-badge">{escalated ? '\u25b2' : '\u25bc'}</span>
             {/if}
           </div>
           <p class="at-changes">
-            {#if Array.isArray(e.changes)}
+            {#if isAction}
+              {actionEventText(e)}
+            {:else if Array.isArray(e.changes)}
               {#each e.changes as c, ci}
                 {@const parsed = formatChange(c)}
                 {#if ci > 0} &middot; {/if}
@@ -106,7 +130,7 @@
               No changes recorded
             {/if}
           </p>
-          {#if e.summary && e.summary !== (Array.isArray(e.changes) ? e.changes.join(' \u00b7 ') : '')}
+          {#if !isAction && e.summary && e.summary !== (Array.isArray(e.changes) ? e.changes.join(' \u00b7 ') : '')}
             <p class="at-summary">{e.summary}</p>
           {/if}
           {#if Array.isArray(e.newLinks) && e.newLinks.length}

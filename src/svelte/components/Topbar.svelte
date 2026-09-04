@@ -1,9 +1,9 @@
 <script>
-  import { mode, connected, loading, highlightedItemId, filter, items, scanners, collapsedSections, activeOperations } from '../lib/stores.js';
+  import { mode, connected, activeOperations, actionProposals, actionsQueueOpen, openActionsQueue } from '../lib/stores.js';
   import { setMode } from '../lib/actions.js';
   import SearchOverlay from './SearchOverlay.svelte';
   import iconUrl from '../../icon.png';
-  import { get } from 'svelte/store';
+  import { navigateToRadarItem } from '../lib/radar-navigation.js';
 
   let { version = '', updateAvailable = false, updateText = 'Update available', updateUrl = '', onupdatedismiss } = $props();
 
@@ -30,22 +30,7 @@
     if (type === 'briefing') {
       setMode('Briefings');
     } else {
-      filter.set('all');
-      setMode('Radar');
-
-      // Expand the scanner section containing this item
-      const targetItem = get(items).find(i => i.id === id);
-      if (targetItem && targetItem.scannerId) {
-        const sectionId = `scanner-${targetItem.scannerId}`;
-        const allSectionIds = get(scanners).map(s => `scanner-${s.id}`);
-        collapsedSections.set(allSectionIds.filter(sid => sid !== sectionId));
-      }
-
-      // Highlight and scroll to item
-      setTimeout(() => {
-        highlightedItemId.set(id);
-        setTimeout(() => highlightedItemId.set(null), 4000);
-      }, 100);
+      void navigateToRadarItem(id);
     }
   }
 
@@ -56,12 +41,16 @@
     $connected ? 'Connected' : 'Ready'
   );
   let statusClass = $derived(activeCount > 0 ? 'loading' : ($connected ? 'connected' : ''));
+  let actionCount = $derived($actionProposals.filter((proposal) => !proposal.archivedAt).length);
 </script>
 
 <header class="topbar">
   <div class="brand">
     <img class="brand-logo" src={iconUrl} alt="FlightDeck logo" />
-    <span class="brand-name">FLIGHT<span class="brand-accent">DECK</span></span>
+    <span class="brand-lockup">
+      <span class="brand-name">FLIGHT<span class="brand-accent">DECK</span></span>
+      <span class="brand-context">WORK COMMAND CENTER</span>
+    </span>
     {#if version}
       <span class="version-badge visible">v{version}</span>
     {/if}
@@ -83,14 +72,20 @@
 
   <SearchOverlay onnavigate={handleSearchNavigate} />
 
-  <div class="topbar-tabs">
-    <button class="mode-btn" class:active={$mode === 'Radar'}
+  <nav class="topbar-tabs" aria-label="Command center">
+    <button type="button" class="mode-btn mode-btn--primary" class:active={$mode === 'Today'} aria-pressed={$mode === 'Today'}
+      on:click={() => handleModeClick('Today')}>Today</button>
+    <button type="button" class="mode-btn" class:active={$mode === 'Radar'} aria-pressed={$mode === 'Radar'}
       on:click={() => handleModeClick('Radar')}>Radar</button>
-    <button class="mode-btn" class:active={$mode === 'Briefings'}
+    <button type="button" class="mode-btn" class:active={$mode === 'Briefings'} aria-pressed={$mode === 'Briefings'}
       on:click={() => handleModeClick('Briefings')}>Briefings</button>
-    <button class="mode-btn" class:active={$mode === 'History'}
+    <button type="button" class="mode-btn action-nav-btn" aria-haspopup="dialog"
+      aria-expanded={$actionsQueueOpen} on:click={(event) => openActionsQueue(event.currentTarget)}>
+      Actions <span class="action-nav-count">{actionCount}</span>
+    </button>
+    <button type="button" class="mode-btn" class:active={$mode === 'History'} aria-pressed={$mode === 'History'}
       on:click={() => handleModeClick('History')}>History</button>
-  </div>
+  </nav>
 
   <div class="topbar-controls">
     <span class="status-pill {statusClass}">{statusLabel}</span>

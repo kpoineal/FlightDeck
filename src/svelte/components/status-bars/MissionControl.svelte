@@ -1,7 +1,7 @@
 <script>
-  import { items, scanners, meetings, highlightedItemId, mode, filter, collapsedSections } from '../../lib/stores.js';
+  import { items, meetings, mode } from '../../lib/stores.js';
   import { normalizeSeverity } from '../../lib/utils.js';
-  import { get } from 'svelte/store';
+  import { navigateToRadarItem } from '../../lib/radar-navigation.js';
 
   let now = $state(new Date());
 
@@ -64,18 +64,7 @@
   }
 
   function navigateToItem(itemId) {
-    filter.set('all');
-    mode.set('Radar');
-    const targetItem = get(items).find(i => i.id === itemId);
-    if (targetItem && targetItem.scannerId) {
-      const sectionId = `scanner-${targetItem.scannerId}`;
-      const allSectionIds = get(scanners).map(s => `scanner-${s.id}`);
-      collapsedSections.set(allSectionIds.filter(id => id !== sectionId));
-    }
-    setTimeout(() => {
-      highlightedItemId.set(itemId);
-      setTimeout(() => highlightedItemId.set(null), 4000);
-    }, 100);
+    void navigateToRadarItem(itemId);
   }
 
   function prepMeeting(meeting) {

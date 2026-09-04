@@ -8,7 +8,8 @@
     "demo": "npm run build:renderer && electron . --demo",
     "demo:reseed": "npm run build:renderer && electron . --demo-reseed",
     "screenshots": "npm run build:renderer && node scripts/capture-screenshots.js",
-    "test": "node --test test/main-utils.test.js test/main-window-state.test.js test/main-pty-bridge.test.js test/main-ipc-handlers.test.js test/main-ipc-tracker-popout.test.js",
+    "test": "node --test test/main-utils.test.js test/main-window-state.test.js test/main-pty-bridge.test.js test/main-workiq-mcp-client.test.js test/main-ipc-handlers.test.js test/main-ipc-tracker-popout.test.js test/mailbox.test.js test/mailbox-actions-monitor.test.js test/action-proposals.test.js test/item-deletion.test.js test/persistence-deletion.test.js test/proposal-synthesis.test.js test/radar-navigation.test.js test/radar-selection-transition.test.js test/scanner-exclusion.test.js",
+    "test:radar:browser": "npm run build:renderer && node scripts/test-radar-browser.js",
     "dev": "vite src/",
     "build:renderer": "vite build",
     "dist": "npm run build:renderer && electron-builder --win msi",
@@ -73,7 +74,7 @@
     "vite": "^8.0.8"
   },
   "dependencies": {
-    "@microsoft/workiq": "^0.4.1",
+    "@microsoft/workiq": "1.0.0",
     "electron-store": "^11.0.2",
     "node-pty": "1.1.0"
   }

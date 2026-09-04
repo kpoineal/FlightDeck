@@ -78,3 +78,7 @@
 - **Issue:** "Cleanup old incrementals" step in `.github/workflows/incremental.yml` failed on run #24654922912 because `git push origin :refs/tags/...` returned non-zero when deleting the last tag in the loop. PowerShell propagates `$LASTEXITCODE` from the final native command as the script exit code.
 - **Fix:** Reset `$global:LASTEXITCODE = 0` after each `git push` tag deletion (tag may already be gone — not an error), and added explicit `exit 0` at end of script as a safety net.
 - **Pattern:** In PowerShell GitHub Actions steps, always reset `$LASTEXITCODE` after fire-and-forget native commands, especially inside loops. The "Create pre-release" step was unaffected because `gh release create` runs after its `git push`, overwriting the exit code.
+
+### 2026-09-04 — Preserve Tracked Squad State
+- `.squad/**` is tracked team state and must not be deleted or ignored wholesale; `.gitignore` should retain only the selective runtime-artifact rules from the protected branch.
+- When repairing a branch that deleted `.squad` from its index, restore both index and worktree from the protected ref, then verify the correction diff contains no application paths before committing.
