@@ -1,7 +1,7 @@
 <script>
   import ScannerForm from './ScannerForm.svelte';
 
-  let { open = false, scanner = null, onsave, onrunnow, ondelete, onclose } = $props();
+  let { open = false, scanner = null, canRun = true, runDisabledReason = '', onsave, onrunnow, ondelete, onclose } = $props();
 
   function handleBackdrop(e) {
     if (e.target === e.currentTarget) onclose?.();
@@ -14,6 +14,8 @@
     <div class="modal-card">
       <h3 class="scanner-modal-title">{scanner ? (scanner.name || 'Scanner Settings') : 'New Scanner'}</h3>
       <ScannerForm {scanner}
+        {canRun}
+        {runDisabledReason}
         onsave={(data) => onsave?.(data)}
         onrunnow={() => onrunnow?.()}
         oncancel={() => onclose?.()} />

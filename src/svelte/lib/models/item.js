@@ -7,6 +7,7 @@ import {
   WORK_HOURS_START_HOUR,
   WORK_HOURS_END_HOUR,
   LIFECYCLE_STATUSES,
+  UNKNOWN_LIFECYCLE_STATUS,
   ALL_SIGNAL_TYPES,
   MAX_EVIDENCE_LINKS_PER_ITEM,
 } from '../constants.js';
@@ -28,6 +29,26 @@ import {
   adoptStructuredLabels,
   extractLabelEmbeddedUrl,
 } from '../utils.js';
+
+const MAX_ACTION_HISTORY_ENTRIES = 20;
+const MAX_OTHER_HISTORY_ENTRIES = 20;
+
+export function capItemUpdateHistory(entries) {
+  let actionEntries = 0;
+  let otherEntries = 0;
+  return (Array.isArray(entries) ? entries : []).filter((entry) => {
+    if (entry?.kind === 'action') {
+      actionEntries += 1;
+      return actionEntries <= MAX_ACTION_HISTORY_ENTRIES;
+    }
+    otherEntries += 1;
+    return otherEntries <= MAX_OTHER_HISTORY_ENTRIES;
+  });
+}
+
+export function prependItemUpdateHistory(entries, entry) {
+  return capItemUpdateHistory([entry, ...(Array.isArray(entries) ? entries : [])]);
+}
 
 // ── Schedule / monitoring helpers ──────────────────────────────────
 
@@ -142,6 +163,63 @@ function _buildEvidenceLinks(item, inlineLinks) {
   return links;
 }
 
+export function collectItemEvidenceLinks(item) {
+  const links = [];
+  const seenUrls = new Set();
+  const candidates = [
+    ...(Array.isArray(item?.evidenceLinks) ? item.evidenceLinks : []),
+    ...(Array.isArray(item?.ledgerEvidenceLinks) ? item.ledgerEvidenceLinks : []),
+  ];
+
+  for (const candidate of candidates) {
+    let entry = normalizeEvidenceLink(candidate, item?.sourceType || 'source');
+    if (!entry && candidate && typeof candidate === 'object') {
+      const url = normalizeExternalUrl(candidate.url);
+      if (url && !isHallucinatedUrl(url) && isDeepLink(url)) {
+        const signalAt = toIsoOrNull(candidate.signalAt);
+        entry = {
+          label: cleanDisplayText(candidate.label || compactLinkLabel(url, 'source')),
+          type: normalizeSignalType(candidate.type || item?.sourceType || 'source'),
+          url,
+          ...(signalAt ? { signalAt } : {}),
+        };
+      }
+    }
+    if (!entry || seenUrls.has(entry.url)) continue;
+    seenUrls.add(entry.url);
+    links.push(entry);
+  }
+
+  return links.slice(0, MAX_EVIDENCE_LINKS_PER_ITEM);
+}
+
+export function reconcileItemEvidenceLinks(item, response) {
+  const hasStructuredEvidence = Array.isArray(response?.evidenceLinks);
+  const inlineLinks = [
+    ...extractInlineCitations(response?.summary || ''),
+    ...extractInlineCitations(response?.reason || ''),
+  ];
+  if (!inlineLinks.length) {
+    inlineLinks.push(
+      ...extractBareUrlCitations(response?.summary || ''),
+      ...extractBareUrlCitations(response?.reason || ''),
+    );
+  }
+  adoptStructuredLabels(inlineLinks, response?.evidenceLinks);
+
+  if (!hasStructuredEvidence && !inlineLinks.length) {
+    return collectItemEvidenceLinks(item);
+  }
+
+  return collectItemEvidenceLinks({
+    sourceType: item?.sourceType,
+    evidenceLinks: [
+      ...(hasStructuredEvidence ? response.evidenceLinks : []),
+      ...inlineLinks,
+    ],
+  });
+}
+
 function buildDefaultMonitorPrompt(item) {
   const parts = [];
   const title = cleanDisplayText(item?.title || '');
@@ -166,6 +244,30 @@ function buildDefaultMonitorPrompt(item) {
 
 // ── Unified normalizer ─────────────────────────────────────────────
 
+export function normalizeItemId(value) {
+  const normalized = String(value ?? '').trim();
+  return normalized || null;
+}
+
+export function normalizeDeletedItemIds(values) {
+  return [...new Set((Array.isArray(values) ? values : []).map(normalizeItemId).filter(Boolean))];
+}
+
+export function filterDeletedItems(entries, deletedIds) {
+  const exclusions = new Set(normalizeDeletedItemIds(deletedIds));
+  return (Array.isArray(entries) ? entries : []).filter((entry) => {
+    const itemId = normalizeItemId(entry?.id);
+    return itemId && !exclusions.has(itemId);
+  });
+}
+
+export function reconcileHydratedItems(currentEntries, hydratedEntries, deletedIds) {
+  const reconciled = new Map();
+  for (const entry of filterDeletedItems(hydratedEntries, deletedIds)) reconciled.set(normalizeItemId(entry.id), entry);
+  for (const entry of filterDeletedItems(currentEntries, deletedIds)) reconciled.set(normalizeItemId(entry.id), entry);
+  return [...reconciled.values()];
+}
+
 export function normalizeItem(item) {
   const inlineLinks = [
     ...extractInlineCitations(item?.summary || ''),
@@ -179,7 +281,7 @@ export function normalizeItem(item) {
   }
   adoptStructuredLabels(inlineLinks, item?.evidenceLinks);
 
-  const normalizedId = String(item?.id || '').trim() || `custom_${hashString(`${Date.now()}_${Math.random()}`)}`;
+  const normalizedId = normalizeItemId(item?.id) || `custom_${hashString(`${Date.now()}_${Math.random()}`)}`;
   const monitorEnabled = item?.monitorEnabled === true;
   const monitorSignals = Array.isArray(item?.monitorSignals) && item.monitorSignals.length
     ? item.monitorSignals.filter((s) => ALL_SIGNAL_TYPES.includes(s))
@@ -197,6 +299,9 @@ export function normalizeItem(item) {
     reason: cleanDisplayText(item?.reason || ''),
     status: cleanDisplayText(item?.status || 'Inbound'),
     doneCriteria: cleanDisplayText(item?.doneCriteria || '') || null,
+    completionConfidence: ['high', 'medium', 'low'].includes(String(item?.completionConfidence || '').toLowerCase())
+      ? String(item.completionConfidence).toLowerCase()
+      : null,
     evidenceLinks: _buildEvidenceLinks(item, inlineLinks).slice(0, MAX_EVIDENCE_LINKS_PER_ITEM),
     suggestedNextSteps: Array.isArray(item?.suggestedNextSteps)
       ? item.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2)
@@ -231,16 +336,26 @@ export function normalizeItem(item) {
       if (item?.lifecycleStatus === 'complete' || item?.lifecycleStatus === 'archived') return item.lifecycleStatus;
       if (item?.lifecycleStatus === 'snoozed') return 'snoozed';
       const s = String(item?.status || '').toLowerCase();
+      if (s.includes('archiv')) return 'archived';
       if (s.includes('complete') || s.includes('resolved') || s.includes('closed') || s.includes('done')) return 'complete';
       if (s.includes('block') || s.includes('stalled')) return 'blocked';
       if (s.includes('wait') || s.includes('pending')) return 'waiting';
+      if (s.includes('progress')) return 'in-progress';
       if (LIFECYCLE_STATUSES.includes(item?.lifecycleStatus)) return item.lifecycleStatus;
-      return 'in-progress';
+      return UNKNOWN_LIFECYCLE_STATUS;
     })(),
     scannerId: item?.scannerId || null,
     isNew: item?.isNew === true,
     updateHistory: Array.isArray(item?.updateHistory)
-      ? item.updateHistory.map((e) => ({ ...e, seen: e.seen ?? true }))
+      ? capItemUpdateHistory(item.updateHistory.map((entry) => ({
+          ...entry,
+          ...(!Object.prototype.hasOwnProperty.call(entry ?? {}, 'kind')
+            && entry?.seen === false
+            && !entry?.changes?.includes?.('Discovered')
+            ? { kind: 'reply' }
+            : {}),
+          seen: entry?.seen ?? true,
+        })))
       : [],
     hasNewUpdate: item?.hasNewUpdate === true,
     archived: item?.archived === true,
@@ -251,6 +366,7 @@ export function normalizeItem(item) {
 
   if (!normalized.updateHistory.length) {
     normalized.updateHistory.push({
+      kind: 'discovery',
       timestamp: normalized.discoveredAt || normalized.trackedAt || nowIso(),
       changes: ['Discovered'],
       summary: normalized.summary || normalized.title || '',

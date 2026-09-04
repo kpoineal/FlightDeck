@@ -242,6 +242,7 @@ Return strict valid JSON only:
     {
       "label": "descriptive label for the source signal",
       "type": "string (e.g. email, chat, meeting, doc, devops, planner, etc. — use your best judgment to describe the signal source)",
+      "url": "https URL for the exact source signal",
       "signalAt": "ISO-8601 timestamp when the signal was sent/written/updated, or null"
     }
   ],

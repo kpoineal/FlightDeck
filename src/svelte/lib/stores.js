@@ -9,6 +9,8 @@ export const meetingsLastFetched = writable(0);
 export const briefingsByMeetingId = writable({});
 export const briefingSeenAt = writable({});
 export const history = writable([]);
+export const actionProposals = writable([]);
+export const deletedItemIds = writable([]);
 
 // ── Demo mode ────────────────────────────────────────────────────────
 export const isDemo = writable(false);
@@ -21,7 +23,15 @@ export const activeOperations = writable(new Map());
 
 /** Backward-compatible loading flag — true when any operation is active */
 export const loading = derived(activeOperations, ($ops) => $ops.size > 0);
-export const mode = writable('Radar');
+export const mode = writable('Today');
+export const actionsQueueOpen = writable(false);
+export const actionsQueueFocusOrigin = writable(null);
+export function openActionsQueue(initiator = null) {
+  const activeElement = typeof document === 'undefined' ? null : document.activeElement;
+  actionsQueueFocusOrigin.set(initiator || activeElement);
+  actionsQueueOpen.set(true);
+}
+export const selectedProposalId = writable(null);
 export const density = writable('full');
 export const filter = writable('all');
 export const collapsedSections = writable([]);
@@ -52,13 +62,14 @@ export const kpis = derived(items, ($items) => {
 export const coldItems = writable([]);
 
 /** Filtered items based on current filter selection. */
-export const filteredItems = derived([items, coldItems, filter], ([$items, $coldItems, $filter]) => {
+export const filteredItems = derived([items, coldItems, deletedItemIds, filter], ([$items, $coldItems, $deletedItemIds, $filter]) => {
+  const deletedIds = new Set($deletedItemIds);
   if ($filter === 'archived') {
-    const hot = $items.filter(i => i.lifecycleStatus === 'complete' || i.lifecycleStatus === 'archived');
+    const hot = $items.filter(i => !deletedIds.has(i.id) && (i.lifecycleStatus === 'complete' || i.lifecycleStatus === 'archived'));
     // Merge cold storage items (deduped by id)
     const hotIds = new Set(hot.map(i => i.id));
-    const uniqueCold = $coldItems.filter(i => !hotIds.has(i.id));
+    const uniqueCold = $coldItems.filter(i => !deletedIds.has(i.id) && !hotIds.has(i.id));
     return [...hot, ...uniqueCold];
   }
-  return $items.filter(i => i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived');
+  return $items.filter(i => !deletedIds.has(i.id) && i.lifecycleStatus !== 'complete' && i.lifecycleStatus !== 'archived');
 });

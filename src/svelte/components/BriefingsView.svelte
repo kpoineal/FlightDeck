@@ -1,5 +1,5 @@
 <script>
-  import { meetings, briefingsByMeetingId, briefingSeenAt, expandedBriefingMeetingIds, items, kpis } from '../lib/stores.js';
+  import { meetings, briefingsByMeetingId, briefingSeenAt, expandedBriefingMeetingIds, items, kpis, actionProposals, openActionsQueue, selectedProposalId } from '../lib/stores.js';
   import { DAY_BRIEFING_KEY } from '../lib/constants.js';
   import { addHistory } from '../lib/actions.js';
   import { savePersistentState } from '../lib/persistence.js';
@@ -8,6 +8,7 @@
   import { runWorkiqJson } from '../lib/json-parser.js';
   import DayBriefingCard from './DayBriefingCard.svelte';
   import MeetingCard from './MeetingCard.svelte';
+  import { createActionProposal } from '../lib/action-proposals.js';
 
   let { onrefresh } = $props();
 
@@ -225,41 +226,74 @@
       return ids;
     });
   }
+
+  function handlePropose(data) {
+    const meeting = $meetings.find((entry) => entry.id === data.meetingId);
+    const matchedItem = $items.find((item) => {
+      const haystack = `${meeting?.title || ''} ${meeting?.summary || ''}`.toLowerCase();
+      return String(item.title || '').split(/\s+[—-]\s+/)[0].toLowerCase().split(' ').some((word) => word.length > 5 && haystack.includes(word));
+    });
+    const briefing = getBriefing(meeting.id);
+    const sourceItem = matchedItem || {
+      id: `meeting_${meeting.id}`,
+      title: meeting.title,
+      sourceType: 'Meeting',
+      owner: meeting.organizer,
+      counterparties: [meeting.organizer].filter(Boolean),
+      summary: meeting.summary || briefing?.headline,
+      evidenceLinks: (briefing?.sources || []).map((source) => ({ label: source.label, url: source.url })),
+      severity: 'Observe',
+    };
+    const proposal = createActionProposal(
+      sourceItem,
+      `Prepare the follow-up for ${meeting?.title || sourceItem.title} using the generated briefing and linked evidence.`,
+      {
+        reason: `Meeting readiness follow-up proposed from ${meeting?.title || 'Briefings'}.`,
+        sourceDestination: 'Briefings',
+        sourceContextId: meeting.id,
+      }
+    );
+    actionProposals.update((entries) => [proposal, ...entries]);
+    selectedProposalId.set(proposal.id);
+    openActionsQueue(data.initiator);
+  }
 </script>
 
-<div class="panel panel--full">
-  <div class="briefings-header">
+<div class="command-view briefing-command">
+  <div class="command-view__heading briefings-header">
     <div>
-      <h2>Briefings</h2>
-      <div class="panel-sub">Upcoming meetings today; expand one and generate a focused briefing</div>
+      <span>BRIEFINGS</span>
+      <h1>Now / Next / Later</h1>
+      <p>Meeting readiness, generated briefs, and linked evidence</p>
     </div>
     <button class="small-btn" class:is-loading={refreshing} disabled={refreshing} on:click={handleRefresh}>
       {refreshing ? 'Refreshing...' : '↻ Refresh Meetings'}
     </button>
   </div>
 
-  <DayBriefingCard
-    briefing={dayBriefing}
-    unseen={dayBriefingUnseen}
-    generating={dayGenerating}
-    ongenerate={handleDayGenerate}
-  />
+  <section class="briefing-now">
+    <div class="briefing-lane-label"><strong>Now</strong><span>Operating brief</span></div>
+    <DayBriefingCard briefing={dayBriefing} unseen={dayBriefingUnseen} generating={dayGenerating} ongenerate={handleDayGenerate} />
+  </section>
 
-  {#if sortedMeetings.length}
-    {#each sortedMeetings as meeting (meeting.id)}
-      <MeetingCard
-        {meeting}
-        briefing={getBriefing(meeting.id)}
-        unseen={isMeetingBriefingUnseen(meeting.id, getBriefing(meeting.id), $briefingSeenAt)}
-        expanded={$expandedBriefingMeetingIds.includes(meeting.id)}
-        generating={meetingGeneratingId === meeting.id}
-        ongenerate={handleMeetingGenerate}
-        ontoggle={handleMeetingToggle}
-      />
-    {/each}
-  {:else}
-    <div class="empty">No upcoming meetings for today. Click Refresh to reload.</div>
-  {/if}
+  {#each [
+    { label: 'Next', hint: 'Prepare before these start', meetings: sortedMeetings.slice(0, 2) },
+    { label: 'Later', hint: 'Readiness queue', meetings: sortedMeetings.slice(2) }
+  ] as lane}
+    <section class="briefing-lane">
+      <div class="briefing-lane-label"><strong>{lane.label}</strong><span>{lane.hint}</span></div>
+      <div class="briefing-lane-content">
+        {#each lane.meetings as meeting (meeting.id)}
+          <MeetingCard {meeting} briefing={getBriefing(meeting.id)}
+            unseen={isMeetingBriefingUnseen(meeting.id, getBriefing(meeting.id), $briefingSeenAt)}
+            expanded={$expandedBriefingMeetingIds.includes(meeting.id)}
+            generating={meetingGeneratingId === meeting.id}
+            ongenerate={handleMeetingGenerate} ontoggle={handleMeetingToggle} onpropose={handlePropose} />
+        {:else}<div class="command-empty">No meetings in this horizon.</div>{/each}
+      </div>
+    </section>
+  {/each}
+  <footer class="briefing-provenance">Generated content is grounded in linked sources. Source cutoff and provenance remain visible inside each brief.</footer>
 </div>
 
 <style>

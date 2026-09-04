@@ -2,7 +2,7 @@
   import { safeDate, shortTime } from '../lib/utils.js';
   import BriefingContent from './BriefingContent.svelte';
 
-  let { meeting, briefing = null, unseen = false, expanded = false, generating = false, ontoggle, ongenerate } = $props();
+  let { meeting, briefing = null, unseen = false, expanded = false, generating = false, ontoggle, ongenerate, onpropose } = $props();
 
   let hasBriefing = $derived(!!briefing);
   let severityClass = $derived(unseen ? 'briefed' : hasBriefing ? 'briefed' : 'unbriefed');
@@ -90,6 +90,7 @@
         <button class="small-btn primary" class:is-loading={generating} disabled={generating} on:click={handleGenerate}>
           {generating ? 'Generating...' : buttonLabel}
         </button>
+        <button class="small-btn" on:click={(event) => onpropose?.({ meetingId: meeting.id, initiator: event.currentTarget })}>Review follow-up</button>
       </div>
       {#if generating}
         <div class="meeting-card__generating">Generating briefing…</div>

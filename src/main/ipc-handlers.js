@@ -1,4 +1,4 @@
-const { app, ipcMain, BrowserWindow, shell, Notification, net } = require('electron');
+const { app, ipcMain, BrowserWindow, shell, Notification, net, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -70,7 +70,8 @@ function fetchLatestRelease() {
   });
 }
 
-function registerIpcHandlers(getMainWindow, popoutWindows) {
+function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
+  const workiqMcpClient = dependencies.workiqMcpClient;
 
   ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
     try {
@@ -87,6 +88,144 @@ function registerIpcHandlers(getMainWindow, popoutWindows) {
 
   ipcMain.handle(IPC_CHANNELS.ACCEPT_WORKIQ_EULA, async () => {
     return runWorkiqAcceptEula();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROBE_WORKIQ_MCP, async () => {
+    if (!workiqMcpClient || typeof workiqMcpClient.probe !== 'function') {
+      logError('[main] WorkIQ MCP client is unavailable');
+      return {
+        ok: false,
+        readOnly: true,
+        mcp: 'unavailable',
+        auth: 'unknown',
+        code: 'START_FAILED',
+      };
+    }
+
+    return workiqMcpClient.probe();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROPOSE_THREAD_ACTIONS, async (_event, context) => {
+    if (!workiqMcpClient || typeof workiqMcpClient.proposeThreadActions !== 'function') {
+      logError('[main] WorkIQ MCP synthesis client is unavailable');
+      return {
+        ok: false,
+        readOnly: true,
+        code: 'START_FAILED',
+      };
+    }
+
+    return workiqMcpClient.proposeThreadActions(context);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CREATE_OUTLOOK_DRAFT, async (_event, draft) => {
+    if (!workiqMcpClient || typeof workiqMcpClient.createOutlookDraft !== 'function') {
+      logError('[main] WorkIQ MCP draft client is unavailable');
+      return {
+        ok: false,
+        action: 'outlook-draft-create',
+        code: 'START_FAILED',
+        dispatched: false,
+      };
+    }
+
+    const confirmationOptions = {
+      type: 'question',
+      buttons: ['Cancel', 'Create draft'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'Create Outlook draft',
+      message: 'Create this saved Outlook draft?',
+      detail: 'The message will not be sent.',
+    };
+
+    let confirmation;
+    try {
+      const mainWindow = getMainWindow();
+      confirmation = mainWindow
+        ? await dialog.showMessageBox(mainWindow, confirmationOptions)
+        : await dialog.showMessageBox(confirmationOptions);
+    } catch (_) {
+      logError('[main] Outlook draft confirmation failed');
+      return {
+        ok: false,
+        action: 'outlook-draft-create',
+        code: 'CONFIRMATION_FAILED',
+        dispatched: false,
+      };
+    }
+
+    if (confirmation.response !== 1) {
+      return {
+        ok: false,
+        action: 'outlook-draft-create',
+        code: 'CANCELLED',
+        dispatched: false,
+      };
+    }
+
+    return workiqMcpClient.createOutlookDraft(draft);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SEND_TEAMS_MESSAGE, async (_event, payload) => {
+    if (!workiqMcpClient || typeof workiqMcpClient.sendTeamsMessage !== 'function') {
+      logError('[main] WorkIQ MCP Teams client is unavailable');
+      return { ok: false, action: 'teams-message-send', code: 'START_FAILED' };
+    }
+
+    const payloadKeys = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? Object.keys(payload).sort()
+      : [];
+    const hasValidShape = payloadKeys.length === 2
+      && payloadKeys[0] === 'message'
+      && payloadKeys[1] === 'targetDisplayName';
+    const targetDisplayName = hasValidShape && typeof payload.targetDisplayName === 'string'
+      ? payload.targetDisplayName.trim()
+      : '';
+    const message = hasValidShape && typeof payload.message === 'string'
+      ? payload.message.trim()
+      : '';
+    if (
+      !targetDisplayName
+      || targetDisplayName.length > 160
+      || /[\x00-\x1f\x7f]/.test(targetDisplayName)
+      || !message
+      || message.length > 4000
+      || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)
+    ) {
+      return { ok: false, action: 'teams-message-send', code: 'INVALID_MESSAGE' };
+    }
+
+    const normalizedPayload = { targetDisplayName, message };
+
+    const confirmationOptions = {
+      type: 'question',
+      buttons: ['Cancel', 'Send message'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'Send Teams message',
+      message: `Send this Teams message to ${targetDisplayName}?`,
+      detail: 'FlightDeck will resolve an existing one-to-one chat. The message will be posted immediately.',
+    };
+
+    let confirmation;
+    try {
+      const mainWindow = getMainWindow();
+      confirmation = mainWindow
+        ? await dialog.showMessageBox(mainWindow, confirmationOptions)
+        : await dialog.showMessageBox(confirmationOptions);
+    } catch (_) {
+      logError('[main] Teams message confirmation failed');
+      return { ok: false, action: 'teams-message-send', code: 'CONFIRMATION_FAILED' };
+    }
+
+    if (confirmation.response !== 1) {
+      return { ok: false, action: 'teams-message-send', code: 'CANCELLED' };
+    }
+
+    return workiqMcpClient.sendTeamsMessage(normalizedPayload);
   });
 
   ipcMain.handle(IPC_CHANNELS.READ_PROMPT_FILE, async (_event, filename) => {

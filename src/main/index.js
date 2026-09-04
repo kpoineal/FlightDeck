@@ -10,6 +10,7 @@ const {
 } = require('./utils');
 const { loadWindowState, saveWindowState, debouncedSaveWindowState, isStateOnScreen } = require('./window-state');
 const { registerIpcHandlers } = require('./ipc-handlers');
+const { createWorkiqMcpClient } = require('./workiq-mcp-client');
 
 const APP_ROOT = path.join(__dirname, '..');
 const IS_DEMO = process.argv.includes('--demo');
@@ -26,10 +27,12 @@ initLogFile(path.join(app.getPath('userData'), 'logs'));
 let mainWindow = null;
 let appTray = null;
 let isQuitting = false;
+let shutdownComplete = false;
 const popoutWindows = new Set();
+const workiqMcpClient = createWorkiqMcpClient();
 
 // Register IPC handlers — pass getter for mainWindow since it's set after createWindow()
-registerIpcHandlers(() => mainWindow, popoutWindows);
+registerIpcHandlers(() => mainWindow, popoutWindows, { workiqMcpClient });
 
 const { IPC_CHANNELS } = require('../shared/ipc-contract');
 
@@ -165,8 +168,15 @@ if (!gotTheLock) {
   });
 }
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   isQuitting = true;
+  if (shutdownComplete) return;
+
+  event.preventDefault();
+  workiqMcpClient.shutdown().finally(() => {
+    shutdownComplete = true;
+    app.quit();
+  });
 });
 
 app.on('activate', () => {

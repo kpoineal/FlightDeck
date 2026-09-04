@@ -52,6 +52,9 @@
   let blockedCount = $derived($kpis.blocked || 0);
   let newItemCount = $derived($kpis.new || 0);
   let completeCount = $derived($kpis.complete || 0);
+  function widthClass(value) {
+    return `stack-width-${Math.max(0, Math.min(10, Math.round(value / 10)))}`;
+  }
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -73,12 +76,9 @@
     {/if}
     <span class="summary-sep"></span>
     <div class="severity-stack summary-bar" aria-label="Severity distribution">
-      <span class="stack-segment {isBriefings ? 'unbriefed' : 'critical'}"
-        style="--bar-width: {criticalPct}%"></span>
-      <span class="stack-segment {isBriefings ? 'briefed' : 'elevated'}"
-        style="--bar-width: {elevatedPct}%"></span>
-      <span class="stack-segment observe"
-        style="--bar-width: {observePct}%; --bar-opacity: {isBriefings ? '0' : '1'}"></span>
+      <span class="stack-segment {isBriefings ? 'unbriefed' : 'critical'} {widthClass(criticalPct)}"></span>
+      <span class="stack-segment {isBriefings ? 'briefed' : 'elevated'} {widthClass(elevatedPct)}"></span>
+      <span class="stack-segment observe {widthClass(observePct)}" class:stack-hidden={isBriefings}></span>
     </div>
     <span class="summary-sep"></span>
     <span class="summary-total">{totalLabel}</span>

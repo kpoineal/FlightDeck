@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import { items, connected, activeOperations } from './stores.js';
 import { addHistory } from './actions.js';
 import { savePersistentState } from './persistence.js';
-import { computeNextRunAt } from './models/item.js';
+import { computeNextRunAt, prependItemUpdateHistory, reconcileItemEvidenceLinks } from './models/item.js';
 import { nowIso, cleanDisplayText, normalizeSeverity } from './utils.js';
 import { ALL_SIGNAL_TYPES } from './constants.js';
 import { logInfo, logWarn, logError } from './logger.js';
@@ -34,6 +34,7 @@ async function checkDueItems() {
   const currentItems = get(items);
   const due = currentItems.filter((i) =>
     i.monitorEnabled &&
+    (!i.snoozeUntil || !Number.isFinite(new Date(i.snoozeUntil).getTime()) || new Date(i.snoozeUntil).getTime() <= nowMs) &&
     i.nextRunAt &&
     new Date(i.nextRunAt).getTime() <= nowMs &&
     i.lifecycleStatus !== 'complete' &&
@@ -91,24 +92,73 @@ export async function runItemCheck(item) {
       const updated = { ...i, lastRunAt: nowIso() };
 
       if (!noUpdate) {
-        updated.summary = cleanDisplayText(payload.summary || i.summary || '');
-        updated.reason = cleanDisplayText(payload.reason || i.reason || '');
-        updated.status = cleanDisplayText(payload.status || i.status || 'Monitoring');
-        updated.severity = normalizeSeverity(payload.severity || i.severity);
-        updated.dueAt = payload.dueAt || i.dueAt || null;
-        updated.owner = cleanDisplayText(payload.owner || i.owner || 'You');
+        const status = cleanDisplayText(payload.status || i.status || 'Monitoring');
+        const statusLower = status.toLowerCase();
+        const completionConfidence = ['high', 'medium', 'low'].includes(String(payload.completionConfidence || '').toLowerCase())
+          ? String(payload.completionConfidence).toLowerCase()
+          : null;
+        const observation = {
+          summary: cleanDisplayText(payload.summary || i.summary || ''),
+          reason: cleanDisplayText(payload.reason || i.reason || ''),
+          status,
+          severity: normalizeSeverity(payload.severity || i.severity),
+          dueAt: payload.dueAt || i.dueAt || null,
+          owner: cleanDisplayText(payload.owner || i.owner || 'You'),
+          counterparties: Array.isArray(payload.counterparties)
+            ? payload.counterparties.map(cleanDisplayText).filter(Boolean)
+            : (Array.isArray(i.counterparties) ? i.counterparties : []),
+          suggestedNextSteps: Array.isArray(payload.suggestedNextSteps)
+            ? payload.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2)
+            : (Array.isArray(i.suggestedNextSteps) ? i.suggestedNextSteps : []),
+          evidenceLinks: reconcileItemEvidenceLinks(i, payload),
+          doneCriteria: cleanDisplayText(payload.doneCriteria || i.doneCriteria || '') || null,
+          completionConfidence: statusLower.includes('complete') || statusLower.includes('resolved') || statusLower.includes('closed')
+            ? completionConfidence
+            : null,
+        };
+        const currentObservation = {
+          summary: i.summary || '',
+          reason: i.reason || '',
+          status: i.status || 'Monitoring',
+          severity: normalizeSeverity(i.severity),
+          dueAt: i.dueAt || null,
+          owner: i.owner || 'You',
+          counterparties: Array.isArray(i.counterparties) ? i.counterparties : [],
+          suggestedNextSteps: Array.isArray(i.suggestedNextSteps) ? i.suggestedNextSteps : [],
+          evidenceLinks: reconcileItemEvidenceLinks(i, {}),
+          doneCriteria: i.doneCriteria || null,
+          completionConfidence: i.completionConfidence || null,
+        };
+        let observedLifecycle = i.lifecycleStatus;
+        if (statusLower.includes('resolved') || statusLower.includes('complete') || statusLower.includes('closed')) {
+          if (i.lifecycleStatus !== 'archived') observedLifecycle = 'complete';
+        } else if ((statusLower.includes('blocked') || statusLower.includes('stalled')) && i.lifecycleStatus === 'in-progress') {
+          observedLifecycle = 'blocked';
+        } else if ((statusLower.includes('waiting') || statusLower.includes('pending')) && i.lifecycleStatus === 'in-progress') {
+          observedLifecycle = 'waiting';
+        }
+        observation.lifecycleStatus = observedLifecycle;
+        currentObservation.lifecycleStatus = i.lifecycleStatus;
 
-        if (Array.isArray(payload.counterparties)) {
-          updated.counterparties = payload.counterparties.map(cleanDisplayText).filter(Boolean);
+        if (JSON.stringify(observation) === JSON.stringify(currentObservation)) {
+          if (updated.scheduleType === 'one-time') {
+            updated.monitorEnabled = false;
+            updated.nextRunAt = null;
+            if (updated.lifecycleStatus !== 'complete' && updated.lifecycleStatus !== 'archived') {
+              updated.lifecycleStatus = 'complete';
+              updated.completedAt = updated.completedAt || nowIso();
+            }
+          } else {
+            updated.nextRunAt = computeNextRunAt(updated);
+          }
+          return updated;
         }
-        if (Array.isArray(payload.suggestedNextSteps)) {
-          updated.suggestedNextSteps = payload.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2);
-        }
+
+        Object.assign(updated, observation);
 
         // Auto-update lifecycle status
-        const statusLower = (updated.status || '').toLowerCase();
         if (statusLower.includes('resolved') || statusLower.includes('complete') || statusLower.includes('closed')) {
-          if (updated.lifecycleStatus !== 'complete' && updated.lifecycleStatus !== 'archived') {
+          if (updated.lifecycleStatus !== 'archived') {
             updated.lifecycleStatus = 'complete';
             updated.monitorEnabled = false;
             updated.nextRunAt = null;
@@ -124,25 +174,29 @@ export async function runItemCheck(item) {
         updated.hasNewUpdate = true;
 
         // Record in updateHistory
-        const updateHistory = Array.isArray(updated.updateHistory) ? [...updated.updateHistory] : [];
-        while (updateHistory.length >= 20) updateHistory.pop();
         const changes = [];
         const oldStatus = (i.status || '').trim().toLowerCase();
         const newStatus = (updated.status || '').trim().toLowerCase();
         const oldSev = (i.severity || '').trim().toLowerCase();
         const newSev = (updated.severity || '').trim().toLowerCase();
+        const previousUrls = new Set((i.evidenceLinks || []).map((entry) => entry?.url).filter(Boolean));
+        const newLinks = (updated.evidenceLinks || []).filter((entry) => entry?.url && !previousUrls.has(entry.url));
         if (oldStatus !== newStatus) changes.push(`Status: ${i.status} → ${updated.status}`);
         if (oldSev !== newSev) changes.push(`Severity: ${i.severity} → ${updated.severity}`);
+        if (newLinks.length) changes.push(`Links: +${newLinks.length} new`);
         if (!changes.length) changes.push('Updated');
-        updateHistory.unshift({
+        updated.updateHistory = prependItemUpdateHistory(updated.updateHistory, {
+          kind: 'reply',
           timestamp: nowIso(),
           changes,
           summary: updated.summary || '',
           status: updated.status,
           severity: updated.severity,
+          sourceType: updated.sourceType,
+          newLinks: newLinks.length ? newLinks : undefined,
+          suggestedNextSteps: updated.suggestedNextSteps.length ? [...updated.suggestedNextSteps] : undefined,
           seen: false,
         });
-        updated.updateHistory = updateHistory;
 
         addHistory('scan', `Meaningful change detected: ${updated.title}`, { itemId: updated.id });
 

@@ -48,6 +48,10 @@ describe('preload IPC contract', () => {
     await exposedApi.getAppVersion();
     await exposedApi.ask('status?');
     await exposedApi.acceptEula();
+    await exposedApi.probeMcp();
+    await exposedApi.proposeThreadActions({ schemaVersion: 1 });
+    await exposedApi.createOutlookDraft({ subject: 'Hi' });
+    await exposedApi.sendTeamsMessage({ targetDisplayName: 'James Farquharson', message: 'Hello' });
     await exposedApi.readPromptFile('briefing.md');
     await exposedApi.openMarkdownWindow({ title: 'Draft' });
     await exposedApi.openExternal('https://example.com');
@@ -65,6 +69,10 @@ describe('preload IPC contract', () => {
       [IPC_CHANNELS.GET_APP_VERSION],
       [IPC_CHANNELS.ASK_WORKIQ, 'status?'],
       [IPC_CHANNELS.ACCEPT_WORKIQ_EULA],
+      [IPC_CHANNELS.PROBE_WORKIQ_MCP],
+      [IPC_CHANNELS.PROPOSE_THREAD_ACTIONS, { schemaVersion: 1 }],
+      [IPC_CHANNELS.CREATE_OUTLOOK_DRAFT, { subject: 'Hi' }],
+      [IPC_CHANNELS.SEND_TEAMS_MESSAGE, { targetDisplayName: 'James Farquharson', message: 'Hello' }],
       [IPC_CHANNELS.READ_PROMPT_FILE, 'briefing.md'],
       [IPC_CHANNELS.OPEN_MARKDOWN_WINDOW, { title: 'Draft' }],
       [IPC_CHANNELS.OPEN_EXTERNAL, 'https://example.com'],
@@ -101,6 +109,12 @@ describe('registerIpcHandlers()', () => {
   let lastLoadedUrl;
   let currentMainWindow;
   let notificationInstances;
+  let workiqMcpProbeCalls;
+  let workiqDraftCalls;
+  let workiqProposalCalls;
+  let workiqTeamsCalls;
+  let dialogCalls;
+  let dialogResponse;
 
   beforeEach(() => {
     handlers = new Map();
@@ -108,6 +122,12 @@ describe('registerIpcHandlers()', () => {
     lastLoadedUrl = '';
     currentMainWindow = null;
     notificationInstances = [];
+    workiqMcpProbeCalls = 0;
+    workiqDraftCalls = [];
+    workiqProposalCalls = [];
+    workiqTeamsCalls = [];
+    dialogCalls = [];
+    dialogResponse = 0;
 
     electronMock.ipcMain.handle = (channel, handler) => {
       handlers.set(channel, handler);
@@ -169,23 +189,174 @@ describe('registerIpcHandlers()', () => {
         }
       }
     };
+    electronMock.dialog = {
+      showMessageBox: async (...args) => {
+        dialogCalls.push(args);
+        return { response: dialogResponse };
+      },
+    };
 
     const handlersPath = path.resolve(__dirname, '../src/main/ipc-handlers.js');
     delete require.cache[handlersPath];
     const { registerIpcHandlers } = require(handlersPath);
-    registerIpcHandlers(() => currentMainWindow, new Set());
+    registerIpcHandlers(() => currentMainWindow, new Set(), {
+      workiqMcpClient: {
+        probe: async () => {
+          workiqMcpProbeCalls += 1;
+          return { ok: true, readOnly: true, mcp: 'available', auth: 'unknown' };
+        },
+        createOutlookDraft: async (draft) => {
+          workiqDraftCalls.push(draft);
+          return { ok: true, action: 'outlook-draft-created' };
+        },
+        proposeThreadActions: async (context) => {
+          workiqProposalCalls.push(context);
+          return { ok: true, readOnly: true, result: { schemaVersion: 1 } };
+        },
+        sendTeamsMessage: async (payload) => {
+          workiqTeamsCalls.push(payload);
+          return { ok: true, action: 'teams-message-sent' };
+        },
+      },
+    });
   });
 
   it('registers IPC handlers using canonical channel constants', () => {
     assert.equal(typeof handlers.get(IPC_CHANNELS.GET_APP_VERSION), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.ASK_WORKIQ), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.ACCEPT_WORKIQ_EULA), 'function');
+    assert.equal(typeof handlers.get(IPC_CHANNELS.PROBE_WORKIQ_MCP), 'function');
+    assert.equal(typeof handlers.get(IPC_CHANNELS.PROPOSE_THREAD_ACTIONS), 'function');
+    assert.equal(typeof handlers.get(IPC_CHANNELS.CREATE_OUTLOOK_DRAFT), 'function');
+    assert.equal(typeof handlers.get(IPC_CHANNELS.SEND_TEAMS_MESSAGE), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.READ_PROMPT_FILE), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.OPEN_MARKDOWN_WINDOW), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.OPEN_TRACKER_POPOUT), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.OPEN_EXTERNAL), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.SHOW_DESKTOP_NOTIFICATION), 'function');
     assert.equal(typeof eventHandlers.get(IPC_CHANNELS.TRACKER_STATE_CHANGED), 'function');
+  });
+
+  it('runs the read-only WorkIQ MCP probe without accepting renderer input', async () => {
+    const probeWorkiqMcp = handlers.get(IPC_CHANNELS.PROBE_WORKIQ_MCP);
+    const result = await probeWorkiqMcp(null, { method: 'tools/call', secret: 'nope' });
+
+    assert.deepEqual(result, {
+      ok: true,
+      readOnly: true,
+      mcp: 'available',
+      auth: 'unknown',
+    });
+    assert.equal(workiqMcpProbeCalls, 1);
+  });
+
+  it('forwards only the narrow synthesis context without showing write confirmation', async () => {
+    const proposeThreadActions = handlers.get(IPC_CHANNELS.PROPOSE_THREAD_ACTIONS);
+    const context = { schemaVersion: 1, thread: { id: 'thread-1', title: 'Deployment' } };
+
+    assert.deepEqual(await proposeThreadActions(null, context), {
+      ok: true,
+      readOnly: true,
+      result: { schemaVersion: 1 },
+    });
+    assert.deepEqual(workiqProposalCalls, [context]);
+    assert.equal(dialogCalls.length, 0);
+  });
+
+  it('keeps final draft consent in Electron main and invokes the client once', async () => {
+    const createOutlookDraft = handlers.get(IPC_CHANNELS.CREATE_OUTLOOK_DRAFT);
+    const draft = {
+      subject: 'Sensitive subject',
+      body: 'Sensitive body',
+      to: ['sensitive@example.com'],
+    };
+
+    assert.deepEqual(await createOutlookDraft(null, draft), {
+      ok: false,
+      action: 'outlook-draft-create',
+      code: 'CANCELLED',
+      dispatched: false,
+    });
+    assert.deepEqual(workiqDraftCalls, []);
+    assert.equal(dialogCalls.length, 1);
+    const cancelOptions = dialogCalls[0][0];
+    assert.deepEqual(cancelOptions.buttons, ['Cancel', 'Create draft']);
+    assert.equal(cancelOptions.defaultId, 0);
+    assert.equal(cancelOptions.cancelId, 0);
+    assert.equal(JSON.stringify(cancelOptions).includes(draft.subject), false);
+    assert.equal(JSON.stringify(cancelOptions).includes(draft.body), false);
+    assert.equal(JSON.stringify(cancelOptions).includes(draft.to[0]), false);
+
+    dialogResponse = 1;
+    assert.deepEqual(await createOutlookDraft(null, draft), {
+      ok: true,
+      action: 'outlook-draft-created',
+    });
+    assert.deepEqual(workiqDraftCalls, [draft]);
+    assert.equal(dialogCalls.length, 2);
+  });
+
+  it('keeps final Teams send consent in Electron main and invokes the narrow client once', async () => {
+    const sendTeamsMessage = handlers.get(IPC_CHANNELS.SEND_TEAMS_MESSAGE);
+    const payload = {
+      targetDisplayName: '  James Farquharson  ',
+      message: '  Can you confirm\tthe scope?\r\nThanks.  ',
+    };
+    const normalizedPayload = {
+      targetDisplayName: 'James Farquharson',
+      message: 'Can you confirm\tthe scope?\r\nThanks.',
+    };
+
+    assert.deepEqual(await sendTeamsMessage(null, payload), {
+      ok: false,
+      action: 'teams-message-send',
+      code: 'CANCELLED',
+    });
+    assert.deepEqual(workiqTeamsCalls, []);
+
+    dialogResponse = 1;
+    assert.deepEqual(await sendTeamsMessage(null, payload), { ok: true, action: 'teams-message-sent' });
+    assert.deepEqual(workiqTeamsCalls, [normalizedPayload]);
+    const options = dialogCalls.at(-1)[0];
+    assert.match(options.message, /James Farquharson/);
+    assert.equal(JSON.stringify(options).includes(payload.message), false);
+    assert.equal(JSON.stringify(options).includes(normalizedPayload.message), false);
+  });
+
+  it('rejects invalid Teams message payloads before confirmation or client invocation', async () => {
+    const sendTeamsMessage = handlers.get(IPC_CHANNELS.SEND_TEAMS_MESSAGE);
+    const validPayload = { targetDisplayName: 'James Farquharson', message: 'Hello' };
+    const invalidPayloads = [
+      null,
+      [],
+      {},
+      { message: 'Hello' },
+      { targetDisplayName: 'James Farquharson' },
+      { ...validPayload, targetDisplayName: '   ' },
+      { ...validPayload, targetDisplayName: 'x'.repeat(161) },
+      { ...validPayload, targetDisplayName: 'James\x00Farquharson' },
+      { ...validPayload, targetDisplayName: 'James\x7fFarquharson' },
+      { ...validPayload, message: ' \t\r\n ' },
+      { ...validPayload, message: 'x'.repeat(4001) },
+      { ...validPayload, message: 'Hello\x00world' },
+      { ...validPayload, message: 'Hello\x0bworld' },
+      { ...validPayload, message: 'Hello\x7fworld' },
+      { ...validPayload, chatId: 'chat-1' },
+      { ...validPayload, tool: 'send_chat_message' },
+      { ...validPayload, parentUrl: 'https://example.com' },
+      { ...validPayload, jsonBody: '{"message":"Hello"}' },
+    ];
+
+    for (const payload of invalidPayloads) {
+      assert.deepEqual(await sendTeamsMessage(null, payload), {
+        ok: false,
+        action: 'teams-message-send',
+        code: 'INVALID_MESSAGE',
+      });
+    }
+
+    assert.deepEqual(dialogCalls, []);
+    assert.deepEqual(workiqTeamsCalls, []);
   });
 
   it('ignores rawHtml and renders markdown preview from markdown fields', async () => {
