@@ -1,6 +1,7 @@
 <script>
-  import { items, highlightedItemId } from '../../lib/stores.js';
+  import { items } from '../../lib/stores.js';
   import { normalizeSeverity } from '../../lib/utils.js';
+  import { navigateToRadarItem } from '../../lib/radar-navigation.js';
 
   const SOURCE_TYPES = ['Email', 'Chat', 'Meeting', 'Doc', 'Custom'];
 
@@ -62,7 +63,7 @@
   }
 
   function clickItem(item) {
-    highlightedItemId.set(item.id);
+    void navigateToRadarItem(item.id);
   }
 </script>
 

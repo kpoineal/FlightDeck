@@ -1,8 +1,15 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
-  import { mode, connected, history as historyStore, isDemo } from './lib/stores.js';
-  import { loadPersistentState, savePersistentState, seedDemoFixture, pruneStaleBriefings } from './lib/persistence.js';
+  import { mode, connected, deletedItemIds, history as historyStore, isDemo, actionProposals } from './lib/stores.js';
+  import {
+    cancelScheduledPersistentStateSave,
+    loadPersistentState,
+    savePersistentState,
+    schedulePersistentStateSave,
+    seedDemoFixture,
+    pruneStaleBriefings,
+  } from './lib/persistence.js';
   import { items, scanners, meetings, meetingsLastFetched, briefingsByMeetingId, briefingSeenAt,
     density, filter, collapsedSections, highlightedItemId } from './lib/stores.js';
   import { addHistory } from './lib/actions.js';
@@ -13,6 +20,8 @@
   import { TODAY_MEETINGS_PROMPT } from './lib/prompts.js';
   import { runWorkiqJson } from './lib/json-parser.js';
   import Topbar from './components/Topbar.svelte';
+  import TodayView from './components/TodayView.svelte';
+  import ActionQueue from './components/ActionQueue.svelte';
   import ConnectBanner from './components/ConnectBanner.svelte';
   import SummaryStrip from './components/SummaryStrip.svelte';
   import TickerTape from './components/status-bars/TickerTape.svelte';
@@ -23,6 +32,8 @@
   import ConfirmModal from './components/ConfirmModal.svelte';
   import ScannerSettingsModal from './components/ScannerSettingsModal.svelte';
   import AddTaskModal from './components/AddTaskModal.svelte';
+  import { createActionProposal } from './lib/action-proposals.js';
+  import { navigateToRadarItem } from './lib/radar-navigation.js';
 
   let version = $state('');
   let updateAvailable = $state(false);
@@ -33,7 +44,6 @@
   let confirmSummary = '';
   let confirmTargets = '';
   let pendingConfirmAction = null;
-  let saveTimer = null;
 
   // Theme init
   function initTheme() {
@@ -41,14 +51,12 @@
     if (stored === 'light' || stored === 'dark') {
       document.documentElement.setAttribute('data-theme', stored);
     } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', 'dark');
     }
   }
 
   function debouncedSave() {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => savePersistentState(get(isDemo)), 500);
+    schedulePersistentStateSave(get(isDemo), 500);
   }
 
   async function fetchMeetings(force = false) {
@@ -139,6 +147,16 @@
     }
 
     await loadPersistentState(demoMode);
+    const currentItems = get(items);
+    const priorityItem = currentItems.find((item) => /meridian/i.test(item.title))
+      || currentItems.find((item) => item.severity === 'Critical');
+    if (demoReseed && priorityItem && get(actionProposals).length === 0) {
+      actionProposals.set([createActionProposal(
+        priorityItem,
+        priorityItem.suggestedNextSteps?.[0] || `Prepare an update for ${priorityItem.title}`,
+        { id: `proposal_${priorityItem.id}_seed` }
+      )]);
+    }
     await loadPersistedLog();
     logInfo('app', demoMode ? 'FlightDeck demo mode initialized' : 'FlightDeck Svelte app initialized');
 
@@ -183,6 +201,8 @@
     unsubscribers.push(collapsedSections.subscribe(debouncedSave));
     unsubscribers.push(briefingsByMeetingId.subscribe(debouncedSave));
     unsubscribers.push(briefingSeenAt.subscribe(debouncedSave));
+    unsubscribers.push(actionProposals.subscribe(debouncedSave));
+    unsubscribers.push(deletedItemIds.subscribe(debouncedSave));
 
     // Listen for state changes from other windows
     if (window.workiq && typeof window.workiq.onStateChanged === 'function') {
@@ -211,40 +231,14 @@
       const unsubNotification = window.workiq.onNotificationClicked((payload) => {
         const taskId = payload?.taskId;
         if (!taskId) return;
-
-        // Find which scanner section contains this item
-        const currentItems = get(items);
-        const targetItem = currentItems.find(i => i.id === taskId);
-
-        // Reset filter so target item is visible
-        filter.set('all');
-        mode.set('Radar');
-
-        // Expand the scanner section containing this item (collapse others)
-        if (targetItem && targetItem.scannerId) {
-          const sectionId = `scanner-${targetItem.scannerId}`;
-          // Keep only other sections collapsed — expand the target
-          collapsedSections.update($cs => {
-            const withoutTarget = $cs.filter(id => id !== sectionId);
-            // Collapse all OTHER sections for accordion effect
-            const allSectionIds = get(scanners).map(s => `scanner-${s.id}`);
-            return allSectionIds.filter(id => id !== sectionId);
-          });
-        }
-
-        // Highlight the target item (components react to this)
-        // Use a small delay to let the DOM update after section expansion
-        setTimeout(() => {
-          highlightedItemId.set(taskId);
-          setTimeout(() => highlightedItemId.set(null), 4000);
-        }, 100);
+        void navigateToRadarItem(taskId);
       });
       unsubscribers.push(unsubNotification);
     }
   });
 
   onDestroy(() => {
-    clearTimeout(saveTimer);
+    cancelScheduledPersistentStateSave();
     stopScannerEngine();
     stopMonitoringLoop();
     persistLog();
@@ -279,7 +273,9 @@
       <ConnectBanner onenable={handleEnable} />
     {/if}
 
-    <SummaryStrip />
+    {#if $mode !== 'Today'}
+      <SummaryStrip />
+    {/if}
 
     {#if $mode === 'Radar'}
       <div class="ticker-bar">
@@ -287,7 +283,9 @@
       </div>
     {/if}
 
-    {#if $mode === 'Radar'}
+    {#if $mode === 'Today'}
+      <TodayView />
+    {:else if $mode === 'Radar'}
       <RadarView />
     {:else if $mode === 'Briefings'}
       <BriefingsView onrefresh={() => fetchMeetings(true)} />
@@ -302,6 +300,7 @@
   oncancel={() => { confirmOpen = false; }} />
 
 <Toast />
+<ActionQueue />
 
 <style>
   .ticker-bar {

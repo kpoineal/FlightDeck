@@ -11,7 +11,7 @@
   align-items: center;
   justify-content: center;
   padding: 72px 16px 16px;
-  z-index: 99;
+  z-index: 1000;
   animation: fadeIn 0.2s ease;
 }
 .modal.show { display: flex; }
@@ -19,7 +19,8 @@
   width: min(620px, 100%);
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-card);
-  background: var(--bg-surface);
+  background: var(--bg-overlay-panel, var(--bg-surface));
+  color: var(--text);
   backdrop-filter: blur(var(--blur-radius));
   -webkit-backdrop-filter: blur(var(--blur-radius));
   padding: 20px;
@@ -42,6 +43,20 @@
   gap: 12px;
   margin-top: 8px;
 }
+.modal-actions .small-btn { min-height: 44px; }
+.confirm-acknowledgement {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--warn-border);
+  border-radius: 6px;
+  background: var(--warn-bg);
+  color: var(--text-secondary);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+.confirm-acknowledgement input { margin-top: 2px; accent-color: var(--accent); }
 
 /* ── Add Task modal form ── */
 .add-task-modal-form {
@@ -97,4 +112,15 @@ html[data-theme="light"] .theme-icon.moon { display: block; }
 @media (prefers-color-scheme: light) {
   html:not([data-theme="dark"]) .theme-icon.sun { display: none; }
   html:not([data-theme="dark"]) .theme-icon.moon { display: block; }
+}
+
+@media (max-width: 860px) {
+  .modal {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .modal-card {
+    max-height: calc(100vh - 24px);
+  }
 }

@@ -5,13 +5,21 @@ body {
   background: var(--bg-body);
   color: var(--text);
   min-height: 100vh;
-  padding: 20px 24px;
+  padding: 10px 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+#svelte-app {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
 }
 
 .topbar {
@@ -19,8 +27,8 @@ body {
   background: linear-gradient(135deg, var(--bg-surface) 0%, color-mix(in srgb, var(--accent) 5%, var(--bg-surface)) 100%);
   backdrop-filter: blur(var(--blur-radius));
   -webkit-backdrop-filter: blur(var(--blur-radius));
-  border-radius: var(--radius-xl);
-  padding: 12px 20px;
+  border-radius: 8px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -39,6 +47,8 @@ body {
   font-size: 0.95rem;
   color: var(--text);
 }
+.brand-lockup { display: flex; flex-direction: column; line-height: 1; }
+.brand-context { margin-top: 4px; color: var(--text-dim); font-size: 0.54rem; font-weight: 650; letter-spacing: 0.16em; white-space: nowrap; }
 
 .brand-accent {
   color: var(--accent-blue);
@@ -193,9 +203,10 @@ body {
 
 .app-shell {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 20px;
-  min-height: calc(100vh - 100px);
+  min-height: 0;
 }
 
 .topbar-tabs {
@@ -206,14 +217,16 @@ body {
   margin-right: 8px;
   background: var(--bg-inset);
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  border-radius: 7px;
   padding: 3px;
 }
 
 .main {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -261,9 +274,10 @@ body {
   .kpi-visuals { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 860px) {
-  .topbar { flex-wrap: wrap; }
-  .topbar-tabs { margin-left: 0; width: 100%; justify-content: center; }
+@media (max-width: 960px) {
+  body { padding: 8px; }
+  .topbar { flex-wrap: wrap; position: static; gap: 8px; }
+  .topbar-tabs { margin: 0; width: 100%; justify-content: flex-start; overflow-x: auto; }
   .kpis { grid-template-columns: 1fr; }
 }
 

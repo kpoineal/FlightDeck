@@ -38,6 +38,7 @@ export const WORK_HOURS_START_HOUR = 8;
 export const WORK_HOURS_END_HOUR = 17;
 
 export const LIFECYCLE_STATUSES = ['in-progress', 'blocked', 'waiting', 'complete', 'archived'];
+export const UNKNOWN_LIFECYCLE_STATUS = 'unknown';
 
 export const ALL_SIGNAL_TYPES = ['email', 'chat', 'meeting', 'doc'];
 
@@ -75,6 +76,7 @@ export const LIFECYCLE_LABELS = {
   'waiting': 'Waiting',
   'complete': 'Complete',
   'archived': 'Archived',
+  unknown: 'Unknown',
 };
 
 export const NOTIFICATION_MODE_OPTIONS = [
@@ -114,6 +116,7 @@ export const RADAR_SCAN_JSON_SCHEMA = `Return only valid JSON and nothing else u
         {
           "label": "descriptive label for the source",
           "type": "string (e.g. email, chat, meeting, doc, devops, planner — describe the signal source)",
+          "url": "https URL for the exact source signal",
           "signalAt": "ISO-8601 timestamp when the signal was sent or updated, or null"
         }
       ],

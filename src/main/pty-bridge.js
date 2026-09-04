@@ -117,7 +117,7 @@ function stripAnsi(text) {
 }
 
 function runWorkiqCommand(question) {
-  log('[main] Received question:', question);
+  log('[main] Received WorkIQ question, length:', String(question || '').length);
 
   if (!workiqLauncher || !fs.existsSync(workiqLauncher)) {
     logError('[main] WorkIQ launcher not found!');
@@ -136,7 +136,7 @@ function runWorkiqCommand(question) {
     args = [workiqLauncher, 'ask', '-q', question];
   }
   log('[main] Using executable:', executable);
-  log('[main] PTY args prepared:', args);
+  log('[main] WorkIQ PTY command prepared');
 
   return new Promise((resolve) => {
     let outputBuffer = '';
@@ -167,9 +167,6 @@ function runWorkiqCommand(question) {
       log('[main] Finalizing reason:', reason);
       log('[main] Effective exit code:', effectiveExitCode);
       log('[main] Final visible output length:', output.length);
-      log('[main] Raw WorkIQ output start');
-      console.log(output);
-      log('[main] Raw WorkIQ output end');
 
       if (effectiveExitCode === 0 && output) {
         resolve({ success: true, answer: output });
@@ -254,7 +251,6 @@ function runWorkiqAcceptEula() {
   return new Promise((resolve) => {
     let outputBuffer = '';
     let resolved = false;
-    const dataChunks = [];
 
     const finalize = (exitCode, reason) => {
       if (resolved) return;
@@ -265,10 +261,7 @@ function runWorkiqAcceptEula() {
       diagnostics.exitCode = exitCode;
       diagnostics.reason = reason;
       diagnostics.rawOutputLength = outputBuffer.length;
-      diagnostics.cleanedOutput = output;
-      diagnostics.dataChunks = dataChunks;
       log('[main] accept-eula finalize reason:', reason, 'exit:', exitCode);
-      log('[main] accept-eula output:', output);
 
       if (exitCode === 0) {
         resolve({ success: true, output, diagnostics });
@@ -302,8 +295,6 @@ function runWorkiqAcceptEula() {
 
     proc.onData((chunk) => {
       outputBuffer += chunk;
-      const cleanChunk = stripAnsi(chunk).trim();
-      if (cleanChunk) dataChunks.push(cleanChunk);
       // Auto-confirm any Y/N prompt
       const text = stripAnsi(chunk).toLowerCase();
       if (text.includes('(y/n)') || text.includes('[y/n]') || text.includes('accept?') || text.includes('agree?') || text.includes('do you accept')) {

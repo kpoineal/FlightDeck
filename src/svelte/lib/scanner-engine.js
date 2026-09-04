@@ -1,6 +1,6 @@
 // ── Scanner background engine (Svelte) ──────────────────────────────
 import { get } from 'svelte/store';
-import { items, scanners, connected, activeOperations } from './stores.js';
+import { items, scanners, connected, activeOperations, deletedItemIds } from './stores.js';
 import { addHistory } from './actions.js';
 import { savePersistentState } from './persistence.js';
 import { normalizeItem, computeNextRunAt } from './models/item.js';
@@ -136,6 +136,11 @@ export async function runScanner(scanner) {
       })
     : capped;
 
+  const currentScanner = get(scanners).find((entry) => entry.id === scanner.id) || scanner;
+  const excludedItemIds = new Set(currentScanner.excludedItemIds || []);
+  const globallyDeletedItemIds = new Set(get(deletedItemIds));
+  const eligible = filtered.filter((item) => !excludedItemIds.has(item.id) && !globallyDeletedItemIds.has(item.id));
+
   // Prune recentTitles older than 24h
   const RECENT_TITLE_TTL_MS = 24 * 60 * 60 * 1000;
   const cutoff = Date.now() - RECENT_TITLE_TTL_MS;
@@ -157,13 +162,13 @@ export async function runScanner(scanner) {
     existingTitles.add(entry.title);
   }
 
-  const unique = filtered.filter(
+  const unique = eligible.filter(
     (i) => !existingIds.has(i.id) && !existingTitles.has(cleanDisplayText(i.title || '').toLowerCase())
   );
 
   // Record discovered titles in scanner's recentTitles for cross-move dedup
   const existingRecentSet = new Set(recentTitles.map((e) => e.title));
-  const newRecentEntries = filtered
+  const newRecentEntries = eligible
     .map((i) => ({ title: cleanDisplayText(i.title || '').toLowerCase(), at: nowIso() }))
     .filter((e) => !existingRecentSet.has(e.title));
   const updatedRecentTitles = [...recentTitles, ...newRecentEntries];
