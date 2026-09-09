@@ -1,8 +1,13 @@
 // ── Scanner background engine (Svelte) ──────────────────────────────
 import { get } from 'svelte/store';
-import { items, scanners, connected, activeOperations, deletedItemIds } from './stores.js';
+import { items, scanners, connected, deletedItemIds } from './stores.js';
 import { addHistory } from './actions.js';
 import { savePersistentState } from './persistence.js';
+import {
+  releaseOperationGuards,
+  scannerOperationKey,
+  tryAcquireOperationGuards,
+} from './operation-guards.js';
 import { normalizeItem, computeNextRunAt } from './models/item.js';
 import { computeScannerNextRunAt } from './models/scanner.js';
 import { nowIso, cleanDisplayText, hashString, normalizeSeverity } from './utils.js';
@@ -21,6 +26,16 @@ export function startScannerEngine() {
   logInfo('scanner', 'Engine started');
   rescheduleOverdueScanners();
   intervalHandle = setInterval(checkDue, TICK_MS);
+  void checkDue();
+}
+
+export function resumeScannerEngine() {
+  if (!get(connected)) return;
+  if (!intervalHandle) {
+    startScannerEngine();
+    return;
+  }
+  void checkDue();
 }
 
 export function stopScannerEngine() {
@@ -85,7 +100,7 @@ async function checkDue() {
         scanners.update(($s) =>
           $s.map((s) =>
             s.id === scanner.id
-              ? { ...s, lastRunAt: nowIso(), nextRunAt: computeScannerNextRunAt(s) }
+              ? { ...s, lastRunAt: nowIso(), lastRunStatus: 'failed', nextRunAt: computeScannerNextRunAt(s) }
               : s
           )
         );
@@ -101,8 +116,13 @@ async function checkDue() {
 
 
 export async function runScanner(scanner) {
-  const opKey = `scanner:${scanner.id}`;
-  activeOperations.update(ops => { const m = new Map(ops); m.set(opKey, { type: 'scan', id: scanner.id, label: scanner.name, startedAt: Date.now() }); return m; });
+  const lease = tryAcquireOperationGuards(scannerOperationKey(scanner?.id), {
+    type: 'scan',
+    id: scanner?.id,
+    label: scanner?.name,
+    startedAt: Date.now(),
+  });
+  if (!lease) return { ok: false, code: 'BUSY' };
   try {
   const prompt = buildScannerPrompt(scanner, get(items), get(scanners));
   const payload = await runWorkiqJson(
@@ -112,6 +132,9 @@ export async function runScanner(scanner) {
   );
 
   if (!payload || !Array.isArray(payload.radarItems)) return;
+  if (!payload || !Array.isArray(payload.radarItems)) {
+    return { ok: false, code: 'INVALID_RESPONSE' };
+  }
 
   const newItems = payload.radarItems.map((item) =>
     normalizeItem({
@@ -199,14 +222,15 @@ export async function runScanner(scanner) {
   }
 
   // Update scanner metadata
+  const completedAt = nowIso();
   scanners.update(($s) =>
     $s.map((s) => {
       if (s.id !== scanner.id) return s;
-      const updatedLastRunAt = nowIso();
       return {
         ...s,
-        lastRunAt: updatedLastRunAt,
-        nextRunAt: s.scheduleType === 'one-time' ? null : computeScannerNextRunAt({ ...s, lastRunAt: updatedLastRunAt }),
+        lastRunAt: completedAt,
+        lastRunStatus: 'success',
+        nextRunAt: s.scheduleType === 'one-time' ? null : computeScannerNextRunAt({ ...s, lastRunAt: completedAt }),
         itemCount: get(items).filter((i) => i.scannerId === s.id).length,
         enabled: s.scheduleType === 'one-time' ? false : s.enabled,
         recentTitles: updatedRecentTitles,
@@ -244,7 +268,8 @@ export async function runScanner(scanner) {
       }
     }
   }
+  return { ok: true, code: 'COMPLETED', newItemCount: unique.length, completedAt };
   } finally {
-    activeOperations.update(ops => { const m = new Map(ops); m.delete(opKey); return m; });
+    releaseOperationGuards(lease);
   }
 }

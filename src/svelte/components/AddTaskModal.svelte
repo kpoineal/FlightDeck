@@ -22,7 +22,7 @@
   let selectedSignals = $state([...ALL_SIGNAL_TYPES]);
   let selectedScannerId = $state(scannerId);
 
-  $effect(() => { if (scannerId !== selectedScannerId) selectedScannerId = scannerId; });
+  $effect(() => { if (open) selectedScannerId = scannerId; });
 
   function handleBackdrop(e) {
     if (e.target === e.currentTarget) oncancel?.();

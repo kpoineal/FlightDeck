@@ -60,6 +60,7 @@ export function normalizeScannerDefinition(raw) {
     scannerGroupId: typeof raw?.scannerGroupId === 'string' && raw.scannerGroupId.trim() ? raw.scannerGroupId.trim() : '',
     excludedItemIds: Array.isArray(raw?.excludedItemIds) ? raw.excludedItemIds.filter((v) => typeof v === 'string') : [],
     lastRunAt: raw?.lastRunAt || null,
+    lastRunStatus: ['success', 'failed'].includes(raw?.lastRunStatus) ? raw.lastRunStatus : null,
     nextRunAt: raw?.nextRunAt || null,
     itemCount: Number(raw?.itemCount) || 0,
     recentTitles: Array.isArray(raw?.recentTitles) ? raw.recentTitles.filter(

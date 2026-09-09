@@ -41,7 +41,7 @@
     $connected ? 'Connected' : 'Ready'
   );
   let statusClass = $derived(activeCount > 0 ? 'loading' : ($connected ? 'connected' : ''));
-  let actionCount = $derived($actionProposals.filter((proposal) => !proposal.archivedAt).length);
+  let actionCount = $derived($actionProposals.filter((proposal) => proposal.auditOnly !== true && !proposal.archivedAt).length);
 </script>
 
 <header class="topbar">

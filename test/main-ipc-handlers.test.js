@@ -101,6 +101,21 @@ describe('preload IPC contract', () => {
     assert.deepEqual(onCalls, []);
     assert.deepEqual(removeCalls, []);
   });
+
+  it('forwards app-resumed payloads through the canonical channel and removes the same listener', () => {
+    const payloads = [];
+    const unsubscribe = exposedApi.onAppResumed((payload) => payloads.push(payload));
+
+    assert.equal(onCalls.length, 1);
+    const [channel, listener] = onCalls[0];
+    assert.equal(channel, IPC_CHANNELS.APP_RESUMED);
+
+    listener({ sender: 'main' }, 'resume');
+    assert.deepEqual(payloads, ['resume']);
+
+    unsubscribe();
+    assert.deepEqual(removeCalls, [[IPC_CHANNELS.APP_RESUMED, listener]]);
+  });
 });
 
 describe('registerIpcHandlers()', () => {

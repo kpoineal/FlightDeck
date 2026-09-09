@@ -68,7 +68,8 @@
   });
 
   $effect(() => {
-    if (selected?.id && selected.id !== $selectedProposalId) selectedProposalId.set(selected.id);
+    const visibleSelectionId = selected?.id || null;
+    if (visibleSelectionId !== $selectedProposalId) selectedProposalId.set(visibleSelectionId);
   });
 
   function close() {
@@ -82,11 +83,13 @@
   }
 
   function selectProposal(id) {
-    selectedProposalId.set(id);
+    const proposal = visibleProposals.find((entry) => entry.id === id);
+    if (proposal?.auditOnly === true) return;
+    selectedProposalId.set(proposal?.id || null);
   }
 
   function returnToSource() {
-    if (!selected) return;
+    if (!selected || selected.auditOnly === true) return;
     if (selected.sourceDestination === 'Briefings') {
       mode.set('Briefings');
       if (selected.sourceContextId) {
@@ -101,7 +104,7 @@
   }
 
   async function advance(nextState) {
-    if (!selected) return;
+    if (!selected || selected.auditOnly === true) return;
     let updated = null;
     actionProposals.update((proposals) => proposals.map((proposal) => {
       if (proposal.id !== selected.id) return proposal;
@@ -164,7 +167,7 @@
   }
 
   function managementForProposal(proposal) {
-    if (!proposal) return null;
+    if (!proposal || proposal.auditOnly === true) return null;
     if (proposal.archivedAt) return {
       operation: 'restore',
       event: 'restored',
@@ -203,7 +206,7 @@
   }
 
   function requestManagement(event) {
-    if (!selected || !managementAction) return;
+    if (!selected || selected.auditOnly === true || !managementAction) return;
     confirmReturnFocus = event.currentTarget;
     pendingManagement = { ...managementAction, proposalId: selected.id };
     confirmTitle = 'Confirm Action';
@@ -242,7 +245,7 @@
   }
 
   function requestDeletion(event, includeDuplicates = false) {
-    if (!selected || deletePending || !canPermanentlyDeleteActionProposal(selected)) return;
+    if (!selected || selected.auditOnly === true || deletePending || !canPermanentlyDeleteActionProposal(selected)) return;
     const duplicateIds = includeDuplicates ? selectedDuplicateGroup?.proposalIds || [selected.id] : [selected.id];
     const proposals = $actionProposals.filter((proposal) => duplicateIds.includes(proposal.id));
     const effect = effectForProposals(proposals);
@@ -275,7 +278,7 @@
       return;
     }
     const current = $actionProposals.find((proposal) => proposal.id === action.proposalId);
-    if (!current) return;
+    if (!current || current.auditOnly === true) return;
     const changedAt = new Date().toISOString();
     const updated = action.operation === 'archive'
       ? archiveActionProposal(current, action.reason, changedAt)
@@ -327,7 +330,7 @@
   }
 
   function updateSelected(field, value) {
-    if (!selected) return;
+    if (!selected || selected.auditOnly === true) return;
     actionProposals.update((proposals) => proposals.map((proposal) =>
       proposal.id === selected.id
         ? field === 'sourceTitle' && proposal.state === 'Drafted'
@@ -344,7 +347,7 @@
   }
 
   async function createOutlookDraft() {
-    if (!selected || selected.channel !== 'outlook-draft' || draftPending) return;
+    if (!selected || selected.auditOnly === true || selected.channel !== 'outlook-draft' || draftPending) return;
     const proposalId = selected.id;
     const executing = {
       ...selected,

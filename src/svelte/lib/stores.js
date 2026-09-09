@@ -52,7 +52,7 @@ export const kpis = derived(items, ($items) => {
     elevated: active.filter(i => i.severity === 'Elevated').length,
     observe: active.filter(i => i.severity === 'Observe' || i.severity === 'Monitor').length,
     total: active.length,
-    blocked: active.filter(i => i.isBlocked).length,
+    blocked: active.filter(i => i.lifecycleStatus === 'blocked').length,
     new: active.filter(i => i.isNew).length,
     complete: $items.filter(i => i.lifecycleStatus === 'complete').length,
   };

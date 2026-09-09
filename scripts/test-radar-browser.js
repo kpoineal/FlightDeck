@@ -88,6 +88,7 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
     window.__notificationCallback = null;
     window.__coldHydrationPending = false;
     window.__resolveColdHydration = null;
+    window.__coldGetCalls = 0;
     window.workiq = {
       storeGet: async (key) => read(key),
       storeSet: async (key, value) => {
@@ -111,6 +112,7 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
       storeDelete: async (key) => { localStorage.removeItem(prefix + key); return true; },
       readPromptFile: async () => ({ success: false, error: 'Unavailable in browser acceptance mode' }),
       getColdItems: async () => {
+        window.__coldGetCalls += 1;
         const cold = read('__coldItems', []);
         if (!window.__coldHydrationPending) return cold;
         return new Promise((resolve) => {
@@ -157,7 +159,7 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
             target: { displayName: 'James Farquharson', channelId: '', threadId: '' },
             payload: { message: 'Who can confirm the renewal deployment owner?' },
             expectedOutcome: 'An owner is identified.',
-            risk: '',
+            risk: 'Confirm the recipient is the current owner.',
             reviewNote: 'Verify the channel.',
             needsTargetResolution: true,
             missingContext: [],
@@ -358,6 +360,220 @@ async function scannerScenario(session) {
   const renderedNames = await session.page.locator('#radar-scanner option').allTextContents();
   const persistedState = await session.page.evaluate(() => window.workiq.storeGet('flightdeck.demo.v2'));
   assert.ok(renderedNames.includes(uniqueName), `Scanner was not rehydrated. rendered=${JSON.stringify(renderedNames)} persisted=${JSON.stringify(persistedState?.scanners?.map((scanner) => scanner.name))}`);
+  await assertHealthy(session);
+}
+
+async function addItemPersistScenario(session) {
+  await openApp(session);
+  const itemTitle = 'Browser mounted custom item';
+  const monitorContext = 'Track confirmed ownership and the next committed delivery date.';
+  const scanner = await session.page.evaluate(async () => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return state.scanners[1] || state.scanners[0];
+  });
+
+  await session.page.getByTestId('radar-add-item').click();
+  const dialog = session.page.getByRole('dialog').filter({ hasText: 'Add Item to' });
+  await dialog.getByRole('heading', { name: /Add Item to/ }).waitFor({ state: 'visible' });
+  await dialog.getByPlaceholder('e.g., Customer agreement for Project X').fill(itemTitle);
+  await dialog.locator('select').nth(0).selectOption(scanner.id);
+  await dialog.locator('select').nth(1).selectOption('Critical');
+  await dialog.getByPlaceholder('What should WorkIQ look for when refreshing this task?').fill(monitorContext);
+  await dialog.getByRole('button', { name: 'Create Task', exact: true }).click();
+
+  await session.page.locator('.radar-thread-detail h2').filter({ hasText: itemTitle }).waitFor({ state: 'visible' });
+  assert.equal(await session.page.getByLabel('Criticality').inputValue(), 'Critical');
+  assert.equal(await session.page.getByLabel('Work state').inputValue(), 'in-progress');
+  assert.equal(await session.page.getByLabel('Scanner assignment').inputValue(), scanner.id);
+  await session.page.waitForFunction(({ itemTitle, monitorContext, scannerId }) => {
+    const raw = localStorage.getItem('__flightdeck_browser_acceptance__:flightdeck.demo.v2');
+    const state = raw ? JSON.parse(raw) : null;
+    const item = state?.items?.find((entry) => entry.title === itemTitle);
+    return item?.origin === 'custom'
+      && item?.sourceType === 'Custom'
+      && item?.status === 'Inbound'
+      && item?.lifecycleStatus === 'in-progress'
+      && item?.scannerId === scannerId
+      && item?.severity === 'Critical'
+      && item?.monitorPrompt === monitorContext
+      && item?.monitorEnabled === true;
+  }, { itemTitle, monitorContext, scannerId: scanner.id });
+
+  await openApp(session, { reseed: false });
+  const restored = session.page.locator('.radar-thread').filter({ hasText: itemTitle });
+  await restored.waitFor({ state: 'visible' });
+  await restored.click();
+  await session.page.locator('.radar-thread-detail h2').filter({ hasText: itemTitle }).waitFor({ state: 'visible' });
+  await session.page.locator('#radar-scanner').selectOption(scanner.id);
+  await session.page.locator('.radar-thread').filter({ hasText: itemTitle }).waitFor({ state: 'visible' });
+  await assertHealthy(session);
+}
+
+async function seedScannerDeletionFixture(session, suffix, { withProposal = false, unhydrated = false } = {}) {
+  await openApp(session);
+  return session.page.evaluate(async ({ fixtureItemId, suffix, withProposal, unhydrated }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const source = state.items.find((item) => item.id === fixtureItemId);
+    const scannerId = `scanner_browser_${suffix}`;
+    const scannerName = `Browser ${suffix} scanner`;
+    const hotItemId = `browser_${suffix}_hot`;
+    const coldItemId = `browser_${suffix}_cold`;
+    const proposalId = `browser_${suffix}_proposal`;
+    const scanner = {
+      ...state.scanners[0],
+      id: scannerId,
+      name: scannerName,
+      prompt: `Local ${suffix} scanner fixture.`,
+      itemCount: 2,
+    };
+    const hotItem = {
+      ...source,
+      id: hotItemId,
+      title: `Browser ${suffix} hot thread`,
+      scannerId,
+      lifecycleStatus: 'in-progress',
+      isNew: false,
+      hasNewUpdate: false,
+    };
+    const coldItem = {
+      ...source,
+      id: coldItemId,
+      title: `Browser ${suffix} cold thread`,
+      scannerId,
+      lifecycleStatus: 'archived',
+      monitorEnabled: false,
+      isNew: false,
+      hasNewUpdate: false,
+    };
+    const actionProposals = withProposal
+      ? [...(state.actionProposals || []), {
+        id: proposalId,
+        sourceItemId: hotItemId,
+        sourceTitle: hotItem.title,
+        channel: 'email',
+        state: 'Drafted',
+        dispatchStatus: 'not-started',
+        createdAt: '2026-09-08T10:00:00Z',
+        updatedAt: '2026-09-08T10:00:00Z',
+      }]
+      : (state.actionProposals || []);
+    await window.workiq.storeSet('flightdeck.demo.v2', {
+      ...state,
+      scanners: [...state.scanners, scanner],
+      items: [...state.items, hotItem],
+      actionProposals,
+    });
+    await window.workiq.setColdItems(unhydrated
+      ? [coldItem]
+      : [...(await window.workiq.getColdItems()), coldItem]);
+    if (unhydrated) window.__coldGetCalls = 0;
+    return { scannerId, scannerName, hotItemId, coldItemId, proposalId };
+  }, { fixtureItemId: FIXTURE_ITEM_ID, suffix, withProposal, unhydrated });
+}
+
+async function openScannerDeletionDialog(session, fixture, { openArchive = true } = {}) {
+  await openApp(session, { reseed: false });
+  if (openArchive) {
+    await session.page.getByTestId('radar-view-archived').click();
+    await session.page.locator(`[data-thread-id="${fixture.coldItemId}"]`).waitFor({ state: 'visible' });
+  }
+  await session.page.locator('#radar-scanner').selectOption(fixture.scannerId);
+  await session.page.getByTestId('radar-edit-scanner').click();
+  const settings = session.page.getByRole('dialog').filter({ hasText: fixture.scannerName });
+  await settings.getByRole('button', { name: 'Delete this scanner', exact: true }).click();
+  const deletion = session.page.getByTestId('scanner-deletion-modal');
+  await deletion.getByRole('heading', { name: `Delete ${fixture.scannerName}?`, exact: true }).waitFor({ state: 'visible' });
+  return deletion;
+}
+
+async function scannerDeletionReassignScenario(session) {
+  const fixture = await seedScannerDeletionFixture(session, 'reassign');
+  const deletion = await openScannerDeletionDialog(session, fixture);
+  const reassign = deletion.getByRole('radio', { name: /Keep and reassign/ });
+  assert.equal(await reassign.isChecked(), true, 'Scanner deletion did not default to preservation');
+  assert.equal(await deletion.getByTestId('scanner-deletion-target').locator('option:checked').textContent(), 'Unassigned Inbox');
+  await deletion.getByTestId('scanner-deletion-confirm').click();
+  await deletion.waitFor({ state: 'detached' });
+  await session.page.waitForFunction(async ({ scannerId, hotItemId }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return !state.scanners.some((scanner) => scanner.id === scannerId)
+      && state.items.find((item) => item.id === hotItemId)?.scannerId == null;
+  }, fixture);
+  const coldItems = await session.page.evaluate(() => window.workiq.getColdItems());
+  assert.equal(coldItems.find((item) => item.id === fixture.coldItemId)?.scannerId, null,
+    'Reassign did not preserve the archived thread as unassigned');
+  await openApp(session, { reseed: false });
+  assert.equal(await session.page.locator(`#radar-scanner option[value="${fixture.scannerId}"]`).count(), 0,
+    'Deleted scanner returned after reload');
+  assert.equal(await session.page.locator(`[data-thread-id="${fixture.hotItemId}"]`).count(), 1,
+    'Reassigned hot thread did not survive reload');
+  await assertHealthy(session);
+}
+
+async function scannerDeletionDeleteAllScenario(session) {
+  const fixture = await seedScannerDeletionFixture(session, 'delete_all', { withProposal: true });
+  const deletion = await openScannerDeletionDialog(session, fixture);
+  await deletion.getByRole('radio', { name: /Delete all/ }).check();
+  assert.equal(await deletion.getByTestId('scanner-deletion-confirm').isDisabled(), true,
+    'Destructive scanner deletion was enabled before acknowledgement');
+  await deletion.getByTestId('scanner-deletion-acknowledgement').check();
+  await deletion.getByTestId('scanner-deletion-confirm').click();
+  await deletion.waitFor({ state: 'detached' });
+  await session.page.waitForFunction(async ({ scannerId, hotItemId, proposalId }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return !state.scanners.some((scanner) => scanner.id === scannerId)
+      && !state.items.some((item) => item.id === hotItemId)
+      && !state.actionProposals.some((proposal) => proposal.id === proposalId)
+      && state.deletedItemIds.includes(hotItemId);
+  }, fixture);
+  const coldItems = await session.page.evaluate(() => window.workiq.getColdItems());
+  assert.equal(coldItems.some((item) => item.id === fixture.coldItemId), false,
+    'Delete all retained the archived scanner thread');
+  const persisted = await session.page.evaluate(() => window.workiq.storeGet('flightdeck.demo.v2'));
+  assert.equal(persisted.deletedItemIds.includes(fixture.coldItemId), true,
+    'Delete all did not tombstone the archived scanner thread');
+  await openApp(session, { reseed: false });
+  assert.equal(await session.page.locator(`[data-thread-id="${fixture.hotItemId}"]`).count(), 0,
+    'Permanently deleted scanner thread returned after reload');
+  await assertHealthy(session);
+}
+
+async function scannerDeletionUnhydratedArchiveScenario(session) {
+  const fixture = await seedScannerDeletionFixture(session, 'unhydrated_archive', { unhydrated: true });
+  assert.equal(await session.page.evaluate(() => window.__coldGetCalls), 0,
+    'The browser fixture hydrated Archive before scanner deletion began');
+  const deletion = await openScannerDeletionDialog(session, fixture, { openArchive: false });
+  assert.ok(await session.page.evaluate(() => window.__coldGetCalls) > 0,
+    'Scanner deletion preview did not load authoritative cold state');
+  await deletion.getByRole('radio', { name: /Delete all/ }).check();
+  await deletion.getByTestId('scanner-deletion-acknowledgement').check();
+  await deletion.getByTestId('scanner-deletion-confirm').click();
+  await deletion.waitFor({ state: 'detached' });
+  await session.page.waitForFunction(async ({ scannerId, hotItemId, coldItemId }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const cold = await window.workiq.getColdItems();
+    return !state.scanners.some((scanner) => scanner.id === scannerId)
+      && !state.items.some((item) => item.id === hotItemId)
+      && !cold.some((item) => item.id === coldItemId)
+      && state.deletedItemIds.includes(coldItemId);
+  }, fixture);
+  await openApp(session, { reseed: false });
+  const persisted = await session.page.evaluate(async ({ scannerId, hotItemId, coldItemId }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const cold = await window.workiq.getColdItems();
+    return {
+      scannerPresent: state.scanners.some((scanner) => scanner.id === scannerId),
+      hotPresent: state.items.some((item) => item.id === hotItemId),
+      coldPresent: cold.some((item) => item.id === coldItemId),
+      coldTombstoned: state.deletedItemIds.includes(coldItemId),
+    };
+  }, fixture);
+  assert.deepEqual(persisted, {
+    scannerPresent: false,
+    hotPresent: false,
+    coldPresent: false,
+    coldTombstoned: true,
+  });
   await assertHealthy(session);
 }
 
@@ -1180,6 +1396,9 @@ async function teamsReviewScenario(session) {
   const proposalCalls = await session.page.evaluate(() => structuredClone(window.__proposalCalls));
   assert.equal(proposalCalls.length, 1, 'Draft Teams message did not invoke the narrow API exactly once');
   assert.equal(proposalCalls[0].requestedChannel, 'teams');
+  await draft.getByText('A confirmed window is the smallest step that unblocks the renewal.', { exact: true }).waitFor({ state: 'visible' });
+  await draft.getByText('Confirm the recipient is the current owner.', { exact: true }).waitFor({ state: 'visible' });
+  await draft.getByText('Verify the channel.', { exact: true }).waitFor({ state: 'visible' });
   const recipient = draft.locator('input[type="text"]');
   assert.equal(await recipient.inputValue(), 'James Farquharson');
   await recipient.fill('Alex Johnson');
@@ -1572,6 +1791,77 @@ async function blockedPriorityScenario(session) {
   await session.page.locator('.radar-thread-detail label').filter({ hasText: 'Work state' }).locator('select').selectOption('blocked');
   await session.page.getByTestId('radar-view-priority').click();
   await session.page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`).waitFor({ state: 'visible' });
+  await assertHealthy(session);
+}
+
+async function recentFilterEditScenario(session) {
+  await openApp(session);
+  const fixture = await session.page.evaluate(async (fixtureItemId) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const source = state.items.find((item) => item.id === fixtureItemId);
+    const newer = {
+      ...source,
+      id: 'browser_recent_updated',
+      title: 'Browser Recent updated thread',
+      scannerId: state.scanners[0].id,
+      lastChangedAt: '2099-09-08T11:00:00Z',
+      isNew: false,
+      hasNewUpdate: true,
+      owner: 'Initial owner',
+      dueAt: null,
+      doneCriteria: 'Initial done criteria',
+      monitorPrompt: 'Stored browser prompt must remain unchanged.',
+    };
+    const older = {
+      ...source,
+      id: 'browser_recent_older',
+      title: 'Browser Recent older thread',
+      scannerId: state.scanners[0].id,
+      lastChangedAt: '2099-09-08T10:00:00Z',
+      isNew: false,
+      hasNewUpdate: false,
+    };
+    await window.workiq.storeSet('flightdeck.demo.v2', { ...state, items: [...state.items, older, newer] });
+    return {
+      newerId: newer.id,
+      olderId: older.id,
+      targetScannerId: state.scanners[1].id,
+      monitorPrompt: newer.monitorPrompt,
+    };
+  }, FIXTURE_ITEM_ID);
+
+  await openApp(session, { reseed: false });
+  assert.equal(await session.page.locator('#radar-sort').inputValue(), 'recent', 'Recent was not the default sort');
+  assert.equal(await session.page.locator('.radar-thread').first().getAttribute('data-thread-id'), fixture.newerId,
+    'Recent did not put the newest deterministic fixture first');
+  await session.page.getByTestId('inbox-quick-updated').click();
+  await session.page.locator(`[data-thread-id="${fixture.newerId}"]`).waitFor({ state: 'visible' });
+  assert.equal(await session.page.locator(`[data-thread-id="${fixture.olderId}"]`).count(), 0,
+    'UPDATED quick filter retained a non-updated thread');
+  await session.page.locator(`[data-thread-id="${fixture.newerId}"]`).click();
+  await session.page.getByLabel('Scanner assignment').selectOption(fixture.targetScannerId);
+  await session.page.getByLabel('Owner').fill('Browser owner');
+  await session.page.getByLabel('Owner').press('Tab');
+  await session.page.getByLabel('Due date').fill('2099-09-15T14:30');
+  await session.page.getByLabel('Due date').press('Tab');
+  await session.page.getByLabel('Done criteria').fill('Browser workflow is persisted.');
+  await session.page.getByLabel('Done criteria').press('Tab');
+  await session.page.getByTestId('inbox-active-filter').filter({ hasText: /UPDATED/i }).click();
+  await session.page.locator(`[data-thread-id="${fixture.olderId}"]`).waitFor({ state: 'visible' });
+  await session.page.waitForFunction(({ newerId, targetScannerId, monitorPrompt }) => {
+    const raw = localStorage.getItem('__flightdeck_browser_acceptance__:flightdeck.demo.v2');
+    const state = raw ? JSON.parse(raw) : null;
+    const item = state?.items?.find((entry) => entry.id === newerId);
+    return item?.scannerId === targetScannerId
+      && item?.owner === 'Browser owner'
+      && item?.doneCriteria === 'Browser workflow is persisted.'
+      && item?.monitorPrompt === monitorPrompt;
+  }, fixture);
+  await openApp(session, { reseed: false });
+  const persisted = await session.page.evaluate(async (id) => (await window.workiq.storeGet('flightdeck.demo.v2')).items.find((item) => item.id === id), fixture.newerId);
+  assert.equal(persisted.owner, 'Browser owner');
+  assert.equal(persisted.doneCriteria, 'Browser workflow is persisted.');
+  assert.equal(persisted.monitorPrompt, fixture.monitorPrompt, 'Routine edits silently rewrote the stored monitoring prompt');
   await assertHealthy(session);
 }
 
@@ -1977,6 +2267,10 @@ async function radarRichContextScenario(session) {
     process.stdout.write(`EDGE_EXECUTABLE=${executablePath}\nLOCAL_RENDERER=${rendererServer.baseUrl}\n`);
     await runScenario('theme-continuity-and-switching', browser, rendererServer.baseUrl, themeScenario);
     await runScenario('scanner-create-and-persist', browser, rendererServer.baseUrl, scannerScenario);
+    await runScenario('add-item-submit-persist-reload', browser, rendererServer.baseUrl, addItemPersistScenario);
+    await runScenario('scanner-delete-keep-and-reassign', browser, rendererServer.baseUrl, scannerDeletionReassignScenario);
+    await runScenario('scanner-delete-all', browser, rendererServer.baseUrl, scannerDeletionDeleteAllScenario);
+    await runScenario('scanner-delete-unhydrated-archive', browser, rendererServer.baseUrl, scannerDeletionUnhydratedArchiveScenario);
     await runScenario('criticality-edit-and-persist', browser, rendererServer.baseUrl, criticalityScenario);
     await runScenario('completed-view-and-active-restore', browser, rendererServer.baseUrl, completedRestoreScenario);
     await runScenario('action-draft-cancel', browser, rendererServer.baseUrl, (session) => draftScenario(session, 'cancel'), { draftMode: 'cancel' });
@@ -2019,6 +2313,7 @@ async function radarRichContextScenario(session) {
     await runScenario('snooze-complete-archive-no-reselection', browser, rendererServer.baseUrl, selectionRegressionScenario);
     await runScenario('inbox-explicit-activation-marks-read', browser, rendererServer.baseUrl, inboxReadActivationScenario);
     await runScenario('blocked-elevated-item-remains-priority', browser, rendererServer.baseUrl, blockedPriorityScenario);
+    await runScenario('inbox-recent-filter-edit-workflow', browser, rendererServer.baseUrl, recentFilterEditScenario);
     await runScenario('mobile-list-detail-back-focus', browser, rendererServer.baseUrl, mobileScenario, { viewport: { width: 760, height: 900 } });
     await runScenario('action-queue-and-timeline-desktop-capture', browser, rendererServer.baseUrl,
       (session) => actionQueueScreenshotScenario(session, 'desktop'),

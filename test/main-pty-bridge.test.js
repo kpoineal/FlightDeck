@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const { getNodeExecutable, stripAnsi } = require('../src/main/pty-bridge');
+const { getNodeExecutable, stripAnsi, isWorkiqDiagnostic } = require('../src/main/pty-bridge');
 
 /* ------------------------------------------------------------------ */
 /*  stripAnsi()                                                        */
@@ -54,6 +54,26 @@ describe('stripAnsi()', () => {
       stripAnsi('\x1b[1m\x1b[32mbold green\x1b[0m\x1b[39m'),
       'bold green'
     );
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  isWorkiqDiagnostic()                                               */
+/* ------------------------------------------------------------------ */
+describe('isWorkiqDiagnostic()', () => {
+  it('recognizes WorkIQ JSON parse diagnostics', () => {
+    assert.equal(
+      isWorkiqDiagnostic("Error: '{' is invalid after a single JSON value. Expected end of data."),
+      true
+    );
+  });
+
+  it('recognizes diagnostics regardless of case and surrounding whitespace', () => {
+    assert.equal(isWorkiqDiagnostic('  ERROR: authentication failed  '), true);
+  });
+
+  it('does not classify valid JSON as a diagnostic', () => {
+    assert.equal(isWorkiqDiagnostic('{"radarItems":[]}'), false);
   });
 });
 
