@@ -722,6 +722,7 @@ async function writePersistentState(isDemo = false) {
       const receipt = await window.workiq.setColdItems([...coldById.values()]);
       if (!isAcceptedPersistenceReceipt(receipt)) throw new Error('Cold persistence was not confirmed.');
       currentItems = snapshotItems().filter((item) => !evictedIds.has(normalizeItemId(item?.id)));
+      items.set(currentItems);
       console.log(`[flightdeck] Evicted ${evictedItems.length} item(s) to cold storage`);
     } catch (err) {
       console.warn('[flightdeck] cold storage eviction failed, keeping items hot', err.message);
@@ -747,6 +748,7 @@ async function writePersistentState(isDemo = false) {
       const receipt = await window.workiq.setColdItems([...coldById.values()]);
       if (!isAcceptedPersistenceReceipt(receipt)) throw new Error('Cold persistence was not confirmed.');
       currentItems = snapshotItems().filter((item) => !overflowIds.has(normalizeItemId(item?.id)));
+      items.set(currentItems);
       console.log(`[flightdeck] Cap overflow: evicted ${overflow.length} item(s) to cold storage`);
     } catch (err) {
       console.warn('[flightdeck] cap overflow eviction failed', err.message);

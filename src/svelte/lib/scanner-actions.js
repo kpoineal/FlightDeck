@@ -25,8 +25,10 @@ import {
   scannerOperationKey,
   tryAcquireOperationGuards,
 } from './operation-guards.js';
+import { hydrateRadarColdItems } from './radar-navigation.js';
 
-export function previewScannerDeletion(scannerId) {
+export async function previewScannerDeletion(scannerId) {
+  await hydrateRadarColdItems();
   const snapshot = collectScannerDeletionSnapshot(scannerId);
   return snapshot ? toDeletionPreview(snapshot) : { ok: false, code: 'NOT_FOUND' };
 }
@@ -37,6 +39,7 @@ export async function executeScannerDeletion({
   targetScannerId = null,
   previewToken,
 } = {}) {
+  await hydrateRadarColdItems();
   const snapshot = collectScannerDeletionSnapshot(scannerId);
   if (!snapshot) return { ok: false, code: 'NOT_FOUND' };
   if (!['reassign', 'delete-all'].includes(disposition)) {

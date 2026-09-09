@@ -46,7 +46,9 @@ function activityAt(item) {
 
 function nextCalendarDayBoundary(now, days) {
   const date = new Date(now);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  return date.getTime();
 }
 
 function isDueSoon(item, now) {

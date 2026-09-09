@@ -723,8 +723,8 @@
     savePersistentState();
   }
 
-  function requestScannerDeletion({ scannerId: requestedScannerId, returnFocus }) {
-    const preview = previewScannerDeletion(requestedScannerId);
+  async function requestScannerDeletion({ scannerId: requestedScannerId, returnFocus }) {
+    const preview = await previewScannerDeletion(requestedScannerId);
     if (preview?.ok === false) return;
     scannerModalOpen = false;
     scannerDeletion = {
@@ -825,7 +825,7 @@
     }
 
     if (result.code === 'STALE_PREVIEW') {
-      const refreshedPreview = previewScannerDeletion(currentPreview.scanner.id);
+      const refreshedPreview = await previewScannerDeletion(currentPreview.scanner.id);
       scannerDeletion = refreshedPreview?.ok === false
         ? {
             ...scannerDeletion,
@@ -842,7 +842,7 @@
     }
 
     if (result.code === 'INVALID_TARGET') {
-      const refreshedPreview = previewScannerDeletion(currentPreview.scanner.id);
+      const refreshedPreview = await previewScannerDeletion(currentPreview.scanner.id);
       scannerDeletion = {
         ...scannerDeletion,
         preview: refreshedPreview?.ok === false ? currentPreview : refreshedPreview,
