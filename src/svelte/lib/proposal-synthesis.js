@@ -26,7 +26,7 @@ export function buildProposalSynthesisContext(item, options = {}) {
       sourceType: boundedString(item.sourceType, 80),
       severity: boundedString(item.severity, 40),
       owner: boundedString(item.owner, 120),
-      updatedAt: validTimestamp(item.updatedAt || item.lastUpdatedAt),
+      lastChangedAt: validTimestamp(item.lastChangedAt || item.updatedAt || item.lastUpdatedAt),
       counterparties: boundedStrings(item.counterparties, 10, 120),
       suggestedNextSteps: boundedStrings(item.suggestedNextSteps, 5, 500),
       evidenceLabels: Array.isArray(item.evidenceLinks)
@@ -36,7 +36,7 @@ export function buildProposalSynthesisContext(item, options = {}) {
           })).filter((entry) => entry.label)
         : [],
       recentUpdates: Array.isArray(item.updateHistory)
-        ? item.updateHistory.slice(-6).map((entry) => ({
+        ? item.updateHistory.slice(0, 6).map((entry) => ({
             at: validTimestamp(entry?.at || entry?.timestamp),
             kind: boundedString(entry?.kind || entry?.type, 40),
             summary: boundedString(entry?.summary || entry?.text, 600),
@@ -68,7 +68,7 @@ export function normalizeProposalSynthesisContext(value) {
       sourceType: boundedString(thread.sourceType, 80),
       severity: boundedString(thread.severity, 40),
       owner: boundedString(thread.owner, 120),
-      updatedAt: validTimestamp(thread.updatedAt),
+      lastChangedAt: validTimestamp(thread.lastChangedAt || thread.updatedAt || thread.lastUpdatedAt),
       counterparties: boundedStrings(thread.counterparties, 10, 120),
       suggestedNextSteps: boundedStrings(thread.suggestedNextSteps, 5, 500),
       evidenceLabels: Array.isArray(thread.evidenceLabels)
@@ -78,7 +78,7 @@ export function normalizeProposalSynthesisContext(value) {
           })).filter((entry) => entry.label)
         : [],
       recentUpdates: Array.isArray(thread.recentUpdates)
-        ? thread.recentUpdates.slice(-6).map((entry) => ({
+        ? thread.recentUpdates.slice(0, 6).map((entry) => ({
             at: validTimestamp(entry?.at),
             kind: boundedString(entry?.kind, 40),
             summary: boundedString(entry?.summary, 600),
@@ -253,5 +253,5 @@ function boundedString(value, maxLength) {
 }
 
 function validTimestamp(value) {
-  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : '';
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : '';
 }

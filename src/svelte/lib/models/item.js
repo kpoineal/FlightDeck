@@ -340,6 +340,7 @@ export function normalizeItem(item) {
       if (s.includes('complete') || s.includes('resolved') || s.includes('closed') || s.includes('done')) return 'complete';
       if (s.includes('block') || s.includes('stalled')) return 'blocked';
       if (s.includes('wait') || s.includes('pending')) return 'waiting';
+      if (s === 'inbound') return 'in-progress';
       if (s.includes('progress')) return 'in-progress';
       if (LIFECYCLE_STATUSES.includes(item?.lifecycleStatus)) return item.lifecycleStatus;
       return UNKNOWN_LIFECYCLE_STATUS;

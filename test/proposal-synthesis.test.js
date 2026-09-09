@@ -60,6 +60,47 @@ describe('proposal synthesis context', () => {
     assert.equal(buildProposalSynthesisContext(item, { requestedChannel: 'teams' }).requestedChannel, 'teams');
     assert.equal(Object.hasOwn(buildProposalSynthesisContext(item, { requestedChannel: 'planner' }), 'requestedChannel'), false);
   });
+
+  it('uses canonical lastChangedAt with existing fallbacks and keeps the newest six history entries', () => {
+    const newestFirstHistory = Array.from({ length: 8 }, (_, index) => ({
+      timestamp: `2026-09-08T0${8 - index}:00:00Z`,
+      kind: 'reply',
+      summary: `Update ${8 - index}`,
+    }));
+    const context = buildProposalSynthesisContext({
+      id: 'thread-history',
+      title: 'Deployment history',
+      lastChangedAt: '2026-09-08T09:30:00Z',
+      updatedAt: '2026-09-01T09:30:00Z',
+      updateHistory: newestFirstHistory,
+    });
+
+    assert.equal(context.thread.lastChangedAt, '2026-09-08T09:30:00.000Z');
+    assert.deepEqual(context.thread.recentUpdates.map((entry) => entry.summary), [
+      'Update 8',
+      'Update 7',
+      'Update 6',
+      'Update 5',
+      'Update 4',
+      'Update 3',
+    ]);
+    assert.equal(
+      buildProposalSynthesisContext({
+        id: 'thread-updated-at',
+        title: 'Existing updatedAt fallback',
+        updatedAt: '2026-09-07T12:00:00Z',
+      }).thread.lastChangedAt,
+      '2026-09-07T12:00:00.000Z'
+    );
+    assert.equal(
+      buildProposalSynthesisContext({
+        id: 'thread-last-updated-at',
+        title: 'Existing lastUpdatedAt fallback',
+        lastUpdatedAt: '2026-09-06T12:00:00Z',
+      }).thread.lastChangedAt,
+      '2026-09-06T12:00:00.000Z'
+    );
+  });
 });
 
 describe('proposal synthesis normalization', () => {
@@ -100,11 +141,16 @@ describe('proposal synthesis normalization', () => {
         target: { displayName: 'James Farquharson' },
         payload: { message: 'Who can own the deployment validation?' },
         expectedOutcome: 'An owner is identified.',
+        risk: 'The recipient may not own deployment validation.',
+        reviewNote: 'Verify the recipient before sending.',
       }],
     }));
 
     assert.deepEqual(normalized.proposals[0].payload, { message: 'Who can own the deployment validation?' });
     assert.equal(normalized.proposals[0].needsTargetResolution, false);
+    assert.equal(normalized.why, 'A confirmed window unblocks the smallest next step.');
+    assert.equal(normalized.proposals[0].risk, 'The recipient may not own deployment validation.');
+    assert.equal(normalized.proposals[0].reviewNote, 'Verify the recipient before sending.');
   });
 
   it('uses the normalized Teams display name as the target resolution authority', () => {

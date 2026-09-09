@@ -1,8 +1,13 @@
 // ── Task-monitoring background engine (Svelte) ─────────────────────
 import { get } from 'svelte/store';
-import { items, connected, activeOperations } from './stores.js';
+import { items, connected } from './stores.js';
 import { addHistory } from './actions.js';
 import { savePersistentState } from './persistence.js';
+import {
+  itemOperationKey,
+  releaseOperationGuards,
+  tryAcquireOperationGuards,
+} from './operation-guards.js';
 import { computeNextRunAt, prependItemUpdateHistory, reconcileItemEvidenceLinks } from './models/item.js';
 import { nowIso, cleanDisplayText, normalizeSeverity } from './utils.js';
 import { ALL_SIGNAL_TYPES } from './constants.js';
@@ -70,8 +75,13 @@ async function checkDueItems() {
 
 
 export async function runItemCheck(item) {
-  const opKey = `item:${item.id}`;
-  activeOperations.update(ops => { const m = new Map(ops); m.set(opKey, { type: 'monitor', id: item.id, label: item.title, startedAt: Date.now() }); return m; });
+  const lease = tryAcquireOperationGuards(itemOperationKey(item?.id), {
+    type: 'monitor',
+    id: item?.id,
+    label: item?.title,
+    startedAt: Date.now(),
+  });
+  if (!lease) return { ok: false, code: 'BUSY' };
   try {
   const prompt = buildMonitorPrompt(item);
   const payload = await runWorkiqJson(
@@ -233,6 +243,6 @@ export async function runItemCheck(item) {
     })
   );
   } finally {
-    activeOperations.update(ops => { const m = new Map(ops); m.delete(opKey); return m; });
+    releaseOperationGuards(lease);
   }
 }

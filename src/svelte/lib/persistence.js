@@ -41,7 +41,6 @@ import {
 import { normalizeScannerDefinition, computeScannerNextRunAt } from './models/scanner.js';
 import {
   normalizeActionProposal,
-  normalizeActionProposals,
   recoverStaleExecutingActionProposal,
 } from './action-proposals.js';
 import fixtureData from '../../demo/fixture.json';
@@ -51,6 +50,10 @@ let _loaded = false;
 let _scheduledSaveTimer = null;
 let _activeTransaction = null;
 let _writesInFlight = 0;
+let _saveGeneration = 0;
+let _pendingSaveGenerations = new Map();
+let _saveWaiters = [];
+let _saveDrainPromise = null;
 let _hydrationGeneration = 0;
 let _mutationEpoch = 0;
 let _hydrationApplying = false;
@@ -78,10 +81,7 @@ export function cancelScheduledPersistentStateSave() {
 export function schedulePersistentStateSave(isDemo = false, delayMs = 500) {
   if (!_loaded || _hydrationApplying) return;
   if (_activeTransaction) {
-    if (_activeTransaction.phase === 'persisting' || _activeTransaction.phase === 'rollback-persisting') {
-      _activeTransaction.followUpRequested = true;
-      _activeTransaction.followUpDemo = _activeTransaction.followUpDemo || isDemo;
-    }
+    void savePersistentState(isDemo);
     return;
   }
 
@@ -99,20 +99,22 @@ export async function runPersistentStateTransaction({
   rollbackExternal = null,
   isDemo = false,
 } = {}) {
-  if (_activeTransaction || _writesInFlight > 0) return { ok: false, code: 'BUSY' };
+  if (_activeTransaction) return { ok: false, code: 'BUSY' };
   if (typeof mutate !== 'function' || typeof rollback !== 'function') {
     return { ok: false, code: 'INVALID_TRANSACTION' };
   }
 
   cancelScheduledPersistentStateSave();
-  _mutationEpoch += 1;
   const transaction = {
-    phase: 'mutating',
-    followUpRequested: false,
-    followUpDemo: isDemo,
+    phase: 'waiting',
+    followUpGenerations: new Map(),
     saveWaiters: [],
   };
   _activeTransaction = transaction;
+
+  if (_saveDrainPromise) await _saveDrainPromise;
+  _mutationEpoch += 1;
+  transaction.phase = 'mutating';
 
   let result;
   let externalAttempted = false;
@@ -127,9 +129,15 @@ export async function runPersistentStateTransaction({
     if (!result) {
       transaction.phase = 'persisting';
       canonicalAttempted = true;
-      result = await writePersistentState(isDemo)
-        ? { ok: true }
-        : { ok: false, code: 'PERSISTENCE_FAILED' };
+      const includedGeneration = pendingSaveGeneration(transaction.followUpGenerations, isDemo);
+      const persisted = await writePersistentState(isDemo);
+      if (persisted) {
+        settleSaveGeneration(transaction.followUpGenerations, transaction.saveWaiters, {
+          generation: includedGeneration,
+          isDemo,
+        }, true);
+      }
+      result = persisted ? { ok: true } : { ok: false, code: 'PERSISTENCE_FAILED' };
     }
   } catch (_) {
     result = { ok: false, code: 'PERSISTENCE_FAILED' };
@@ -145,9 +153,15 @@ export async function runPersistentStateTransaction({
         restored = typeof rollbackExternal === 'function' && await rollbackExternal() === true;
       }
       if (restored && canonicalAttempted) {
-        transaction.followUpRequested = false;
         transaction.phase = 'rollback-persisting';
+        const includedGeneration = pendingSaveGeneration(transaction.followUpGenerations, isDemo);
         restored = await writePersistentState(isDemo);
+        if (restored) {
+          settleSaveGeneration(transaction.followUpGenerations, transaction.saveWaiters, {
+            generation: includedGeneration,
+            isDemo,
+          }, true);
+        }
       }
     } catch (_) {
       restored = false;
@@ -156,14 +170,13 @@ export async function runPersistentStateTransaction({
   }
 
   transaction.phase = 'finishing';
+  if (result.code === 'PERSISTENCE_RECOVERY_REQUIRED') {
+    resolveSaveWaiters(transaction.saveWaiters, () => true, false);
+  } else {
+    await drainSaveGenerations(transaction.followUpGenerations, transaction.saveWaiters);
+  }
   if (_activeTransaction === transaction) _activeTransaction = null;
   _mutationEpoch += 1;
-
-  let followUpResult = result.code !== 'PERSISTENCE_RECOVERY_REQUIRED';
-  if (transaction.followUpRequested && result.code !== 'PERSISTENCE_RECOVERY_REQUIRED') {
-    followUpResult = await writePersistentState(transaction.followUpDemo);
-  }
-  for (const resolve of transaction.saveWaiters) resolve(followUpResult);
   return result;
 }
 
@@ -512,7 +525,7 @@ export async function loadPersistentState(isDemo = false) {
     let recoveredStaleExecution = false;
     const loadedActionProposals = (Array.isArray(parsed.actionProposals) ? parsed.actionProposals : [])
       .map((persistedProposal) => {
-        const proposal = normalizeActionProposal(persistedProposal);
+        const proposal = normalizePersistedActionProposal(persistedProposal);
         if (!proposal || persistedProposal?.state !== 'Executing') return proposal;
         recoveredStaleExecution = true;
         return recoverStaleExecutingActionProposal(proposal);
@@ -591,12 +604,76 @@ export async function loadPersistentState(isDemo = false) {
 
 export async function savePersistentState(isDemo = false) {
   if (_hydrationApplying) return true;
+  const generation = ++_saveGeneration;
+  const useDemo = Boolean(isDemo);
   if (_activeTransaction) {
-    _activeTransaction.followUpRequested = true;
-    _activeTransaction.followUpDemo = _activeTransaction.followUpDemo || isDemo;
-    return new Promise((resolve) => _activeTransaction.saveWaiters.push(resolve));
+    recordSaveGeneration(_activeTransaction.followUpGenerations, generation, useDemo);
+    return new Promise((resolve) => {
+      _activeTransaction.saveWaiters.push({ generation, isDemo: useDemo, resolve });
+    });
   }
-  return writePersistentState(isDemo);
+
+  recordSaveGeneration(_pendingSaveGenerations, generation, useDemo);
+  const result = new Promise((resolve) => {
+    _saveWaiters.push({ generation, isDemo: useDemo, resolve });
+  });
+  ensureSaveDrain();
+  return result;
+}
+
+function recordSaveGeneration(generations, generation, isDemo) {
+  const key = isDemo ? 'demo' : 'canonical';
+  const current = generations.get(key);
+  if (!current || generation > current.generation) {
+    generations.set(key, { generation, isDemo });
+  }
+}
+
+function pendingSaveGeneration(generations, isDemo) {
+  return generations.get(isDemo ? 'demo' : 'canonical')?.generation || 0;
+}
+
+function ensureSaveDrain() {
+  if (_saveDrainPromise) return;
+  _saveDrainPromise = Promise.resolve()
+    .then(() => drainSaveGenerations(_pendingSaveGenerations, _saveWaiters))
+    .catch((error) => {
+      console.warn('[flightdeck] persistence queue failed', error.message);
+      resolveSaveWaiters(_saveWaiters, () => true, false);
+    })
+    .finally(() => {
+      _saveDrainPromise = null;
+      if (_pendingSaveGenerations.size) ensureSaveDrain();
+    });
+}
+
+async function drainSaveGenerations(generations, waiters) {
+  while (generations.size) {
+    const [key, pending] = [...generations.entries()]
+      .sort((left, right) => left[1].generation - right[1].generation)[0];
+    generations.delete(key);
+    const result = await writePersistentState(pending.isDemo);
+    settleSaveGeneration(generations, waiters, pending, result);
+  }
+}
+
+function settleSaveGeneration(generations, waiters, pending, result) {
+  if (!pending.generation) return;
+  const key = pending.isDemo ? 'demo' : 'canonical';
+  const latest = generations.get(key);
+  if (latest && latest.generation <= pending.generation) generations.delete(key);
+  resolveSaveWaiters(waiters, (waiter) => (
+    waiter.isDemo === pending.isDemo && waiter.generation <= pending.generation
+  ), result);
+}
+
+function resolveSaveWaiters(waiters, predicate, result) {
+  const remaining = [];
+  for (const waiter of waiters) {
+    if (predicate(waiter)) waiter.resolve(result);
+    else remaining.push(waiter);
+  }
+  waiters.splice(0, waiters.length, ...remaining);
 }
 
 async function writePersistentState(isDemo = false) {
@@ -609,11 +686,14 @@ async function writePersistentState(isDemo = false) {
 
   const normalizedDeletedItemIds = normalizeDeletedItemIds(get(deletedItemIds));
   const deletedIds = new Set(normalizedDeletedItemIds);
-  let currentItems = get(items).filter((item) => !deletedIds.has(normalizeItemId(item?.id))).map((item) => (
-    Array.isArray(item.evidenceLinks) && item.evidenceLinks.length > MAX_EVIDENCE_LINKS_PER_ITEM
-      ? { ...item, evidenceLinks: item.evidenceLinks.slice(-MAX_EVIDENCE_LINKS_PER_ITEM) }
-      : item
-  ));
+  const snapshotItems = () => get(items)
+    .filter((item) => !deletedIds.has(normalizeItemId(item?.id)))
+    .map((item) => (
+      Array.isArray(item.evidenceLinks) && item.evidenceLinks.length > MAX_EVIDENCE_LINKS_PER_ITEM
+        ? { ...item, evidenceLinks: item.evidenceLinks.slice(-MAX_EVIDENCE_LINKS_PER_ITEM) }
+        : item
+    ));
+  let currentItems = snapshotItems();
 
   // ── Tiered storage eviction ─────────────────────────────────────
   const evictionCutoff = Date.now() - COLD_EVICTION_HOURS * 60 * 60 * 1000;
@@ -634,14 +714,14 @@ async function writePersistentState(isDemo = false) {
   }
 
   if (evictedItems.length) {
+    const evictedIds = new Set(evictedItems.map((item) => normalizeItemId(item?.id)).filter(Boolean));
     try {
       const existingCold = await window.workiq.getColdItems() || [];
       const coldById = new Map(filterDeletedItems(existingCold, normalizedDeletedItemIds).map((c) => [c.id, c]));
       for (const item of evictedItems) coldById.set(item.id, item);
       const receipt = await window.workiq.setColdItems([...coldById.values()]);
       if (!isAcceptedPersistenceReceipt(receipt)) throw new Error('Cold persistence was not confirmed.');
-      items.set(hotItems);
-      currentItems = hotItems;
+      currentItems = snapshotItems().filter((item) => !evictedIds.has(normalizeItemId(item?.id)));
       console.log(`[flightdeck] Evicted ${evictedItems.length} item(s) to cold storage`);
     } catch (err) {
       console.warn('[flightdeck] cold storage eviction failed, keeping items hot', err.message);
@@ -666,8 +746,7 @@ async function writePersistentState(isDemo = false) {
       for (const item of overflow) coldById.set(item.id, item);
       const receipt = await window.workiq.setColdItems([...coldById.values()]);
       if (!isAcceptedPersistenceReceipt(receipt)) throw new Error('Cold persistence was not confirmed.');
-      currentItems = currentItems.filter((i) => !overflowIds.has(i.id));
-      items.set(currentItems);
+      currentItems = snapshotItems().filter((item) => !overflowIds.has(normalizeItemId(item?.id)));
       console.log(`[flightdeck] Cap overflow: evicted ${overflow.length} item(s) to cold storage`);
     } catch (err) {
       console.warn('[flightdeck] cap overflow eviction failed', err.message);
@@ -690,7 +769,7 @@ async function writePersistentState(isDemo = false) {
     filter: get(filter),
     collapsedSections: get(collapsedSections),
     scannerSortPrefs: get(scannerSortPrefs),
-    actionProposals: normalizeActionProposals(get(actionProposals)),
+    actionProposals: get(actionProposals).map(normalizePersistedActionProposal).filter(Boolean),
     deletedItemIds: normalizedDeletedItemIds,
     trackingDensity: currentDensity,
     radarDensity: currentDensity,
@@ -711,4 +790,9 @@ async function writePersistentState(isDemo = false) {
       window.workiq.broadcastStateChanged();
     } catch (_) {}
   }
+}
+
+function normalizePersistedActionProposal(proposal) {
+  const normalized = normalizeActionProposal(proposal);
+  return normalized && proposal?.auditOnly === true ? { ...normalized, auditOnly: true } : normalized;
 }

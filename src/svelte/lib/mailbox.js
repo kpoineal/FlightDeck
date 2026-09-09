@@ -2,6 +2,11 @@ import { LIFECYCLE_LABELS, LIFECYCLE_STATUSES, UNKNOWN_LIFECYCLE_STATUS } from '
 
 const ARCHIVED_LIFECYCLES = new Set(['archived']);
 const INACTIVE_LIFECYCLES = new Set(['complete', 'archived']);
+const SEVERITY_PRIORITY = new Map([
+  ['Critical', 0],
+  ['Elevated', 1],
+  ['Observe', 2],
+]);
 
 function timeline(item) {
   return Array.isArray(item?.updateHistory) ? item.updateHistory : [];
@@ -58,6 +63,13 @@ export function compareInboxThreads(left, right) {
 export function compareMailboxThreads(left, right) {
   const unreadDifference = Number(isMailboxUnread(right)) - Number(isMailboxUnread(left));
   if (unreadDifference) return unreadDifference;
+
+  const riskDifference = Number(isRadarPriority(right)) - Number(isRadarPriority(left));
+  if (riskDifference) return riskDifference;
+
+  const severityDifference = (SEVERITY_PRIORITY.get(left?.severity) ?? 3)
+    - (SEVERITY_PRIORITY.get(right?.severity) ?? 3);
+  if (severityDifference) return severityDifference;
 
   const leftActivity = Date.parse(mailboxActivityAt(left));
   const rightActivity = Date.parse(mailboxActivityAt(right));

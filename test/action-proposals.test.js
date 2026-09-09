@@ -2,6 +2,8 @@
 
 const { describe, it, before, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { registerHooks } = require('node:module');
 
 const fixtureStub = 'data:text/javascript,export default {}';
@@ -879,6 +881,77 @@ describe('permanent action proposal deletion', () => {
       payload: { itemId: 'thread-1', proposalId, event },
     };
   }
+
+  it('keeps audit-only proposals out of active selection and fails every action API closed', async () => {
+    const auditOnly = proposalFixture('proposal-audit-only', {
+      auditOnly: true,
+      state: 'Queued',
+    });
+    const archivedAuditOnly = {
+      ...auditOnly,
+      archivedAt: '2026-08-31T12:10:00Z',
+      archivedReason: 'Preserved external evidence',
+    };
+    const executingAuditOnly = {
+      ...auditOnly,
+      state: 'Executing',
+      dispatchStatus: 'unknown',
+    };
+    const ordinary = proposalFixture('proposal-ordinary', { state: 'Queued' });
+    const createDraftCalls = [];
+
+    assert.equal(classifyActionProposalView(auditOnly), null);
+    assert.deepEqual(countActionProposalViews([auditOnly, ordinary]), { open: 1, resolved: 0, archived: 0 });
+    const selectable = filterActionProposalsByView([auditOnly, ordinary], 'open');
+    assert.deepEqual(selectable.map((proposal) => proposal.id), [ordinary.id]);
+    assert.equal(selectable.find((proposal) => proposal.id === auditOnly.id), undefined);
+    assert.equal(actionForState(auditOnly), null);
+    assert.equal(isReviewableActionProposal(auditOnly), false);
+    assert.equal(actionProposalDuplicateKey(auditOnly), '');
+    assert.equal(canInsertActionProposal([ordinary], auditOnly), false);
+    assert.equal(canPermanentlyDeleteActionProposal(auditOnly), false);
+    assert.equal(canArchiveActionProposal(auditOnly), false);
+    assert.equal(canRestoreActionProposal(archivedAuditOnly), false);
+    assert.equal(transitionActionProposal(auditOnly, 'Executing'), auditOnly);
+    assert.equal(updateActionProposal(auditOnly, { content: 'Mutated audit evidence' }), auditOnly);
+    assert.equal(archiveActionProposal(auditOnly, 'Hide evidence'), auditOnly);
+    assert.equal(restoreActionProposal(archivedAuditOnly), archivedAuditOnly);
+    assert.deepEqual(recoverStaleExecutingActionProposal(executingAuditOnly), executingAuditOnly);
+    assert.deepEqual(buildOutlookDraftPayload(auditOnly), { ok: false, code: 'AUDIT_ONLY' });
+    assert.equal(applyOutlookDraftResult(auditOnly, { ok: true, action: 'outlook-draft-created' }), auditOnly);
+    assert.equal(await executeOutlookDraftAction(auditOnly, async (payload) => {
+      createDraftCalls.push(payload);
+      return { ok: true, action: 'outlook-draft-created' };
+    }), auditOnly);
+    assert.deepEqual(createDraftCalls, []);
+
+    actionProposals.set([auditOnly, ordinary]);
+    storeSetCalls = 0;
+    assert.deepEqual(await permanentlyDeleteActionProposal(auditOnly.id), { ok: false, code: 'NOT_FOUND' });
+    assert.deepEqual(get(actionProposals), [auditOnly, ordinary]);
+    assert.equal(storeSetCalls, 0);
+
+    assert.equal(classifyActionProposalView(ordinary), 'open');
+    assert.equal(actionForState(ordinary).label, 'Create Outlook draft');
+    assert.notEqual(transitionActionProposal(ordinary, 'Executing'), ordinary);
+    assert.equal(canArchiveActionProposal(ordinary), true);
+    assert.equal(canPermanentlyDeleteActionProposal(ordinary), true);
+  });
+
+  it('keeps mounted audit-only consumers out of counts, approvals, selection, management, and source navigation', () => {
+    const componentRoot = path.join(__dirname, '..', 'src', 'svelte', 'components');
+    const actionQueue = fs.readFileSync(path.join(componentRoot, 'ActionQueue.svelte'), 'utf8');
+    const todayView = fs.readFileSync(path.join(componentRoot, 'TodayView.svelte'), 'utf8');
+    const topbar = fs.readFileSync(path.join(componentRoot, 'Topbar.svelte'), 'utf8');
+
+    assert.match(actionQueue, /visibleProposals = \$derived\(filterActionProposalsByView\(\$actionProposals, activeView\)\)/);
+    assert.match(actionQueue, /selected = \$derived\(visibleProposals\.find\(/);
+    assert.match(actionQueue, /function selectProposal\(id\)[\s\S]*?proposal\?\.auditOnly === true\) return;/);
+    assert.match(actionQueue, /function returnToSource\(\)[\s\S]*?selected\.auditOnly === true\) return;/);
+    assert.match(actionQueue, /function managementForProposal\(proposal\)[\s\S]*?proposal\.auditOnly === true\) return null;/);
+    assert.match(todayView, /approvals = \$derived\(\$actionProposals\.filter\(\(proposal\) => proposal\.auditOnly !== true/);
+    assert.match(topbar, /actionCount = \$derived\(\$actionProposals\.filter\(\(proposal\) => proposal\.auditOnly !== true/);
+  });
 
   it('normalizes durable dispatch status and classifies effect without trusting localOnly', () => {
     const drafted = proposalFixture('proposal-drafted');
