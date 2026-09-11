@@ -91,7 +91,14 @@ export function normalizeProposalSynthesisContext(value) {
 export function parseProposalSynthesisResponse(rawResponse) {
   if (typeof rawResponse !== 'string' || rawResponse.length > 100000) return null;
   try {
-    return normalizeProposalSynthesisResult(JSON.parse(rawResponse));
+    const parsed = JSON.parse(rawResponse);
+    const candidate = parsed
+      && typeof parsed === 'object'
+      && !Array.isArray(parsed)
+      && typeof parsed.response === 'string'
+      ? JSON.parse(parsed.response)
+      : parsed;
+    return normalizeProposalSynthesisResult(candidate);
   } catch {
     return null;
   }
