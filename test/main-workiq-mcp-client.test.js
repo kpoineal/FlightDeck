@@ -101,7 +101,7 @@ describe('createWorkiqMcpClient()', () => {
 
     assert.equal(spawnCalls.length, 1);
     assert.equal(spawnCalls[0].executable, 'C:\\WorkIQ\\workiq.exe');
-    assert.deepEqual(spawnCalls[0].args, ['mcp', '--log-level', 'Error']);
+    assert.deepEqual(spawnCalls[0].args, ['--log-level', 'Error', 'mcp']);
     assert.deepEqual(children[0].messages.map((message) => message.method), [
       'initialize',
       'notifications/initialized',
@@ -665,6 +665,40 @@ describe('createWorkiqMcpClient()', () => {
     assert.equal(askCall.params.arguments.question.includes('private raw body'), false);
     assert.equal(askCall.params.arguments.question.includes('unsafe.example'), false);
     assert.equal(askCall.params.arguments.question.includes('create_entity'), false);
+  });
+
+  it('accepts the installed WorkIQ ask_work_iq tool name', async () => {
+    let askCall;
+    const { client } = createHarness((message, child) => {
+      if (message.method === 'initialize') {
+        queueMicrotask(() => child.respond(message.id, { protocolVersion: '2025-03-26' }));
+      } else if (message.method === 'tools/list') {
+        queueMicrotask(() => child.respond(message.id, { tools: [{ name: 'ask_work_iq' }] }));
+      } else if (message.method === 'tools/call') {
+        askCall = message;
+        queueMicrotask(() => child.respond(message.id, {
+          content: [{ type: 'text', text: JSON.stringify({
+            schemaVersion: 1,
+            recommendation: 'Review the runtime probe result.',
+            blocker: '',
+            why: 'The probe confirms the smallest next step.',
+            confidence: 'high',
+            evidence: [{ kind: 'observed', text: 'The runtime probe completed.' }],
+            proposals: [],
+            noCommunicationReason: 'No external communication is needed.',
+          }) }],
+          isError: false,
+        }));
+      }
+    });
+
+    const result = await client.proposeThreadActions({
+      schemaVersion: 1,
+      thread: { id: 'thread-ask-work-iq', title: 'Runtime probe' },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(askCall.params.name, 'ask_work_iq');
   });
 
   it('rejects invalid synthesis context before starting WorkIQ', async () => {

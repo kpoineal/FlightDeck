@@ -109,6 +109,25 @@ describe('proposal synthesis normalization', () => {
     assert.equal(parseProposalSynthesisResponse('{broken'), null);
   });
 
+  it('unwraps the WorkIQ response envelope before validating synthesis', () => {
+    const result = resultFixture({
+      proposals: [{
+        channel: 'email',
+        target: { displayName: 'Sofia', address: 'sofia@example.com' },
+        payload: { subject: 'Deployment window', body: 'Can you confirm Tuesday at 10:00?' },
+      }],
+    });
+
+    const normalized = parseProposalSynthesisResponse(JSON.stringify({
+      conversationId: 'opaque-conversation-id',
+      response: JSON.stringify(result),
+    }));
+
+    assert.equal(normalized.schemaVersion, 1);
+    assert.equal(normalized.proposals[0].payload.subject, 'Deployment window');
+    assert.equal(JSON.stringify(normalized).includes('opaque-conversation-id'), false);
+  });
+
   it('normalizes a useful email and strips unsafe execution fields', () => {
     const normalized = normalizeProposalSynthesisResult(resultFixture({
       proposals: [{
