@@ -1,5 +1,62 @@
 // ── FlightDeck JSON parsing (ES module) ──────────────────────────────
 
+function extractBalancedJsonCandidates(text) {
+  const candidates = [];
+  let start = -1;
+  let stack = [];
+  let inString = false;
+  let escapeNext = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (start < 0) {
+      if (char === '{' || char === '[') {
+        start = index;
+        stack = [char];
+      }
+      continue;
+    }
+
+    if (inString) {
+      if (escapeNext) escapeNext = false;
+      else if (char === '\\') escapeNext = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{' || char === '[') {
+      stack.push(char);
+      continue;
+    }
+
+    if (char !== '}' && char !== ']') continue;
+
+    const opening = stack[stack.length - 1];
+    const matches = (opening === '{' && char === '}') || (opening === '[' && char === ']');
+    if (!matches) {
+      start = -1;
+      stack = [];
+      inString = false;
+      escapeNext = false;
+      continue;
+    }
+
+    stack.pop();
+    if (stack.length === 0) {
+      candidates.push(text.slice(start, index + 1));
+      start = -1;
+    }
+  }
+
+  return candidates;
+}
+
 /**
  * Extract JSON candidate strings from a text response using multiple strategies.
  */
@@ -26,6 +83,8 @@ export function extractJsonFromText(text) {
   if (firstBrace >= 0 && lastBrace > firstBrace) {
     candidates.push(trimmed.slice(firstBrace, lastBrace + 1));
   }
+
+  candidates.push(...extractBalancedJsonCandidates(trimmed));
 
   return [...new Set(candidates.filter(Boolean))];
 }

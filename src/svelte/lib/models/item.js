@@ -249,6 +249,168 @@ export function normalizeItemId(value) {
   return normalized || null;
 }
 
+const SOURCE_IDENTITY_FIELDS = [
+  'sourceId',
+  'sourceKey',
+  'signalId',
+  'messageId',
+  'eventId',
+  'documentId',
+  'threadId',
+];
+const GENERIC_SOURCE_CONTEXTS = new Set(['', 'signal', 'custom', 'source', 'unknown']);
+
+function normalizeOpaqueIdentityValue(value) {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const normalized = String(value).trim();
+  return normalized && normalized.length <= 512 ? normalized : null;
+}
+
+function normalizeSourceContext(value) {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const normalized = String(value).trim().replace(/\s+/g, ' ').toLowerCase();
+  if (!normalized || normalized.length > 160 || /[;=]/.test(normalized)) return null;
+  return normalized;
+}
+
+function getSourceContext(item) {
+  const nestedSource = item?.source && typeof item.source === 'object' ? item.source : {};
+  const provider = [
+    item?.provider,
+    item?.sourceProvider,
+    nestedSource.provider,
+    nestedSource.sourceProvider,
+  ].map(normalizeSourceContext).find(Boolean);
+  const sourceContext = [
+    item?.sourceContext,
+    nestedSource.sourceContext,
+    nestedSource.context,
+  ].map(normalizeSourceContext).find(Boolean);
+  const sourceType = [
+    item?.sourceType,
+    nestedSource.sourceType,
+    nestedSource.type,
+  ].map(normalizeSourceContext).find(Boolean);
+
+  if (!provider && !sourceContext) return null;
+
+  const parts = [];
+  if (provider) parts.push(`provider=${provider}`);
+  if (sourceContext) parts.push(`context=${sourceContext}`);
+  if (sourceType && !GENERIC_SOURCE_CONTEXTS.has(sourceType)) parts.push(`type=${sourceType}`);
+  return parts.length ? parts.join(';') : null;
+}
+
+function buildQualifiedSourceIdentity(context, field, value) {
+  return `source:v1:${encodeURIComponent(context)}:${field}:${encodeURIComponent(value)}`;
+}
+
+function canonicalizeStoredSourceIdentity(value) {
+  const match = /^source:v1:([^:]+):([^:]+):([^:]+)$/.exec(value);
+  if (!match || !SOURCE_IDENTITY_FIELDS.includes(match[2])) return false;
+
+  let context;
+  let sourceValue;
+  try {
+    context = decodeURIComponent(match[1]);
+    sourceValue = decodeURIComponent(match[3]);
+  } catch {
+    return false;
+  }
+
+  const normalizedSourceValue = normalizeOpaqueIdentityValue(sourceValue);
+  if (!normalizedSourceValue) return null;
+  const contextParts = context.split(';');
+  const contextValues = new Map();
+  let hasProviderOrContext = false;
+  for (const part of contextParts) {
+    const contextMatch = /^(provider|context|type)=(.+)$/.exec(part);
+    if (!contextMatch || contextValues.has(contextMatch[1])) return null;
+    const normalizedContextValue = normalizeSourceContext(contextMatch[2]);
+    if (!normalizedContextValue) return null;
+    contextValues.set(contextMatch[1], normalizedContextValue);
+    if (contextMatch[1] === 'provider' || contextMatch[1] === 'context') {
+      hasProviderOrContext = true;
+    }
+  }
+
+  if (!hasProviderOrContext) return null;
+
+  const canonicalContext = ['provider', 'context', 'type']
+    .filter((key) => contextValues.has(key))
+    .filter((key) => key !== 'type' || !GENERIC_SOURCE_CONTEXTS.has(contextValues.get(key)))
+    .map((key) => `${key}=${contextValues.get(key)}`)
+    .join(';');
+  if (!canonicalContext) return null;
+  return buildQualifiedSourceIdentity(canonicalContext, match[2], normalizedSourceValue);
+}
+
+/**
+ * Return exact, normalized identities backed by source fields or verified evidence links.
+ * Title similarity is intentionally not part of this identity set.
+ */
+export function collectItemSourceIdentities(item) {
+  const identities = new Set();
+  const sourceContext = getSourceContext(item);
+  const addField = (field, value) => {
+    if (!sourceContext) return;
+    if (Array.isArray(value)) {
+      for (const entry of value) addField(field, entry);
+      return;
+    }
+    const normalized = normalizeOpaqueIdentityValue(value);
+    if (normalized) identities.add(buildQualifiedSourceIdentity(sourceContext, field, normalized));
+  };
+
+  for (const field of SOURCE_IDENTITY_FIELDS) {
+    addField(field, item?.[field]);
+    addField(field, item?.source?.[field]);
+  }
+
+  const storedIdentities = Array.isArray(item?.sourceIdentities)
+    ? item.sourceIdentities
+    : item?.sourceIdentity;
+  const addStoredIdentity = (value) => {
+    const normalized = normalizeOpaqueIdentityValue(value);
+    if (!normalized) return;
+    if (normalized.startsWith('source:v1:')) {
+      const canonical = canonicalizeStoredSourceIdentity(normalized);
+      if (canonical) identities.add(canonical);
+      return;
+    }
+    if (normalized.startsWith('url:')) {
+      const url = normalized.slice('url:'.length);
+      if (url && isDeepLink(url)) identities.add(`url:${url}`);
+    }
+  };
+  if (Array.isArray(storedIdentities)) {
+    for (const value of storedIdentities) {
+      addStoredIdentity(value);
+    }
+  } else {
+    addStoredIdentity(storedIdentities);
+  }
+
+  for (const link of collectItemEvidenceLinks(item)) {
+    identities.add(`url:${link.url}`);
+  }
+
+  return [...identities].sort();
+}
+
+/**
+ * Derive a repeatable scanner id from verified source identity only.
+ * Records without source identity retain normalizeItem's legacy random fallback.
+ */
+export function deriveStableItemId(item, scope = '') {
+  const sourceIdentities = collectItemSourceIdentities(item);
+  if (sourceIdentities.length) {
+    return `radar_${hashString(sourceIdentities.join('|'))}`;
+  }
+  void scope;
+  return null;
+}
+
 export function normalizeDeletedItemIds(values) {
   return [...new Set((Array.isArray(values) ? values : []).map(normalizeItemId).filter(Boolean))];
 }
@@ -281,7 +443,17 @@ export function normalizeItem(item) {
   }
   adoptStructuredLabels(inlineLinks, item?.evidenceLinks);
 
-  const normalizedId = normalizeItemId(item?.id) || `custom_${hashString(`${Date.now()}_${Math.random()}`)}`;
+  const identityInput = {
+    ...item,
+    evidenceLinks: [
+      ...(Array.isArray(item?.evidenceLinks) ? item.evidenceLinks : []),
+      ...inlineLinks,
+    ],
+  };
+
+  const normalizedId = normalizeItemId(item?.id)
+    || deriveStableItemId(identityInput, item?.scannerId || '')
+    || `custom_${hashString(`${Date.now()}_${Math.random()}`)}`;
   const monitorEnabled = item?.monitorEnabled === true;
   const monitorSignals = Array.isArray(item?.monitorSignals) && item.monitorSignals.length
     ? item.monitorSignals.filter((s) => ALL_SIGNAL_TYPES.includes(s))
@@ -303,6 +475,7 @@ export function normalizeItem(item) {
       ? String(item.completionConfidence).toLowerCase()
       : null,
     evidenceLinks: _buildEvidenceLinks(item, inlineLinks).slice(0, MAX_EVIDENCE_LINKS_PER_ITEM),
+    sourceIdentities: collectItemSourceIdentities(identityInput),
     suggestedNextSteps: Array.isArray(item?.suggestedNextSteps)
       ? item.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2)
       : [],

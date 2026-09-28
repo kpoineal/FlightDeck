@@ -1,5 +1,6 @@
 // ── Svelte reactive stores ───────────────────────────────────────────
 import { writable, derived } from 'svelte/store';
+import { invalidateThreadComposerRequests } from './thread-composer.js';
 
 // ── Core state stores ────────────────────────────────────────────────
 export const items = writable([]);
@@ -27,11 +28,23 @@ export const mode = writable('Today');
 export const actionsQueueOpen = writable(false);
 export const actionsQueueFocusOrigin = writable(null);
 export function openActionsQueue(initiator = null) {
+  invalidateThreadComposerRequests();
   const activeElement = typeof document === 'undefined' ? null : document.activeElement;
   actionsQueueFocusOrigin.set(initiator || activeElement);
   actionsQueueOpen.set(true);
 }
-export const selectedProposalId = writable(null);
+const selectedProposalIdStore = writable(null);
+export const selectedProposalId = {
+  subscribe: selectedProposalIdStore.subscribe,
+  set(value) {
+    invalidateThreadComposerRequests();
+    selectedProposalIdStore.set(value);
+  },
+  update(updater) {
+    invalidateThreadComposerRequests();
+    selectedProposalIdStore.update(updater);
+  },
+};
 export const density = writable('full');
 export const filter = writable('all');
 export const collapsedSections = writable([]);

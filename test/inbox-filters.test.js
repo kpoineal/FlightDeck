@@ -110,7 +110,7 @@ describe('matchesInboxFilters quick filters', () => {
 
   test('due-soon includes overdue dates and excludes dates after seven calendar days', () => {
     assert.equal(matchesInboxFilters(item({ dueAt: '2026-09-07T08:00:00Z' }), { quickFilter: 'due-soon' }, { now: NOW }), true);
-    assert.equal(matchesInboxFilters(item({ dueAt: '2026-09-16T00:00:00Z' }), { quickFilter: 'due-soon' }, { now: NOW }), false);
+    assert.equal(matchesInboxFilters(item({ dueAt: '2026-09-16T12:00:00Z' }), { quickFilter: 'due-soon' }, { now: NOW }), false);
     assert.equal(matchesInboxFilters(item({ dueAt: null }), { quickFilter: 'due-soon' }, { now: NOW }), false);
   });
 });

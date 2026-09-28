@@ -51,6 +51,7 @@
   import { logError } from '../lib/logger.js';
   import { safeDate } from '../lib/utils.js';
   import { nextItemSelectionAfterRemoval, reconcileRadarSelection } from '../lib/radar-selection.js';
+  import { createThreadComposerRequestTracker } from '../lib/thread-composer.js';
   import { hydrateRadarColdItems, resolveRadarItem } from '../lib/radar-navigation.js';
   import { ITEM_DELETION_CONFIRMATION, itemDeletionFailureMessage } from '../lib/item-deletion-ui.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
@@ -99,6 +100,7 @@
   let teamsSendState = $state({ status: 'idle', message: '' });
   let deleteRequest = $state(null);
   let deleteState = $state({ status: 'idle', message: '' });
+  const composerRequestTracker = createThreadComposerRequestTracker();
 
   let projected = $derived.by(() => {
     const hotItemIds = new Set($items.map((item) => item.id));
@@ -164,13 +166,46 @@
       .filter((item) => item.id !== selected.id)
     : []);
 
+  function resetTeamsDraft() {
+    teamsDraft = null;
+    teamsCopyStatus = '';
+    teamsSendState = { status: 'idle', message: '' };
+  }
+
+  function resetThreadComposer() {
+    resetTeamsDraft();
+    synthesisState = { threadId: null, requestedChannel: null, status: 'idle', result: null, error: '' };
+  }
+
+  function setSelectedThreadId(nextId) {
+    selectedId = nextId;
+    composerRequestTracker.setThread(nextId);
+  }
+
+  function isCurrentComposerRequest(request) {
+    return composerRequestTracker.isCurrent(request) && selected?.id === request.threadId;
+  }
+
+  $effect(() => {
+    composerRequestTracker.setThread(selectedId);
+  });
+
+  $effect(() => {
+    const draftThreadId = teamsDraft?.sourceItemId || null;
+    const synthesisThreadId = synthesisState.threadId;
+    if ((draftThreadId && draftThreadId !== selectedId)
+      || (synthesisThreadId && synthesisThreadId !== selectedId)) {
+      resetThreadComposer();
+    }
+  });
+
   $effect(() => {
     const preserveId = pendingNavigationId && projected.some((item) => item.id === pendingNavigationId)
       ? pendingNavigationId
       : null;
     const next = reconcileRadarSelection({ selectedId, mobileStep, smartView, scannerId, query }, threads, { preserveId });
     if (next.selectedId !== selectedId || next.mobileStep !== mobileStep) {
-      selectedId = next.selectedId;
+      setSelectedThreadId(next.selectedId);
       mobileStep = next.mobileStep;
     }
   });
@@ -200,7 +235,7 @@
           : 'inbox';
       scannerId = 'all';
       query = '';
-      selectedId = highlighted.id;
+      setSelectedThreadId(highlighted.id);
       mobileStep = 'detail';
       requestAnimationFrame(() => {
         if (pendingNavigationId !== highlighted.id || selectedId !== highlighted.id) return;
@@ -224,7 +259,7 @@
   });
 
   function selectThread(item, origin, { markRead = false } = {}) {
-    selectedId = item.id;
+    setSelectedThreadId(item.id);
     originatingThread = origin;
     mobileStep = 'detail';
     requestAnimationFrame(() => viewRoot?.querySelector('.radar-thread-detail h2')?.focus());
@@ -246,7 +281,7 @@
       : Math.min(threads.length - 1, currentIndex + 1);
     const target = threads[targetIndex];
     if (!target) return;
-    selectedId = target.id;
+    setSelectedThreadId(target.id);
     originatingThread = event.currentTarget;
     requestAnimationFrame(() => {
       const row = viewRoot?.querySelector(`[data-thread-id="${CSS.escape(target.id)}"]`);
@@ -305,7 +340,7 @@
 
   function chooseView(id) {
     smartView = id;
-    selectedId = null;
+    setSelectedThreadId(null);
     originatingThread = null;
     mobileStep = 'list';
   }
@@ -346,6 +381,7 @@
   async function draftMessage(requestedChannel, initiator = null) {
     if (!selected || synthesisState.status === 'generating') return;
     const sourceItem = selected;
+    const request = composerRequestTracker.begin(sourceItem.id);
     const context = buildProposalSynthesisContext(sourceItem, { requestedChannel });
     if (!context || typeof window.workiq?.proposeThreadActions !== 'function') {
       synthesisState = {
@@ -358,13 +394,11 @@
       return;
     }
 
-    teamsDraft = null;
-    teamsCopyStatus = '';
-    teamsSendState = { status: 'idle', message: '' };
+    resetTeamsDraft();
     synthesisState = { threadId: sourceItem.id, requestedChannel, status: 'generating', result: null, error: '' };
     try {
       const response = await window.workiq.proposeThreadActions(context);
-      if (selected?.id !== sourceItem.id) return;
+      if (!isCurrentComposerRequest(request)) return;
       const result = response?.ok === true ? normalizeProposalSynthesisResult(response.result) : null;
       if (!result) {
         synthesisState = {
@@ -392,6 +426,7 @@
           )
         );
         if (created.length) {
+          if (!isCurrentComposerRequest(request)) return;
           actionProposals.set([...created, ...existing]);
           for (const createdProposal of created) {
             await recordRadarActionEvent({
@@ -404,16 +439,20 @@
               outcome: 'pending',
               verification: 'not-applicable',
             });
+            if (!isCurrentComposerRequest(request)) return;
           }
         }
         const emailProposal = created[0] || matchingExisting;
-        if (emailProposal) {
+        if (emailProposal && isCurrentComposerRequest(request)) {
+          synthesisState = { threadId: sourceItem.id, requestedChannel, status: 'ready', result: channelResult, error: '' };
+          composerRequestTracker.invalidate();
           selectedProposalId.set(emailProposal.id);
           openActionsQueue(initiator);
+          return;
         }
       } else {
         const proposal = matchingProposals[0];
-        if (proposal) {
+        if (proposal && isCurrentComposerRequest(request)) {
           const createdAt = new Date().toISOString();
           teamsDraft = {
             proposalId: inlineProposalId('teams', sourceItem.id, createdAt),
@@ -429,9 +468,10 @@
           };
         }
       }
+      if (!isCurrentComposerRequest(request)) return;
       synthesisState = { threadId: sourceItem.id, requestedChannel, status: 'ready', result: channelResult, error: '' };
     } catch (_) {
-      if (selected?.id === sourceItem.id) {
+      if (isCurrentComposerRequest(request)) {
         synthesisState = {
           threadId: sourceItem.id,
           requestedChannel,
@@ -444,19 +484,21 @@
   }
 
   async function copyTeamsDraft() {
-    if (!teamsDraft?.message) return;
+    const draft = teamsDraft;
+    if (!draft || draft.sourceItemId !== selected?.id || !draft.message) return;
     try {
-      await navigator.clipboard.writeText(teamsDraft.message);
-      teamsCopyStatus = 'Copied';
+      await navigator.clipboard.writeText(draft.message);
+      if (selected?.id === draft.sourceItemId) teamsCopyStatus = 'Copied';
     } catch (_) {
-      teamsCopyStatus = 'Copy unavailable';
+      if (selected?.id === draft.sourceItemId) teamsCopyStatus = 'Copy unavailable';
     }
   }
 
   async function sendTeamsDraft() {
-    if (!teamsDraft || !teamsDraft.target.trim() || teamsSendState.status === 'sending') return;
-    const target = teamsDraft.target.trim();
-    const message = teamsDraft.message.trim();
+    const draft = teamsDraft;
+    if (!draft || draft.sourceItemId !== selected?.id || !draft.target.trim() || teamsSendState.status === 'sending') return;
+    const target = draft.target.trim();
+    const message = draft.message.trim();
     if (!message) {
       teamsSendState = { status: 'error', message: 'Enter a message before sending.' };
       return;
@@ -466,9 +508,9 @@
       return;
     }
 
-    const attempt = (teamsDraft.attempt || 0) + 1;
+    const attempt = (draft.attempt || 0) + 1;
     const attemptedAt = new Date().toISOString();
-    teamsDraft = { ...teamsDraft, target, attempt };
+    teamsDraft = { ...draft, target, attempt };
     teamsSendState = { status: 'sending', message: '' };
     try {
       const response = await window.workiq.sendTeamsMessage({
@@ -476,10 +518,9 @@
         message,
       });
       if (response?.ok === true && response.action === 'teams-message-sent') {
-        teamsSendState = { status: 'sent', message: 'Message sent. Teams returned a matching send receipt.' };
         await recordRadarActionEvent({
-          proposalId: teamsDraft.proposalId,
-          itemId: teamsDraft.sourceItemId,
+          proposalId: draft.proposalId,
+          itemId: draft.sourceItemId,
           event: 'succeeded',
           timestamp: attemptedAt,
           channel: 'teams',
@@ -489,14 +530,16 @@
           code: 'SEND_CONFIRMED',
           attempt,
         });
+        if (selected?.id === draft.sourceItemId) {
+          teamsSendState = { status: 'sent', message: 'Message sent. Teams returned a matching send receipt.' };
+        }
         return;
       }
       const code = safeTeamsCode(response?.code);
       if (code === 'CANCELLED') {
-        teamsSendState = { status: 'idle', message: 'Send cancelled. No request was dispatched. Your draft was not changed.' };
         await recordRadarActionEvent({
-          proposalId: teamsDraft.proposalId,
-          itemId: teamsDraft.sourceItemId,
+          proposalId: draft.proposalId,
+          itemId: draft.sourceItemId,
           event: 'cancelled',
           timestamp: attemptedAt,
           channel: 'teams',
@@ -506,11 +549,13 @@
           code,
           attempt,
         });
+        if (selected?.id === draft.sourceItemId) {
+          teamsSendState = { status: 'idle', message: 'Send cancelled. No request was dispatched. Your draft was not changed.' };
+        }
       } else {
-        teamsSendState = { status: 'error', message: teamsSendError(code) };
         await recordRadarActionEvent({
-          proposalId: teamsDraft.proposalId,
-          itemId: teamsDraft.sourceItemId,
+          proposalId: draft.proposalId,
+          itemId: draft.sourceItemId,
           event: 'failed',
           timestamp: attemptedAt,
           channel: 'teams',
@@ -520,12 +565,14 @@
           code,
           attempt,
         });
+        if (selected?.id === draft.sourceItemId) {
+          teamsSendState = { status: 'error', message: teamsSendError(code) };
+        }
       }
     } catch (_) {
-      teamsSendState = { status: 'error', message: 'Delivery could not be confirmed. Check Teams before trying again.' };
       await recordRadarActionEvent({
-        proposalId: teamsDraft.proposalId,
-        itemId: teamsDraft.sourceItemId,
+        proposalId: draft.proposalId,
+        itemId: draft.sourceItemId,
         event: 'failed',
         timestamp: attemptedAt,
         channel: 'teams',
@@ -535,6 +582,9 @@
         code: 'SEND_UNCONFIRMED',
         attempt,
       });
+      if (selected?.id === draft.sourceItemId) {
+        teamsSendState = { status: 'error', message: 'Delivery could not be confirmed. Check Teams before trying again.' };
+      }
     }
   }
 
@@ -595,6 +645,8 @@
   async function confirmDeleteSelected() {
     const request = deleteRequest;
     if (!request || deleteState.status === 'deleting') return;
+    composerRequestTracker.setThread(null);
+    resetThreadComposer();
     deleteRequest = null;
     deleteState = { status: 'deleting', message: '' };
     const result = await deleteItem(request.id);
@@ -602,19 +654,16 @@
       const replacementId = threads.some((thread) => thread.id === request.replacementId)
         ? request.replacementId
         : null;
-      selectedId = replacementId;
+      setSelectedThreadId(replacementId);
       originatingThread = null;
       mobileStep = replacementId ? 'detail' : 'list';
-      synthesisState = { threadId: null, requestedChannel: null, status: 'idle', result: null, error: '' };
-      teamsDraft = null;
-      teamsCopyStatus = '';
-      teamsSendState = { status: 'idle', message: '' };
+      resetThreadComposer();
       deleteState = { status: 'idle', message: '' };
       if (replacementId) requestAnimationFrame(() => viewRoot?.querySelector('.radar-thread-detail h2')?.focus());
       return;
     }
 
-    selectedId = threads.some((thread) => thread.id === request.id) ? request.id : null;
+    setSelectedThreadId(threads.some((thread) => thread.id === request.id) ? request.id : null);
     mobileStep = selectedId ? 'detail' : 'list';
     deleteState = {
       status: 'error',
@@ -776,6 +825,8 @@
 
   async function confirmScannerDeletion(request) {
     if (!scannerDeletion.preview || ['submitting', 'recovery'].includes(scannerDeletion.status)) return;
+    composerRequestTracker.setThread(null);
+    resetThreadComposer();
     const currentPreview = scannerDeletion.preview;
     const replacementId = request.disposition === 'delete-all'
       ? replacementAfterScannerDeletion(currentPreview.itemIds)
@@ -799,13 +850,10 @@
       scannerSettingsFocusOrigin = null;
       scannerModalOpen = false;
       if (selectedWasDeleted) {
-        selectedId = replacementId;
+        setSelectedThreadId(replacementId);
         originatingThread = null;
         mobileStep = replacementId ? 'detail' : 'list';
-        synthesisState = { threadId: null, requestedChannel: null, status: 'idle', result: null, error: '' };
-        teamsDraft = null;
-        teamsCopyStatus = '';
-        teamsSendState = { status: 'idle', message: '' };
+        resetThreadComposer();
       }
       if (highlightedWasDeleted) highlightedItemId.set(null);
       scannerDeletion = {
@@ -883,7 +931,7 @@
     items.update((entries) => [item, ...entries]);
     smartView = 'inbox';
     scannerId = 'all';
-    selectedId = item.id;
+    setSelectedThreadId(item.id);
     mobileStep = 'detail';
     taskModalOpen = false;
     addHistory('action', `Added item "${item.title}"`, { itemId: item.id, scannerId: item.scannerId });
@@ -1190,7 +1238,7 @@
               {synthesisState.result.noCommunicationReason || synthesisState.result.recommendation}
             </p>
           {/if}
-          {#if teamsDraft}
+          {#if teamsDraft && teamsDraft.sourceItemId === selected.id}
             <section class="radar-teams-draft" data-testid="teams-draft-editor">
               <header>
                 <div>
@@ -1226,7 +1274,7 @@
                   {teamsSendState.status === 'sending' ? 'Sending…' : teamsSendState.status === 'sent' ? 'Sent' : 'Send message'}
                 </button>
                 <button type="button" class="small-btn" data-testid="teams-draft-copy" on:click={copyTeamsDraft}>Copy message</button>
-                <button type="button" class="small-btn" on:click={() => { teamsDraft = null; teamsCopyStatus = ''; teamsSendState = { status: 'idle', message: '' }; }}>Close</button>
+                <button type="button" class="small-btn" on:click={resetTeamsDraft}>Close</button>
                 {#if teamsCopyStatus}<span role="status">{teamsCopyStatus}</span>{/if}
               </div>
               {#if teamsSendState.message}
