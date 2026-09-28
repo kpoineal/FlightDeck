@@ -15,6 +15,8 @@ import { logInfo, logWarn, logError } from './logger.js';
 import { showToast } from '../components/Toast.svelte';import { buildMonitorPrompt } from './prompts.js';
 import { runWorkiqJson } from './json-parser.js';
 const TICK_MS = 30_000; // 30s
+// Bound concurrent WorkIQ requests to keep scheduled monitoring predictable.
+const MAX_CONCURRENT_MONITOR_CHECKS = 3;
 let intervalHandle = null;
 let cycleInProgress = false;
 
@@ -49,23 +51,28 @@ async function checkDueItems() {
 
   cycleInProgress = true;
   try {
-    for (const item of due) {
-      try {
-        logInfo('monitor', `Checking "${item.title}"`, { itemId: item.id });
-        await runItemCheck(item);
-      } catch (err) {
-        logError('monitor', `Check failed for "${item.title}": ${err.message}`, { itemId: item.id });
-        // Reschedule on failure
-        items.update(($i) =>
-          $i.map((i) =>
-            i.id === item.id
-              ? { ...i, lastRunAt: nowIso(), nextRunAt: computeNextRunAt({ ...i, lastRunAt: nowIso() }) }
-              : i
-          )
-        );
-        addHistory('failure', `Task monitor failed for ${item.title}: ${err.message}`, { itemId: item.id });
+    let nextDueIndex = 0;
+    const workerCount = Math.min(MAX_CONCURRENT_MONITOR_CHECKS, due.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (nextDueIndex < due.length) {
+        const item = due[nextDueIndex++];
+        try {
+          logInfo('monitor', `Checking "${item.title}"`, { itemId: item.id });
+          await runItemCheck(item);
+        } catch (err) {
+          logError('monitor', `Check failed for "${item.title}": ${err.message}`, { itemId: item.id });
+          // Reschedule on failure
+          items.update(($i) =>
+            $i.map((i) =>
+              i.id === item.id
+                ? { ...i, lastRunAt: nowIso(), nextRunAt: computeNextRunAt({ ...i, lastRunAt: nowIso() }) }
+                : i
+            )
+          );
+          addHistory('failure', `Task monitor failed for ${item.title}: ${err.message}`, { itemId: item.id });
+        }
       }
-    }
+    }));
   } finally {
     cycleInProgress = false;
     savePersistentState();
