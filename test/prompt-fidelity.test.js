@@ -143,9 +143,13 @@ Evidence & citation rules:
 - Use markdown formatting in summary and reason fields. Include inline citations for every referenced source.
 - Only include citations grounded in actual Microsoft 365 signals.
 
-Items already on my radar from this scanner (do NOT re-report these):
-- Approve launch brief
-- Resolve rollout blocker
+Existing item context from this scanner (advisory identity hints only):
+- Title: Approve launch brief | no verified source identity; title alone is not a duplicate key
+- Title: approve launch brief | no verified source identity; title alone is not a duplicate key
+- Title: Resolve rollout blocker | no verified source identity; title alone is not a duplicate key
+- Treat a result as already represented only when a verified source identity matches.
+- Same or similar titles from different sources are distinct; do not omit them because the title matches.
+- The application performs authoritative exact-identity checks after your response.
 
 Other active scanners (skip items that clearly belong to another scanner's focus area):
 - "Customer escalations" covers: customer escalations
@@ -153,6 +157,44 @@ Other active scanners (skip items that clearly belong to another scanner's focus
 
   assert.equal(prompt, expected);
   assert.doesNotMatch(prompt, /weeklyDays|weeklyTimes|workHoursOnly|dedupStrategy/);
+});
+
+test('scanner prompt keeps same-title sources distinct and exposes only advisory verified identities', () => {
+  const scanner = {
+    id: 'scanner-approvals',
+    prompt: 'Find approval work.',
+    lastRunAt: '2026-09-10T12:00:00.000Z',
+    maxItemsPerScan: 10,
+  };
+  const prompt = buildScannerPrompt(scanner, [
+    {
+      scannerId: scanner.id,
+      title: 'Approve launch brief',
+      evidenceLinks: [{
+        type: 'email',
+        url: 'https://outlook.office.com/mail/deeplink/read/approval-1',
+      }],
+    },
+    {
+      scannerId: scanner.id,
+      title: 'Approve launch brief',
+      evidenceLinks: [{
+        type: 'email',
+        url: 'https://outlook.office.com/mail/deeplink/read/approval-2',
+      }],
+    },
+    {
+      scannerId: scanner.id,
+      title: 'Approve launch brief',
+    },
+  ], [scanner]);
+
+  assert.equal((prompt.match(/Title: Approve launch brief/g) || []).length, 3);
+  assert.match(prompt, /verified identity: https:\/\/outlook\.office\.com\/mail\/deeplink\/read\/approval-1/);
+  assert.match(prompt, /verified identity: https:\/\/outlook\.office\.com\/mail\/deeplink\/read\/approval-2/);
+  assert.match(prompt, /title alone is not a duplicate key/);
+  assert.doesNotMatch(prompt, /do NOT re-report these/);
+  assert.match(prompt, /authoritative exact-identity checks after your response/);
 });
 
 test('monitor prompt preserves context, temporal, metadata, and no-update semantics', () => {

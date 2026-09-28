@@ -1,6 +1,6 @@
 // ── Scanner background engine (Svelte) ──────────────────────────────
 import { get } from 'svelte/store';
-import { items, scanners, connected, deletedItemIds } from './stores.js';
+import { items, coldItems, scanners, connected, deletedItemIds } from './stores.js';
 import { addHistory } from './actions.js';
 import { savePersistentState } from './persistence.js';
 import {
@@ -8,14 +8,21 @@ import {
   scannerOperationKey,
   tryAcquireOperationGuards,
 } from './operation-guards.js';
-import { normalizeItem, computeNextRunAt } from './models/item.js';
+import {
+  normalizeItem,
+  normalizeItemId,
+  collectItemSourceIdentities,
+  deriveStableItemId,
+  computeNextRunAt,
+} from './models/item.js';
 import { computeScannerNextRunAt } from './models/scanner.js';
-import { nowIso, cleanDisplayText, hashString, normalizeSeverity } from './utils.js';
+import { nowIso, cleanDisplayText, normalizeSeverity } from './utils.js';
 import { ALL_SIGNAL_TYPES } from './constants.js';
 import { logInfo, logWarn, logError } from './logger.js';
 import { showToast } from '../components/Toast.svelte';
 import { buildScannerPrompt } from './prompts.js';
 import { runWorkiqJson } from './json-parser.js';
+import { hydrateRadarColdItems } from './radar-navigation.js';
 
 const TICK_MS = 60_000; // 60s
 let intervalHandle = null;
@@ -136,15 +143,19 @@ export async function runScanner(scanner) {
     return { ok: false, code: 'INVALID_RESPONSE' };
   }
 
-  const newItems = payload.radarItems.map((item) =>
-    normalizeItem({
+  // Identity checks must include the authoritative cold store, even when Inbox has not hydrated it yet.
+  await hydrateRadarColdItems();
+
+  const newItems = payload.radarItems.map((item) => {
+    const candidateId = normalizeItemId(item?.id) || deriveStableItemId(item, scanner.id);
+    return normalizeItem({
       ...item,
-      id: item.id || `radar_${hashString(cleanDisplayText(item.title || '') + nowIso())}`,
+      ...(candidateId ? { id: candidateId } : {}),
       status: item.status || 'Inbound',
       scannerId: scanner.id,
       isNew: true,
-    })
-  );
+    });
+  });
 
   // Enforce maxItemsPerScan cap
   const maxItems = scanner.maxItemsPerScan || 10;
@@ -172,24 +183,43 @@ export async function runScanner(scanner) {
   );
 
   // Dedup against existing items
-  const currentItems = get(items);
-  const existingIds = new Set(currentItems.map((i) => i.id));
-  const existingTitles = new Set(
-    currentItems
-      .filter((i) => i.scannerId === scanner.id)
-      .map((i) => cleanDisplayText(i.title || '').toLowerCase())
-  );
+  const currentItems = [...get(items), ...get(coldItems)];
+  const existingIds = new Set();
+  const sourceIdentityOwners = new Map();
+  const addSourceIdentities = (item, ownerScannerId) => {
+    for (const identity of collectItemSourceIdentities(item)) {
+      if (!sourceIdentityOwners.has(identity)) sourceIdentityOwners.set(identity, new Set());
+      sourceIdentityOwners.get(identity).add(ownerScannerId);
+    }
+  };
 
-  // Add recent titles to dedup set
-  for (const entry of recentTitles) {
-    existingTitles.add(entry.title);
+  for (const item of currentItems) {
+    if (!item?.id || globallyDeletedItemIds.has(item.id)) continue;
+    existingIds.add(item.id);
+    addSourceIdentities(item, item.scannerId || null);
   }
 
-  const unique = eligible.filter(
-    (i) => !existingIds.has(i.id) && !existingTitles.has(cleanDisplayText(i.title || '').toLowerCase())
-  );
+  const allowCrossScannerDedup = currentScanner.crossScannerDedup !== false;
+  const unique = [];
+  for (const candidate of eligible) {
+    if (existingIds.has(candidate.id)) continue;
 
-  // Record discovered titles in scanner's recentTitles for cross-move dedup
+    const sourceIdentities = collectItemSourceIdentities(candidate);
+    const sourceMatch = sourceIdentities.some((identity) => {
+      const owners = sourceIdentityOwners.get(identity);
+      if (!owners) return false;
+      return [...owners].some((ownerScannerId) =>
+        ownerScannerId === scanner.id || (allowCrossScannerDedup && ownerScannerId !== scanner.id)
+      );
+    });
+    if (sourceMatch) continue;
+
+    unique.push(candidate);
+    existingIds.add(candidate.id);
+    addSourceIdentities(candidate, scanner.id);
+  }
+
+  // Retain recent titles as scanner metadata; title history is not an acceptance filter.
   const existingRecentSet = new Set(recentTitles.map((e) => e.title));
   const newRecentEntries = eligible
     .map((i) => ({ title: cleanDisplayText(i.title || '').toLowerCase(), at: nowIso() }))

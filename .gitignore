@@ -41,6 +41,9 @@ npm-debug.log*
 # Squad templates (internal tooling)
 .squad-templates/
 
+# Squad state (local agent coordination)
+.squad/
+
 # Window state (user-specific)
 window-state.json
 
