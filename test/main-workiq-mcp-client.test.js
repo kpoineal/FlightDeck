@@ -667,6 +667,44 @@ describe('createWorkiqMcpClient()', () => {
     assert.equal(askCall.params.arguments.question.includes('create_entity'), false);
   });
 
+  it('deduplicates repeated ask output before returning a read-only proposal', async () => {
+    const calls = [];
+    const payload = {
+      schemaVersion: 1,
+      recommendation: 'Confirm the proposed time.',
+      confidence: 'high',
+      evidence: [{ kind: 'observed', text: 'A time was proposed.' }],
+      proposals: [{
+        channel: 'email',
+        intent: 'Confirm timing',
+        target: { address: 'synthetic@example.com' },
+        payload: { subject: 'Synthetic meeting', body: 'Does the proposed time still work?' },
+      }],
+    };
+    const { client } = createHarness((message, child) => {
+      if (message.method === 'initialize') {
+        queueMicrotask(() => child.respond(message.id, { protocolVersion: '2025-03-26' }));
+      } else if (message.method === 'tools/list') {
+        queueMicrotask(() => child.respond(message.id, { tools: [{ name: 'ask' }, { name: 'create_entity' }] }));
+      } else if (message.method === 'tools/call') {
+        calls.push(message.params.name);
+        queueMicrotask(() => child.respond(message.id, {
+          content: [{ type: 'text', text: JSON.stringify(payload) + JSON.stringify(payload, null, 2) }],
+          isError: false,
+        }));
+      }
+    });
+    const result = await client.proposeThreadActions({
+      schemaVersion: 1,
+      requestedChannel: 'email',
+      thread: { id: 'synthetic-thread', title: 'Synthetic meeting' },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.readOnly, true);
+    assert.equal(result.result.proposals.length, 1);
+    assert.deepEqual(calls, ['ask']);
+  });
+
   it('rejects invalid synthesis context before starting WorkIQ', async () => {
     const { client, spawnCalls } = createHarness(successfulServer);
     assert.deepEqual(await client.proposeThreadActions({

@@ -93,8 +93,57 @@ export function parseProposalSynthesisResponse(rawResponse) {
   try {
     return normalizeProposalSynthesisResult(JSON.parse(rawResponse));
   } catch {
-    return null;
+    return parseRepeatedProposalResponse(rawResponse);
   }
+}
+
+function parseRepeatedProposalResponse(rawResponse) {
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+  let first = null;
+  let signature = null;
+  let count = 0;
+
+  for (let index = 0; index < rawResponse.length; index += 1) {
+    const char = rawResponse[index];
+    if (start < 0) {
+      if (/\s/.test(char)) continue;
+      if (char !== '{') return null;
+      start = index;
+      depth = 1;
+      continue;
+    }
+    if (inString) {
+      if (escapeNext) escapeNext = false;
+      else if (char === '\\') escapeNext = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === '{' || char === '[') depth += 1;
+    else if (char === '}' || char === ']') {
+      depth -= 1;
+      if (depth !== 0) continue;
+      try {
+        const parsed = JSON.parse(rawResponse.slice(start, index + 1));
+        const currentSignature = JSON.stringify(parsed);
+        if (count > 0 && currentSignature !== signature) return null;
+        if (count === 0) {
+          first = parsed;
+          signature = currentSignature;
+        }
+      } catch {
+        return null;
+      }
+      count += 1;
+      start = -1;
+    }
+  }
+
+  // Only deduplicate complete, equivalent documents; never select among alternatives.
+  return start < 0 && count > 1 ? normalizeProposalSynthesisResult(first) : null;
 }
 
 export function normalizeProposalSynthesisResult(value) {

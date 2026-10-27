@@ -68,6 +68,41 @@ describe('proposal synthesis normalization', () => {
     assert.equal(parseProposalSynthesisResponse('{broken'), null);
   });
 
+  it('accepts equivalent repeated JSON documents without duplicating proposals', () => {
+    const fixture = resultFixture({
+      proposals: [{
+        channel: 'email',
+        intent: 'Confirm timing',
+        target: { address: 'sofia@example.com' },
+        payload: { subject: 'Synthetic follow-up', body: 'Literal } [ and "quotes" with \\ escapes.' },
+      }],
+    });
+    const raw = JSON.stringify(fixture);
+    const pretty = JSON.stringify(fixture, null, 2);
+    for (const response of [raw + pretty, ` \n${raw}\n${pretty}\n${raw} `]) {
+      const parsed = parseProposalSynthesisResponse(response);
+      assert.deepEqual(parsed, normalizeProposalSynthesisResult(fixture));
+      assert.equal(parsed.proposals.length, 1);
+    }
+  });
+
+  it('rejects conflicting, partial, wrapped, malformed, or invalid repeated proposals', () => {
+    const raw = JSON.stringify(resultFixture());
+    for (const response of [
+      raw + JSON.stringify(resultFixture({ recommendation: 'A different action.' })),
+      raw + raw.slice(0, -1),
+      raw + '{broken}',
+      `Here is the proposal: ${raw}${raw}`,
+      `${raw}${raw} trailing prose`,
+      `\`\`\`json\n${raw}${raw}\n\`\`\``,
+      `[${raw},${raw}]`,
+      '{"wrapper":' + raw + raw,
+      '{"schemaVersion":99}{"schemaVersion":99}',
+    ]) {
+      assert.equal(parseProposalSynthesisResponse(response), null);
+    }
+  });
+
   it('normalizes a useful email and strips unsafe execution fields', () => {
     const normalized = normalizeProposalSynthesisResult(resultFixture({
       proposals: [{
