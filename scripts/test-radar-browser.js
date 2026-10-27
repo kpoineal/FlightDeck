@@ -375,6 +375,75 @@ async function criticalityScenario(session) {
   await assertHealthy(session);
 }
 
+async function radarDropdownPresentationScenario(session) {
+  await openApp(session);
+  await session.page.evaluate(async (id) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const item = state.items.find((entry) => entry.id === id);
+    item.lifecycleStatus = 'unknown';
+    item.status = 'Inbound';
+    await window.workiq.storeSet('flightdeck.demo.v2', state);
+  }, FIXTURE_ITEM_ID);
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(session.page);
+  const workState = session.page.getByLabel('Work state');
+  assert.equal(await workState.inputValue(), 'unknown', 'Unknown work state rendered a blank selection');
+  assert.equal(await workState.locator('option:checked').textContent(), 'Unknown');
+  assert.equal(await workState.locator('option:checked').evaluate((option) => option.disabled), true);
+
+  for (const width of [1440, 390]) {
+    await session.page.setViewportSize({ width, height: 1000 });
+    for (const theme of ['dark', 'light']) {
+      await session.page.emulateMedia({ colorScheme: theme === 'dark' ? 'light' : 'dark' });
+      await session.page.evaluate((value) => document.documentElement.setAttribute('data-theme', value), theme);
+      for (const label of ['Criticality', 'Work state']) {
+        const control = session.page.getByLabel(label);
+        const styles = await control.evaluate((element) => {
+          const probe = document.createElement('span');
+          probe.style.background = 'var(--bg-overlay-panel)';
+          probe.style.color = 'var(--text)';
+          document.body.append(probe);
+          const expected = getComputedStyle(probe);
+          const result = {
+            scheme: getComputedStyle(element).colorScheme,
+            expectedBackground: expected.backgroundColor,
+            expectedColor: expected.color,
+            options: [...element.options].map((option) => ({
+              background: getComputedStyle(option).backgroundColor,
+              color: getComputedStyle(option).color,
+            })),
+          };
+          probe.remove();
+          return result;
+        });
+        assert.equal(styles.scheme, theme, `${label} followed OS colors instead of ${theme} theme`);
+        for (const option of styles.options) {
+          assert.equal(option.background, styles.expectedBackground, `${label} option background mismatched ${theme} theme`);
+          assert.equal(option.color, styles.expectedColor, `${label} option text mismatched ${theme} theme`);
+        }
+        await control.focus();
+        await session.page.keyboard.press('Tab');
+        await session.page.keyboard.press('Shift+Tab');
+        assert.equal(await control.evaluate((element) =>
+          element === document.activeElement && element.matches(':focus-visible')
+            && getComputedStyle(element).outlineStyle !== 'none'
+            && parseFloat(getComputedStyle(element).outlineWidth) >= 2), true, `${label} lacked visible keyboard focus`);
+      }
+      await assertHealthy(session, width <= 960 ? 'mobile' : 'desktop');
+    }
+  }
+
+  await session.page.setViewportSize({ width: 1440, height: 1000 });
+  await session.page.getByLabel('Criticality').selectOption('Elevated');
+  await workState.selectOption('waiting');
+  await session.page.waitForTimeout(700);
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(session.page);
+  assert.equal(await session.page.getByLabel('Criticality').inputValue(), 'Elevated');
+  assert.equal(await workState.inputValue(), 'waiting', 'Work state edit did not persist');
+  assert.equal(await workState.locator('option[value="unknown"]').count(), 0, 'Unknown placeholder remained after choosing a state');
+}
+
 async function completedRestoreScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
@@ -1978,6 +2047,7 @@ async function radarRichContextScenario(session) {
     await runScenario('theme-continuity-and-switching', browser, rendererServer.baseUrl, themeScenario);
     await runScenario('scanner-create-and-persist', browser, rendererServer.baseUrl, scannerScenario);
     await runScenario('criticality-edit-and-persist', browser, rendererServer.baseUrl, criticalityScenario);
+    await runScenario('radar-dropdown-presentation', browser, rendererServer.baseUrl, radarDropdownPresentationScenario);
     await runScenario('completed-view-and-active-restore', browser, rendererServer.baseUrl, completedRestoreScenario);
     await runScenario('action-draft-cancel', browser, rendererServer.baseUrl, (session) => draftScenario(session, 'cancel'), { draftMode: 'cancel' });
     await runScenario('action-draft-error-fail-closed', browser, rendererServer.baseUrl, (session) => draftScenario(session, 'error'), { draftMode: 'error' });

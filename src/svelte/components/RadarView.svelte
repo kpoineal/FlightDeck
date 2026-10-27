@@ -40,7 +40,7 @@
     normalizeProposalSynthesisResult,
   } from '../lib/proposal-synthesis.js';
   import { addHistory } from '../lib/actions.js';
-  import { LIFECYCLE_LABELS, LIFECYCLE_STATUSES } from '../lib/constants.js';
+  import { LIFECYCLE_LABELS, LIFECYCLE_STATUSES, UNKNOWN_LIFECYCLE_STATUS } from '../lib/constants.js';
   import { collectItemEvidenceLinks, filterDeletedItems } from '../lib/models/item.js';
   import { computeScannerNextRunAt, normalizeScannerDefinition } from '../lib/models/scanner.js';
   import { savePersistentState } from '../lib/persistence.js';
@@ -728,8 +728,11 @@
           <label class="radar-control-field">
             <span>Work state</span>
             <span class="mailbox-status mailbox-status-{mailboxWorkStatusClass(selected)} radar-control-pill">
-              <select aria-label="Work state" value={selected.lifecycleStatus}
+              <select aria-label="Work state" value={mailboxWorkStatusClass(selected)}
                 on:change={(event) => setItemLifecycle(selected.id, event.target.value)}>
+                {#if !LIFECYCLE_STATUSES.includes(selected.lifecycleStatus)}
+                  <option value={UNKNOWN_LIFECYCLE_STATUS} disabled>{LIFECYCLE_LABELS[UNKNOWN_LIFECYCLE_STATUS]}</option>
+                {/if}
                 {#each LIFECYCLE_STATUSES as status}
                   <option value={status}>{LIFECYCLE_LABELS[status]}</option>
                 {/each}

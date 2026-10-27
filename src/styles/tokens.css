@@ -3,7 +3,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  color-scheme: dark light;
+  color-scheme: dark;
 
   /* ── Theme tokens (dark default) ── */
   --bg-body: #09090b;
