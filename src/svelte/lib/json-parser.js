@@ -27,6 +27,36 @@ export function extractJsonFromText(text) {
     candidates.push(trimmed.slice(firstBrace, lastBrace + 1));
   }
 
+  // Terminal redraws can append another complete copy of the JSON document.
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const char = trimmed[index];
+    if (start < 0) {
+      if (char !== '{' && char !== '[') continue;
+      start = index;
+      depth = 1;
+      continue;
+    }
+    if (inString) {
+      if (escapeNext) escapeNext = false;
+      else if (char === '\\') escapeNext = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === '{' || char === '[') depth += 1;
+    else if (char === '}' || char === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        candidates.push(trimmed.slice(start, index + 1));
+        start = -1;
+      }
+    }
+  }
+
   return [...new Set(candidates.filter(Boolean))];
 }
 
