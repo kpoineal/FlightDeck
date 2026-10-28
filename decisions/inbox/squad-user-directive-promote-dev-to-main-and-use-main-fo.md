@@ -1,0 +1,4 @@
+### 2026-10-28T20-39-01: User directive: promote dev to main and use main for future work
+**By:** Squad
+**What:** User directive: promote dev to main and use main for future work
+**Why:** On 2026-10-28, the project owner explicitly requested: "Please merge dev into main and let's start working out of main". Promote the existing dev branch through a PR, switch the working checkout to main, and use main as the base and PR target for future work rather than dev. This overrides the previous dev-first workflow. The user was informed before this request that the merge is conflict-free but normal unit tests have five date-dependent fixture failures and the full browser acceptance suite stops on a navigation failure that passes in isolation. Do not treat this promotion as proof that those issues are fixed; do not create a release tag or merge unrelated contributor PRs.
