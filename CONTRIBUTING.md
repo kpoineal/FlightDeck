@@ -158,6 +158,10 @@ npm test
 
 ## Branching & Releases
 
+Create feature branches from the latest `main` and open pull requests targeting
+`main`. FlightDeck does not use a `dev` integration branch or a branch-promotion
+pipeline. Do not recreate `dev`; use a separate feature branch for each change.
+
 FlightDeck uses **tag-based releases**. PRs merge to `main` freely — no installer is built until you tag.
 
 ```
