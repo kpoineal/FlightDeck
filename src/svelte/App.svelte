@@ -13,7 +13,7 @@
   import { items, scanners, meetings, meetingsLastFetched, briefingsByMeetingId, briefingSeenAt,
     density, filter, collapsedSections, highlightedItemId } from './lib/stores.js';
   import { addHistory } from './lib/actions.js';
-  import { startScannerEngine, stopScannerEngine } from './lib/scanner-engine.js';
+  import { resumeScannerEngine, startScannerEngine, stopScannerEngine } from './lib/scanner-engine.js';
   import { startMonitoringLoop, stopMonitoringLoop } from './lib/monitor-engine.js';
   import { cleanDisplayText, hashString, normalizeExternalUrl, nowIso } from './lib/utils.js';
   import { logInfo, persistLog, loadPersistedLog } from './lib/logger.js';
@@ -121,6 +121,7 @@
 
   function handleDayChangeCheck() {
     if (!$connected || get(isDemo)) return;
+    resumeScannerEngine();
     const today = new Date().toDateString();
     if (today === lastDayChecked) {
       // Same day — still try to refresh if meetings are stale (>1 hour)

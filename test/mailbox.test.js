@@ -4,6 +4,8 @@ const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 
 let getMailboxThreads;
+let compareInboxThreads;
+let compareMailboxThreads;
 let isRadarPriority;
 let isMailboxUnread;
 let isMailboxSnoozed;
@@ -16,11 +18,18 @@ let collectItemEvidenceLinks;
 let normalizeItem;
 let buildMonitorPrompt;
 let buildScannerPrompt;
+let get;
+let items;
+let kpis;
 
 before(async () => {
   const mailbox = await import('../src/svelte/lib/mailbox.js');
   const itemModel = await import('../src/svelte/lib/models/item.js');
+  const stores = await import('../src/svelte/lib/stores.js');
+  ({ get } = await import('svelte/store'));
   getMailboxThreads = mailbox.getMailboxThreads;
+  compareInboxThreads = mailbox.compareInboxThreads;
+  compareMailboxThreads = mailbox.compareMailboxThreads;
   isRadarPriority = mailbox.isRadarPriority;
   isMailboxUnread = mailbox.isMailboxUnread;
   isMailboxSnoozed = mailbox.isMailboxSnoozed;
@@ -31,6 +40,8 @@ before(async () => {
   summariesMatch = mailbox.summariesMatch;
   collectItemEvidenceLinks = itemModel.collectItemEvidenceLinks;
   normalizeItem = itemModel.normalizeItem;
+  items = stores.items;
+  kpis = stores.kpis;
   ({ buildMonitorPrompt, buildScannerPrompt } = await import('../src/svelte/lib/prompts.js'));
 });
 
@@ -269,6 +280,42 @@ describe('mailbox predicates and segments', () => {
       'blocked-older',
     ]);
   });
+
+  it('keeps Recent deterministic by activity descending with a stable id tie break', () => {
+    const threads = [
+      { id: 'z-read', lastChangedAt: '2026-09-08T11:00:00Z' },
+      { id: 'b-unread', lastChangedAt: '2026-09-08T10:00:00Z', isNew: true },
+      { id: 'b-tied', lastChangedAt: '2026-09-08T09:00:00Z' },
+      { id: 'a-tied', lastChangedAt: '2026-09-08T09:00:00Z', lifecycleStatus: 'blocked' },
+    ];
+
+    assert.deepEqual([...threads].sort(compareInboxThreads).map((item) => item.id), [
+      'z-read',
+      'b-unread',
+      'a-tied',
+      'b-tied',
+    ]);
+  });
+
+  it('keeps Priority as unread, risk, severity, recency, then stable id', () => {
+    const threads = [
+      { id: 'observe-newer', severity: 'Observe', lifecycleStatus: 'in-progress', lastChangedAt: '2026-09-08T12:00:00Z' },
+      { id: 'b-elevated', severity: 'Elevated', lifecycleStatus: 'in-progress', lastChangedAt: '2026-09-08T10:00:00Z' },
+      { id: 'critical', severity: 'Critical', lifecycleStatus: 'in-progress', lastChangedAt: '2026-09-08T08:00:00Z' },
+      { id: 'blocked', severity: 'Observe', lifecycleStatus: 'blocked', lastChangedAt: '2026-09-08T11:00:00Z' },
+      { id: 'updated', severity: 'Observe', lifecycleStatus: 'in-progress', lastChangedAt: '2026-09-01T00:00:00Z', hasNewUpdate: true },
+      { id: 'a-elevated', severity: 'Elevated', lifecycleStatus: 'in-progress', lastChangedAt: '2026-09-08T10:00:00Z' },
+    ];
+
+    assert.deepEqual([...threads].sort(compareMailboxThreads).map((item) => item.id), [
+      'updated',
+      'critical',
+      'blocked',
+      'a-elevated',
+      'b-elevated',
+      'observe-newer',
+    ]);
+  });
 });
 
 describe('mailbox timeline behavior', () => {
@@ -340,6 +387,13 @@ describe('normalizeItem mailbox history', () => {
     assert.equal(mailboxWorkStatusClass({ lifecycleStatus: 'archived' }), 'archived');
   });
 
+  it('maps scanner Inbound status to the active lifecycle without rewriting the status label', () => {
+    const normalized = normalizeItem({ id: 'scanner-inbound', status: 'Inbound' });
+
+    assert.equal(normalized.status, 'Inbound');
+    assert.equal(normalized.lifecycleStatus, 'in-progress');
+  });
+
   it('normalizes legacy meaningful monitor entries to reply kind', () => {
     const normalized = normalizeItem({
       id: 'legacy-thread',
@@ -353,5 +407,21 @@ describe('normalizeItem mailbox history', () => {
     });
 
     assert.equal(normalized.updateHistory[0].kind, 'reply');
+  });
+});
+
+describe('Radar KPI lifecycle counts', () => {
+  it('counts blocked lifecycle items regardless of severity and ignores the legacy isBlocked flag', () => {
+    items.set([
+      { id: 'critical-blocked', severity: 'Critical', lifecycleStatus: 'blocked', isBlocked: false },
+      { id: 'observe-blocked', severity: 'Observe', lifecycleStatus: 'blocked' },
+      { id: 'legacy-flag', severity: 'Critical', lifecycleStatus: 'in-progress', isBlocked: true },
+    ]);
+
+    try {
+      assert.equal(get(kpis).blocked, 2);
+    } finally {
+      items.set([]);
+    }
   });
 });

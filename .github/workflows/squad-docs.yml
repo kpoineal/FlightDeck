@@ -5,7 +5,8 @@ on:
   push:
     branches: [preview]
     paths:
-      - 'docs/**'
+      - 'site/**'
+      - 'docs/screenshots/**'
       - '.github/workflows/squad-docs.yml'
 
 permissions:
@@ -26,17 +27,26 @@ jobs:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
 
-      - name: Install build dependencies
-        run: npm install --no-save markdown-it markdown-it-anchor
+      - name: Copy screenshots
+        run: |
+          mkdir -p site/static/screenshots
+          cp docs/screenshots/*.png site/static/screenshots/
+
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
 
       - name: Build docs site
-        run: node docs/build.js --out _site --base /squad
+        working-directory: site
+        run: npm run build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
-          path: _site
+          path: site/build
 
   deploy:
     needs: build

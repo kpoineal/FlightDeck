@@ -6,6 +6,7 @@ import {
   BRIEFING_MEETING_JSON_SCHEMA,
   DAY_BRIEFING_JSON_SCHEMA,
 } from './constants.js';
+import { collectItemSourceIdentities } from './models/item.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -37,7 +38,8 @@ function extractScannerTopic(prompt, fallbackName) {
   return fallbackName;
 }
 
-function buildCrossScannerDedupBlock(currentScannerId, allScanners) {
+function buildCrossScannerDedupBlock(currentScannerId, allScanners, enabled = true) {
+  if (!enabled) return '';
   const others = (allScanners || [])
     .filter((s) => s.id !== currentScannerId && s.enabled && s.prompt);
 
@@ -49,6 +51,15 @@ function buildCrossScannerDedupBlock(currentScannerId, allScanners) {
   });
 
   return `\n\nOther active scanners (skip items that clearly belong to another scanner's focus area):\n${lines.join('\n')}`;
+}
+
+function formatScannerIdentityHint(item) {
+  const identities = collectItemSourceIdentities(item)
+    .slice(0, 3)
+    .map((identity) => identity.startsWith('url:') ? identity.slice(4) : identity);
+  return identities.length
+    ? `verified identity: ${identities.join(', ')}`
+    : 'no verified source identity; title alone is not a duplicate key';
 }
 
 /**
@@ -117,24 +128,22 @@ export function buildScannerPrompt(scanner, currentItems, allScanners) {
     ? `\n\nSignal source filter (IMPORTANT):\n- ONLY search for and consider these signal types: ${signalTypes.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(', ')}.\n- IGNORE all other signal types entirely. Do not include evidence from excluded signal types.\n- The signal type labels map as follows: Email = Outlook emails, Chat = Teams chat messages, Meeting = Calendar events and meeting transcripts/notes, Doc = SharePoint/OneDrive documents.`
     : '';
 
-  // Consolidated dedup list — one block, no duplicates
-  const existingTitles = new Set();
+  // Existing items are advisory context; title similarity is not an identity check.
   const dedupLines = [];
   for (const item of currentItems || []) {
     if (item.scannerId !== scanner.id) continue;
     if (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived') continue;
     const title = cleanDisplayText(item.title || '');
-    if (!title || existingTitles.has(title.toLowerCase())) continue;
-    existingTitles.add(title.toLowerCase());
-    dedupLines.push(`- ${title}`);
+    if (!title) continue;
+    dedupLines.push(`- Title: ${title} | ${formatScannerIdentityHint(item)}`);
     if (dedupLines.length >= 20) break;
   }
   const dedupBlock = dedupLines.length
-    ? `\n\nItems already on my radar from this scanner (do NOT re-report these):\n${dedupLines.join('\n')}`
+    ? `\n\nExisting item context from this scanner (advisory identity hints only):\n${dedupLines.join('\n')}\n- Treat a result as already represented only when a verified source identity matches.\n- Same or similar titles from different sources are distinct; do not omit them because the title matches.\n- The application performs authoritative exact-identity checks after your response.`
     : '';
 
   // Cross-scanner domain awareness
-  const crossScannerBlock = buildCrossScannerDedupBlock(scanner.id, allScanners);
+  const crossScannerBlock = buildCrossScannerDedupBlock(scanner.id, allScanners, scanner.crossScannerDedup !== false);
 
   // Assemble the full prompt with clear structure
   return `You are a work-signal scanner agent. Analyze recent Microsoft 365 signals and surface new items that need attention.

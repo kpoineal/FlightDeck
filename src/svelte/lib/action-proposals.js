@@ -30,6 +30,7 @@ const GENERIC_UNCONFIRMED_OUTCOME = 'Action result could not be confirmed. Check
 const UNVERIFIED_OUTCOME = 'Execution status could not be verified; no external write occurred.';
 const FAILED_OUTCOME = 'Action failed; review before retrying.';
 const REJECTED_OUTCOME = 'Action rejected during review.';
+const AUDIT_ONLY_CODE = 'AUDIT_ONLY';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 let proposalSequence = 0;
 
@@ -98,6 +99,7 @@ export function normalizeActionProposal(proposal) {
     createdAt,
     updatedAt,
     localOnly: true,
+    ...(proposal.auditOnly === true ? { auditOnly: true } : {}),
   };
 }
 
@@ -142,7 +144,7 @@ export function createActionProposal(item, suggestion, overrides = {}) {
 
 export function transitionActionProposal(proposal, nextState, at = new Date().toISOString()) {
   const transitionedAt = normalizeTimestamp(at);
-  if (!proposal || normalizeTimestamp(proposal.archivedAt) || !transitionedAt || !NEXT_STATES[proposal.state]?.includes(nextState)) {
+  if (!proposal || proposal.auditOnly === true || normalizeTimestamp(proposal.archivedAt) || !transitionedAt || !NEXT_STATES[proposal.state]?.includes(nextState)) {
     return proposal;
   }
   return {
@@ -172,7 +174,7 @@ export function transitionActionProposal(proposal, nextState, at = new Date().to
 
 export function recoverStaleExecutingActionProposal(proposal, at = new Date().toISOString()) {
   const normalized = normalizeActionProposal(proposal);
-  if (!normalized || normalized.state !== 'Executing') return normalized;
+  if (!normalized || normalized.auditOnly === true || normalized.state !== 'Executing') return normalized;
 
   const updatedAt = normalizeTimestamp(at) || normalized.updatedAt;
   if (normalized.dispatchStatus === 'not-dispatched') {
@@ -220,7 +222,8 @@ export function classifyActionProposalEffect(proposal, { threadEvents = [], glob
     proposalCode
   );
   if (
-    proposalCode === ACTION_UNCONFIRMED_CODE
+    proposal.auditOnly === true
+    || proposalCode === ACTION_UNCONFIRMED_CODE
     || proposal.state === 'Executing'
     || dispatchStatus === 'dispatched'
     || dispatchStatus === 'unknown'
@@ -234,7 +237,7 @@ export function classifyActionProposalEffect(proposal, { threadEvents = [], glob
 }
 
 export function actionProposalDuplicateKey(proposal) {
-  if (!proposal || typeof proposal !== 'object') return '';
+  if (!proposal || typeof proposal !== 'object' || proposal.auditOnly === true) return '';
   return [
     normalizeDuplicateText(proposal.sourceItemId),
     normalizeDuplicateText(proposal.channel),
@@ -272,13 +275,14 @@ export function canPermanentlyDeleteActionProposal(proposal) {
   return Boolean(
     proposal
     && typeof proposal === 'object'
+    && proposal.auditOnly !== true
     && STATES.includes(proposal.state)
     && String(proposal.id || '').trim()
   );
 }
 
 export function classifyActionProposalView(proposal) {
-  if (!proposal || !STATES.includes(proposal.state)) return null;
+  if (!proposal || proposal.auditOnly === true || !STATES.includes(proposal.state)) return null;
   if (normalizeTimestamp(proposal.archivedAt)) return 'archived';
   return TERMINAL_STATES.has(proposal.state) ? 'resolved' : 'open';
 }
@@ -300,6 +304,7 @@ export function countActionProposalViews(proposals) {
 export function canArchiveActionProposal(proposal) {
   return Boolean(
     proposal
+    && proposal.auditOnly !== true
     && STATES.includes(proposal.state)
     && proposal.state !== 'Executing'
     && !normalizeTimestamp(proposal.archivedAt)
@@ -320,6 +325,7 @@ export function archiveActionProposal(proposal, reason = null, at = new Date().t
 export function canRestoreActionProposal(proposal) {
   return Boolean(
     proposal
+    && proposal.auditOnly !== true
     && STATES.includes(proposal.state)
     && proposal.state !== 'Executing'
     && normalizeTimestamp(proposal.archivedAt)
@@ -338,6 +344,9 @@ export function restoreActionProposal(proposal, at = new Date().toISOString()) {
 }
 
 export function buildOutlookDraftPayload(proposal) {
+  if (proposal?.auditOnly === true) {
+    return { ok: false, code: AUDIT_ONLY_CODE };
+  }
   if (!proposal || proposal.channel !== 'outlook-draft') {
     return { ok: false, code: 'INVALID_CHANNEL' };
   }
@@ -365,7 +374,7 @@ export function buildOutlookDraftPayload(proposal) {
 }
 
 export function applyOutlookDraftResult(proposal, result, at = new Date().toISOString()) {
-  if (!proposal || proposal.channel !== 'outlook-draft') return proposal;
+  if (!proposal || proposal.auditOnly === true || proposal.channel !== 'outlook-draft') return proposal;
 
   if (result?.ok === true && result.action === 'outlook-draft-created') {
     return {
@@ -442,6 +451,7 @@ export function applyOutlookDraftResult(proposal, result, at = new Date().toISOS
 }
 
 export async function executeOutlookDraftAction(proposal, createDraft, at = new Date().toISOString()) {
+  if (proposal?.auditOnly === true) return proposal;
   const draft = buildOutlookDraftPayload(proposal);
   if (!draft.ok) return applyOutlookDraftResult(proposal, { ...draft, dispatched: false }, at);
   if (typeof createDraft !== 'function') {
@@ -472,7 +482,7 @@ export function actionForState(proposal) {
 }
 
 export function updateActionProposal(proposal, patch, at = new Date().toISOString()) {
-  if (!proposal || proposal.archivedAt || proposal.state !== 'Drafted') return proposal;
+  if (!proposal || proposal.auditOnly === true || proposal.archivedAt || proposal.state !== 'Drafted') return proposal;
   const next = {};
   if (Object.hasOwn(patch || {}, 'target')) next.target = String(patch.target || '').trim();
   if (Object.hasOwn(patch || {}, 'content')) next.content = String(patch.content || '').trim();
@@ -487,7 +497,7 @@ export function isConcreteActionTarget(target) {
 }
 
 export function isReviewableActionProposal(proposal) {
-  if (proposal?.archivedAt) return false;
+  if (proposal?.auditOnly === true || proposal?.archivedAt) return false;
   if (!isConcreteActionTarget(proposal?.target) || String(proposal?.content || '').trim().length === 0) return false;
   return proposal?.channel !== 'outlook-draft' || buildOutlookDraftPayload(proposal).ok;
 }

@@ -41,6 +41,9 @@ npm-debug.log*
 # Squad templates (internal tooling)
 .squad-templates/
 
+# Squad state (local agent coordination)
+.squad/
+
 # Window state (user-specific)
 window-state.json
 
@@ -59,3 +62,7 @@ mailmap.txt
 .squad-workstream
 test-results.json
 test-results-full.txt
+# Squad: state owned by squad-state branch (two-layer/orphan backend)
+.squad/decisions.md
+.squad/agents/*/history.md
+# /Squad: state owned by squad-state branch

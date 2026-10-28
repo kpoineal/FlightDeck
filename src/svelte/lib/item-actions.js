@@ -204,7 +204,7 @@ export async function deleteItem(itemId, {
   };
 }
 
-async function persistLiveColdItems(setColdItems) {
+export async function persistLiveColdItems(setColdItems) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const snapshot = get(coldItems);
     let result;
@@ -386,13 +386,13 @@ function reconcileDeletedItemChanges(currentItems, changes, deletedAt) {
   return reconciled;
 }
 
-function reconcileDeletedEvents(currentEvents, originalEvents, removedEvents, tombstoneIds) {
+export function reconcileDeletedEvents(currentEvents, originalEvents, removedEvents, tombstoneIds) {
   if (!Array.isArray(currentEvents) || removedEvents.some((entry) => !stableRecordId(entry))) return null;
   const withoutTombstones = currentEvents.filter((entry) => !tombstoneIds.has(stableRecordId(entry)));
   return restoreRecordsAtStablePositions(withoutTombstones, originalEvents, removedEvents, stableRecordId);
 }
 
-function restoreRecordsAtStablePositions(currentRecords, originalRecords, removedRecords, getId) {
+export function restoreRecordsAtStablePositions(currentRecords, originalRecords, removedRecords, getId) {
   const result = [...currentRecords];
   const resultIds = result.map(getId).filter(Boolean);
   if (new Set(resultIds).size !== resultIds.length) return null;
@@ -428,7 +428,7 @@ function restoreRecordsAtStablePositions(currentRecords, originalRecords, remove
   return result;
 }
 
-function stableRecordId(record) {
+export function stableRecordId(record) {
   return record?.eventId || record?.id || null;
 }
 
@@ -437,7 +437,7 @@ function strongerEffect(current, candidate) {
   return rank[candidate] > rank[current] ? candidate : current;
 }
 
-function isDeletedAdministrativeEvent(entry, deletedIds) {
+export function isDeletedAdministrativeEvent(entry, deletedIds) {
   const payload = entry?.payload && typeof entry.payload === 'object' ? entry.payload : entry;
   return deletedIds.has(payload?.proposalId) && PROPOSAL_ADMINISTRATIVE_EVENTS.has(payload?.event);
 }

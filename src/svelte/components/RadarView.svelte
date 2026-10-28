@@ -25,6 +25,7 @@
     mailboxWorkStatus,
     mailboxWorkStatusClass,
   } from '../lib/mailbox.js';
+  import { matchesInboxFilters } from '../lib/inbox-filters.js';
   import {
     createActionEventId,
     deleteItem,
@@ -41,20 +42,25 @@
   } from '../lib/proposal-synthesis.js';
   import { addHistory } from '../lib/actions.js';
   import { LIFECYCLE_LABELS, LIFECYCLE_STATUSES } from '../lib/constants.js';
-  import { collectItemEvidenceLinks, filterDeletedItems } from '../lib/models/item.js';
+  import { collectItemEvidenceLinks, filterDeletedItems, normalizeItem } from '../lib/models/item.js';
   import { computeScannerNextRunAt, normalizeScannerDefinition } from '../lib/models/scanner.js';
   import { savePersistentState } from '../lib/persistence.js';
+  import { executeScannerDeletion, previewScannerDeletion } from '../lib/scanner-actions.js';
   import { runScanner } from '../lib/scanner-engine.js';
   import { runItemCheck } from '../lib/monitor-engine.js';
+  import { logError } from '../lib/logger.js';
   import { safeDate } from '../lib/utils.js';
   import { nextItemSelectionAfterRemoval, reconcileRadarSelection } from '../lib/radar-selection.js';
+  import { createThreadComposerRequestTracker } from '../lib/thread-composer.js';
   import { hydrateRadarColdItems, resolveRadarItem } from '../lib/radar-navigation.js';
   import { ITEM_DELETION_CONFIRMATION, itemDeletionFailureMessage } from '../lib/item-deletion-ui.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
   import AddTaskModal from './AddTaskModal.svelte';
   import ConfirmModal from './ConfirmModal.svelte';
+  import ScannerDeletionModal from './ScannerDeletionModal.svelte';
   import ScannerSettingsModal from './ScannerSettingsModal.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
+  import { showToast } from './Toast.svelte';
 
   const VIEWS = [
     { id: 'inbox', label: 'Inbox', predicate: (item, at) => isMailboxActive(item) && !isMailboxSnoozed(item, at) },
@@ -68,7 +74,9 @@
   let smartView = $state('inbox');
   let scannerId = $state('all');
   let query = $state('');
-  let sort = $state('priority');
+  let sort = $state('recent');
+  let quickFilter = $state('');
+  let refineFilters = $state({});
   let selectedId = $state(null);
   let pendingNavigationId = $state(null);
   let mobileStep = $state('filters');
@@ -78,39 +86,118 @@
   let scannerModalOpen = $state(false);
   let taskModalOpen = $state(false);
   let editingScanner = $state(null);
+  let scannerSettingsFocusOrigin = null;
+  let scannerDeletion = $state({
+    open: false,
+    preview: null,
+    status: 'idle',
+    message: '',
+    returnFocus: null,
+  });
   let synthesisState = $state({ threadId: null, requestedChannel: null, status: 'idle', result: null, error: '' });
   let teamsDraft = $state(null);
   let teamsCopyStatus = $state('');
   let teamsSendState = $state({ status: 'idle', message: '' });
   let deleteRequest = $state(null);
   let deleteState = $state({ status: 'idle', message: '' });
+  const composerRequestTracker = createThreadComposerRequestTracker();
 
-  let projected = $derived(filterDeletedItems([
-    ...$items,
-    ...$coldItems.filter((cold) => !$items.some((item) => item.id === cold.id)),
-  ], $deletedItemIds));
+  let projected = $derived.by(() => {
+    const hotItemIds = new Set($items.map((item) => item.id));
+    return filterDeletedItems([
+      ...$items,
+      ...$coldItems.filter((cold) => !hotItemIds.has(cold.id)),
+    ], $deletedItemIds);
+  });
+  let projectionIndex = $derived.by(() => {
+    const viewCounts = new Map(VIEWS.map((view) => [view.id, 0]));
+    const scannerCounts = new Map();
+    const titleGroups = new Map();
+
+    for (const item of projected) {
+      for (const view of VIEWS) {
+        if (view.predicate(item, now)) viewCounts.set(view.id, viewCounts.get(view.id) + 1);
+      }
+
+      scannerCounts.set(item.scannerId, (scannerCounts.get(item.scannerId) || 0) + 1);
+      const titleGroup = item.title?.split(/\s+[—-]\s+/)[0];
+      const group = titleGroups.get(titleGroup);
+      if (group) group.push(item);
+      else titleGroups.set(titleGroup, [item]);
+    }
+
+    return { viewCounts, scannerCounts, titleGroups };
+  });
   let threads = $derived.by(() => {
     const view = VIEWS.find((entry) => entry.id === smartView) || VIEWS[0];
     const needle = query.trim().toLowerCase();
-    const filtered = projected.filter((item) =>
-      view.predicate(item, now)
-      && (scannerId === 'all' || item.scannerId === scannerId)
-      && (!needle || [item.title, item.summary, item.reason, item.owner, ...(item.counterparties || [])]
-        .some((value) => String(value || '').toLowerCase().includes(needle)))
-    );
-    if (smartView === 'inbox') return [...filtered].sort(compareInboxThreads);
-    if (sort === 'recent') return [...filtered].sort(compareMailboxThreads);
-    const rank = { Critical: 0, Elevated: 1, Observe: 2 };
-    return [...filtered].sort((a, b) =>
-      (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3) || compareMailboxThreads(a, b)
-    );
+    const inboxFilters = {
+      quickFilter,
+      facets: refineFilters,
+    };
+    const filtered = [];
+    for (const item of projected) {
+      if (!view.predicate(item, now)) continue;
+      if (!(scannerId === 'all' || item.scannerId === scannerId)) continue;
+      if (needle && ![item.title, item.summary, item.reason, item.owner, ...(item.counterparties || [])]
+        .some((value) => String(value || '').toLowerCase().includes(needle))) continue;
+      if (!matchesInboxFilters(item, inboxFilters, { now })) continue;
+      filtered.push(item);
+    }
+    if (sort === 'recent') return filtered.sort(compareInboxThreads);
+    return filtered.sort(compareMailboxThreads);
+  });
+  let firstThreadId = $derived(threads.at(0)?.id || null);
+  let activeFilters = $derived.by(() => {
+    const filters = [];
+    if (quickFilter) filters.push({ facet: 'quick', value: quickFilter, label: filterLabel(quickFilter) });
+    for (const [facet, values] of Object.entries(refineFilters)) {
+      for (const value of Array.isArray(values) ? values : []) {
+        filters.push({ facet, value, label: `${facetLabel(facet)}: ${filterLabel(value)}` });
+      }
+    }
+    return filters;
   });
   let selected = $derived(threads.find((item) => item.id === selectedId) || null);
   let timeline = $derived([...(selected?.updateHistory || [])].sort((a, b) => Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0)));
   let sourceLinks = $derived(selected ? collectItemEvidenceLinks(selected) : []);
-  let duplicates = $derived(selected ? projected.filter((item) =>
-    item.id !== selected.id && item.title?.split(/\s+[—-]\s+/)[0] === selected.title?.split(/\s+[—-]\s+/)[0]
-  ) : []);
+  let duplicates = $derived(selected
+    ? (projectionIndex.titleGroups.get(selected.title?.split(/\s+[—-]\s+/)[0]) || [])
+      .filter((item) => item.id !== selected.id)
+    : []);
+
+  function resetTeamsDraft() {
+    teamsDraft = null;
+    teamsCopyStatus = '';
+    teamsSendState = { status: 'idle', message: '' };
+  }
+
+  function resetThreadComposer() {
+    resetTeamsDraft();
+    synthesisState = { threadId: null, requestedChannel: null, status: 'idle', result: null, error: '' };
+  }
+
+  function setSelectedThreadId(nextId) {
+    selectedId = nextId;
+    composerRequestTracker.setThread(nextId);
+  }
+
+  function isCurrentComposerRequest(request) {
+    return composerRequestTracker.isCurrent(request) && selected?.id === request.threadId;
+  }
+
+  $effect(() => {
+    composerRequestTracker.setThread(selectedId);
+  });
+
+  $effect(() => {
+    const draftThreadId = teamsDraft?.sourceItemId || null;
+    const synthesisThreadId = synthesisState.threadId;
+    if ((draftThreadId && draftThreadId !== selectedId)
+      || (synthesisThreadId && synthesisThreadId !== selectedId)) {
+      resetThreadComposer();
+    }
+  });
 
   $effect(() => {
     const preserveId = pendingNavigationId && projected.some((item) => item.id === pendingNavigationId)
@@ -118,7 +205,7 @@
       : null;
     const next = reconcileRadarSelection({ selectedId, mobileStep, smartView, scannerId, query }, threads, { preserveId });
     if (next.selectedId !== selectedId || next.mobileStep !== mobileStep) {
-      selectedId = next.selectedId;
+      setSelectedThreadId(next.selectedId);
       mobileStep = next.mobileStep;
     }
   });
@@ -148,7 +235,7 @@
           : 'inbox';
       scannerId = 'all';
       query = '';
-      selectedId = highlighted.id;
+      setSelectedThreadId(highlighted.id);
       mobileStep = 'detail';
       requestAnimationFrame(() => {
         if (pendingNavigationId !== highlighted.id || selectedId !== highlighted.id) return;
@@ -172,16 +259,88 @@
   });
 
   function selectThread(item, origin, { markRead = false } = {}) {
-    selectedId = item.id;
+    setSelectedThreadId(item.id);
     originatingThread = origin;
     mobileStep = 'detail';
     requestAnimationFrame(() => viewRoot?.querySelector('.radar-thread-detail h2')?.focus());
+    const readStateDefinesProjection = ['unread', 'new', 'updated'].includes(quickFilter)
+      || Boolean(refineFilters.read?.length);
+    markRead = markRead && !readStateDefinesProjection;
     if (markRead && isMailboxUnread(item)) markItemRead(item.id);
+  }
+
+  function handleThreadKeydown(event, item) {
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    if (event.target?.matches?.('input, select, textarea, [contenteditable="true"]')) return;
+    const currentIndex = threads.findIndex((thread) => thread.id === item.id);
+    if (currentIndex < 0) return;
+    event.preventDefault();
+    const targetIndex = event.key === 'Home' ? 0
+      : event.key === 'End' ? threads.length - 1
+      : event.key === 'ArrowUp' ? Math.max(0, currentIndex - 1)
+      : Math.min(threads.length - 1, currentIndex + 1);
+    const target = threads[targetIndex];
+    if (!target) return;
+    setSelectedThreadId(target.id);
+    originatingThread = event.currentTarget;
+    requestAnimationFrame(() => {
+      const row = viewRoot?.querySelector(`[data-thread-id="${CSS.escape(target.id)}"]`);
+      row?.focus({ preventScroll: true });
+      row?.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  function onkeydown(node, item) {
+    let currentItem = item;
+    const handle = (event) => handleThreadKeydown(event, currentItem);
+    node.addEventListener('keydown', handle);
+    return {
+      update(nextItem) {
+        currentItem = nextItem;
+      },
+      destroy() {
+        node.removeEventListener('keydown', handle);
+      },
+    };
+  }
+
+  function filterLabel(value) {
+    const labels = {
+      unread: 'Unread', new: 'NEW', updated: 'UPDATED', critical: 'Critical', blocked: 'Blocked',
+      'due-soon': 'Due soon', 'in-progress': 'In progress', complete: 'Complete', archived: 'Archived',
+      enabled: 'Enabled', paused: 'Paused', disabled: 'Disabled', overdue: 'Overdue', later: 'Later',
+      none: 'None', email: 'Email', chat: 'Teams', meeting: 'Meeting', doc: 'Document',
+      today: 'Today', 'last-7-days': 'Last 7 days', 'last-30-days': 'Last 30 days', older: 'Older',
+      'no-activity': 'No activity', unassigned: 'Unassigned', read: 'Read', waiting: 'Waiting', unknown: 'Unknown',
+    };
+    return labels[value] || value;
+  }
+
+  function facetLabel(facet) {
+    return { severity: 'Severity', lifecycle: 'Lifecycle', scanner: 'Scanner', read: 'Read state', monitoring: 'Monitoring', due: 'Due', signal: 'Signal', 'activity-age': 'Activity' }[facet] || facet;
+  }
+
+  function toggleQuickFilter(value) {
+    quickFilter = quickFilter === value ? '' : value;
+  }
+
+  function toggleRefineFilter(facet, value, checked) {
+    const current = Array.isArray(refineFilters[facet]) ? refineFilters[facet] : [];
+    const values = checked ? [...new Set([...current, value])] : current.filter((entry) => entry !== value);
+    refineFilters = { ...refineFilters, [facet]: values };
+  }
+
+  function removeActiveFilter(filter) {
+    if (filter.facet === 'quick') {
+      quickFilter = '';
+      return;
+    }
+    toggleRefineFilter(filter.facet, filter.value, false);
   }
 
   function chooseView(id) {
     smartView = id;
-    selectedId = null;
+    setSelectedThreadId(null);
     originatingThread = null;
     mobileStep = 'list';
   }
@@ -222,6 +381,7 @@
   async function draftMessage(requestedChannel, initiator = null) {
     if (!selected || synthesisState.status === 'generating') return;
     const sourceItem = selected;
+    const request = composerRequestTracker.begin(sourceItem.id);
     const context = buildProposalSynthesisContext(sourceItem, { requestedChannel });
     if (!context || typeof window.workiq?.proposeThreadActions !== 'function') {
       synthesisState = {
@@ -234,13 +394,11 @@
       return;
     }
 
-    teamsDraft = null;
-    teamsCopyStatus = '';
-    teamsSendState = { status: 'idle', message: '' };
+    resetTeamsDraft();
     synthesisState = { threadId: sourceItem.id, requestedChannel, status: 'generating', result: null, error: '' };
     try {
       const response = await window.workiq.proposeThreadActions(context);
-      if (selected?.id !== sourceItem.id) return;
+      if (!isCurrentComposerRequest(request)) return;
       const result = response?.ok === true ? normalizeProposalSynthesisResult(response.result) : null;
       if (!result) {
         synthesisState = {
@@ -268,6 +426,7 @@
           )
         );
         if (created.length) {
+          if (!isCurrentComposerRequest(request)) return;
           actionProposals.set([...created, ...existing]);
           for (const createdProposal of created) {
             await recordRadarActionEvent({
@@ -280,16 +439,20 @@
               outcome: 'pending',
               verification: 'not-applicable',
             });
+            if (!isCurrentComposerRequest(request)) return;
           }
         }
         const emailProposal = created[0] || matchingExisting;
-        if (emailProposal) {
+        if (emailProposal && isCurrentComposerRequest(request)) {
+          synthesisState = { threadId: sourceItem.id, requestedChannel, status: 'ready', result: channelResult, error: '' };
+          composerRequestTracker.invalidate();
           selectedProposalId.set(emailProposal.id);
           openActionsQueue(initiator);
+          return;
         }
       } else {
         const proposal = matchingProposals[0];
-        if (proposal) {
+        if (proposal && isCurrentComposerRequest(request)) {
           const createdAt = new Date().toISOString();
           teamsDraft = {
             proposalId: inlineProposalId('teams', sourceItem.id, createdAt),
@@ -298,13 +461,17 @@
             attempt: 0,
             target: proposal.needsTargetResolution ? '' : proposal.target.displayName,
             message: proposal.payload.message,
+            why: result.why,
+            risk: proposal.risk,
+            reviewNote: proposal.reviewNote,
             needsTargetResolution: proposal.needsTargetResolution,
           };
         }
       }
+      if (!isCurrentComposerRequest(request)) return;
       synthesisState = { threadId: sourceItem.id, requestedChannel, status: 'ready', result: channelResult, error: '' };
     } catch (_) {
-      if (selected?.id === sourceItem.id) {
+      if (isCurrentComposerRequest(request)) {
         synthesisState = {
           threadId: sourceItem.id,
           requestedChannel,
@@ -317,19 +484,21 @@
   }
 
   async function copyTeamsDraft() {
-    if (!teamsDraft?.message) return;
+    const draft = teamsDraft;
+    if (!draft || draft.sourceItemId !== selected?.id || !draft.message) return;
     try {
-      await navigator.clipboard.writeText(teamsDraft.message);
-      teamsCopyStatus = 'Copied';
+      await navigator.clipboard.writeText(draft.message);
+      if (selected?.id === draft.sourceItemId) teamsCopyStatus = 'Copied';
     } catch (_) {
-      teamsCopyStatus = 'Copy unavailable';
+      if (selected?.id === draft.sourceItemId) teamsCopyStatus = 'Copy unavailable';
     }
   }
 
   async function sendTeamsDraft() {
-    if (!teamsDraft || !teamsDraft.target.trim() || teamsSendState.status === 'sending') return;
-    const target = teamsDraft.target.trim();
-    const message = teamsDraft.message.trim();
+    const draft = teamsDraft;
+    if (!draft || draft.sourceItemId !== selected?.id || !draft.target.trim() || teamsSendState.status === 'sending') return;
+    const target = draft.target.trim();
+    const message = draft.message.trim();
     if (!message) {
       teamsSendState = { status: 'error', message: 'Enter a message before sending.' };
       return;
@@ -339,9 +508,9 @@
       return;
     }
 
-    const attempt = (teamsDraft.attempt || 0) + 1;
+    const attempt = (draft.attempt || 0) + 1;
     const attemptedAt = new Date().toISOString();
-    teamsDraft = { ...teamsDraft, target, attempt };
+    teamsDraft = { ...draft, target, attempt };
     teamsSendState = { status: 'sending', message: '' };
     try {
       const response = await window.workiq.sendTeamsMessage({
@@ -349,10 +518,9 @@
         message,
       });
       if (response?.ok === true && response.action === 'teams-message-sent') {
-        teamsSendState = { status: 'sent', message: 'Message sent. Teams returned a matching send receipt.' };
         await recordRadarActionEvent({
-          proposalId: teamsDraft.proposalId,
-          itemId: teamsDraft.sourceItemId,
+          proposalId: draft.proposalId,
+          itemId: draft.sourceItemId,
           event: 'succeeded',
           timestamp: attemptedAt,
           channel: 'teams',
@@ -362,14 +530,16 @@
           code: 'SEND_CONFIRMED',
           attempt,
         });
+        if (selected?.id === draft.sourceItemId) {
+          teamsSendState = { status: 'sent', message: 'Message sent. Teams returned a matching send receipt.' };
+        }
         return;
       }
       const code = safeTeamsCode(response?.code);
       if (code === 'CANCELLED') {
-        teamsSendState = { status: 'idle', message: 'Send cancelled. No request was dispatched. Your draft was not changed.' };
         await recordRadarActionEvent({
-          proposalId: teamsDraft.proposalId,
-          itemId: teamsDraft.sourceItemId,
+          proposalId: draft.proposalId,
+          itemId: draft.sourceItemId,
           event: 'cancelled',
           timestamp: attemptedAt,
           channel: 'teams',
@@ -379,11 +549,13 @@
           code,
           attempt,
         });
+        if (selected?.id === draft.sourceItemId) {
+          teamsSendState = { status: 'idle', message: 'Send cancelled. No request was dispatched. Your draft was not changed.' };
+        }
       } else {
-        teamsSendState = { status: 'error', message: teamsSendError(code) };
         await recordRadarActionEvent({
-          proposalId: teamsDraft.proposalId,
-          itemId: teamsDraft.sourceItemId,
+          proposalId: draft.proposalId,
+          itemId: draft.sourceItemId,
           event: 'failed',
           timestamp: attemptedAt,
           channel: 'teams',
@@ -393,12 +565,14 @@
           code,
           attempt,
         });
+        if (selected?.id === draft.sourceItemId) {
+          teamsSendState = { status: 'error', message: teamsSendError(code) };
+        }
       }
     } catch (_) {
-      teamsSendState = { status: 'error', message: 'Delivery could not be confirmed. Check Teams before trying again.' };
       await recordRadarActionEvent({
-        proposalId: teamsDraft.proposalId,
-        itemId: teamsDraft.sourceItemId,
+        proposalId: draft.proposalId,
+        itemId: draft.sourceItemId,
         event: 'failed',
         timestamp: attemptedAt,
         channel: 'teams',
@@ -408,6 +582,9 @@
         code: 'SEND_UNCONFIRMED',
         attempt,
       });
+      if (selected?.id === draft.sourceItemId) {
+        teamsSendState = { status: 'error', message: 'Delivery could not be confirmed. Check Teams before trying again.' };
+      }
     }
   }
 
@@ -468,6 +645,8 @@
   async function confirmDeleteSelected() {
     const request = deleteRequest;
     if (!request || deleteState.status === 'deleting') return;
+    composerRequestTracker.setThread(null);
+    resetThreadComposer();
     deleteRequest = null;
     deleteState = { status: 'deleting', message: '' };
     const result = await deleteItem(request.id);
@@ -475,19 +654,16 @@
       const replacementId = threads.some((thread) => thread.id === request.replacementId)
         ? request.replacementId
         : null;
-      selectedId = replacementId;
+      setSelectedThreadId(replacementId);
       originatingThread = null;
       mobileStep = replacementId ? 'detail' : 'list';
-      synthesisState = { threadId: null, requestedChannel: null, status: 'idle', result: null, error: '' };
-      teamsDraft = null;
-      teamsCopyStatus = '';
-      teamsSendState = { status: 'idle', message: '' };
+      resetThreadComposer();
       deleteState = { status: 'idle', message: '' };
       if (replacementId) requestAnimationFrame(() => viewRoot?.querySelector('.radar-thread-detail h2')?.focus());
       return;
     }
 
-    selectedId = threads.some((thread) => thread.id === request.id) ? request.id : null;
+    setSelectedThreadId(threads.some((thread) => thread.id === request.id) ? request.id : null);
     mobileStep = selectedId ? 'detail' : 'list';
     deleteState = {
       status: 'error',
@@ -502,7 +678,22 @@
   }
 
   function viewCount(view) {
-    return projected.filter((item) => view.predicate(item, now)).length;
+    return projectionIndex.viewCounts.get(view.id) || 0;
+  }
+
+  function scannerThreadCount(requestedScannerId) {
+    return projectionIndex.scannerCounts.get(requestedScannerId) || 0;
+  }
+
+  function dueInputValue(value) {
+    const date = new Date(value || '');
+    if (!Number.isFinite(date.getTime())) return '';
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+    return local.toISOString().slice(0, 16);
+  }
+
+  function updateDueDate(itemId, value) {
+    setItemField(itemId, 'dueAt', value ? new Date(value).toISOString() : null);
   }
 
   function openNewScanner() {
@@ -510,9 +701,12 @@
     scannerModalOpen = true;
   }
 
-  function openScannerSettings() {
+  function openScannerSettings(event) {
     editingScanner = $scanners.find((scanner) => scanner.id === scannerId) || null;
-    if (editingScanner) scannerModalOpen = true;
+    if (editingScanner) {
+      scannerSettingsFocusOrigin = event?.currentTarget || document.activeElement;
+      scannerModalOpen = true;
+    }
   }
 
   function saveScanner(data) {
@@ -540,22 +734,186 @@
     savePersistentState();
   }
 
+  function scannerRunFailureMessage(code) {
+    if (code === 'BUSY') return 'This scanner is already running. Wait for it to finish.';
+    if (code === 'INVALID_RESPONSE') return 'The scanner returned an invalid result. Try again.';
+    return 'The scanner could not run. Try again.';
+  }
+
+  async function runScannerNow(scanner) {
+    try {
+      const result = await runScanner(scanner);
+      if (result?.ok === false) {
+        showToast(scannerRunFailureMessage(result.code), { icon: '!' });
+      } else if (result?.ok === true && result.newItemCount === 0) {
+        showToast(`Scanner "${scanner.name}" completed; no new items`, { icon: '\u2713' });
+      }
+      return result;
+    } catch (_) {
+      logError('scanner', 'Manual scanner run failed', { scannerId: scanner?.id });
+      showToast('The scanner could not run. Try again.', { icon: '!' });
+      return { ok: false, code: 'FAILED' };
+    }
+  }
+
   async function runEditingScanner() {
     if (!editingScanner || !$connected || $isDemo) return;
-    await runScanner(editingScanner);
+    const result = await runScannerNow(editingScanner);
+    if (result?.ok !== true) return;
     savePersistentState();
     scannerModalOpen = false;
   }
 
-  function deleteEditingScanner() {
-    if (!editingScanner) return;
-    const removedId = editingScanner.id;
-    scanners.update((entries) => entries.filter((entry) => entry.id !== removedId));
-    items.update((entries) => entries.filter((item) => item.scannerId !== removedId));
-    addHistory('action', `Deleted scanner "${editingScanner.name}" and its items`, { scannerId: removedId });
-    scannerId = 'all';
-    scannerModalOpen = false;
+  async function runSelectedScanner() {
+    const scanner = $scanners.find((entry) => entry.id === scannerId);
+    if (!scanner || !$connected || $isDemo) return;
+    const result = await runScannerNow(scanner);
+    if (result?.ok !== true) return;
     savePersistentState();
+  }
+
+  async function requestScannerDeletion({ scannerId: requestedScannerId, returnFocus }) {
+    const preview = await previewScannerDeletion(requestedScannerId);
+    if (preview?.ok === false) return;
+    scannerModalOpen = false;
+    scannerDeletion = {
+      open: true,
+      preview,
+      status: 'idle',
+      message: '',
+      returnFocus: scannerSettingsFocusOrigin || returnFocus || null,
+    };
+  }
+
+  function cancelScannerDeletion() {
+    const canReopenSettings = editingScanner
+      && $scanners.some((entry) => entry.id === editingScanner.id);
+    scannerDeletion = {
+      open: false,
+      preview: null,
+      status: 'idle',
+      message: '',
+      returnFocus: null,
+    };
+    if (canReopenSettings) {
+      scannerModalOpen = true;
+      requestAnimationFrame(() => {
+        document.querySelector('[data-testid="scanner-settings-delete"]')?.focus();
+      });
+    }
+  }
+
+  function scannerDeletionFailureMessage(code) {
+    if (code === 'BUSY') return 'This scanner or one of its threads is running. Wait for it to finish, then try again.';
+    if (code === 'PERSISTENCE_FAILED') return 'FlightDeck could not save this change. Nothing was deleted. Check storage access and try again.';
+    if (code === 'INVALID_TARGET') return 'That destination is no longer available. Review the updated destinations and choose another one.';
+    if (code === 'NOT_FOUND') return 'This scanner no longer exists. Cancel and refresh Radar.';
+    return 'The scanner could not be deleted. Review the impact and try again.';
+  }
+
+  function replacementAfterScannerDeletion(affectedItemIds) {
+    const affected = new Set(affectedItemIds);
+    const view = VIEWS.find((entry) => entry.id === smartView) || VIEWS[0];
+    const needle = query.trim().toLowerCase();
+    return projected.find((item) =>
+      !affected.has(item.id)
+      && view.predicate(item, now)
+      && (!needle || [item.title, item.summary, item.reason, item.owner, ...(item.counterparties || [])]
+        .some((value) => String(value || '').toLowerCase().includes(needle)))
+    )?.id || null;
+  }
+
+  async function confirmScannerDeletion(request) {
+    if (!scannerDeletion.preview || ['submitting', 'recovery'].includes(scannerDeletion.status)) return;
+    composerRequestTracker.setThread(null);
+    resetThreadComposer();
+    const currentPreview = scannerDeletion.preview;
+    const replacementId = request.disposition === 'delete-all'
+      ? replacementAfterScannerDeletion(currentPreview.itemIds)
+      : selectedId;
+    scannerDeletion = { ...scannerDeletion, status: 'submitting', message: '' };
+
+    const result = await executeScannerDeletion({
+      scannerId: currentPreview.scanner.id,
+      disposition: request.disposition,
+      targetScannerId: request.targetScannerId,
+      previewToken: request.previewToken,
+    });
+
+    if (result.ok) {
+      const selectedWasDeleted = request.disposition === 'delete-all'
+        && result.affectedItemIds.includes(selectedId);
+      const highlightedWasDeleted = request.disposition === 'delete-all'
+        && result.affectedItemIds.includes(get(highlightedItemId));
+      scannerId = 'all';
+      editingScanner = null;
+      scannerSettingsFocusOrigin = null;
+      scannerModalOpen = false;
+      if (selectedWasDeleted) {
+        setSelectedThreadId(replacementId);
+        originatingThread = null;
+        mobileStep = replacementId ? 'detail' : 'list';
+        resetThreadComposer();
+      }
+      if (highlightedWasDeleted) highlightedItemId.set(null);
+      scannerDeletion = {
+        open: false,
+        preview: null,
+        status: 'idle',
+        message: '',
+        returnFocus: null,
+      };
+      requestAnimationFrame(() => {
+        const focusTarget = replacementId
+          ? viewRoot?.querySelector('.radar-thread-detail h2')
+          : viewRoot?.querySelector('[data-testid="radar-new-scanner"]');
+        focusTarget?.focus();
+      });
+      return;
+    }
+
+    if (result.code === 'STALE_PREVIEW') {
+      const refreshedPreview = await previewScannerDeletion(currentPreview.scanner.id);
+      scannerDeletion = refreshedPreview?.ok === false
+        ? {
+            ...scannerDeletion,
+            status: 'error',
+            message: scannerDeletionFailureMessage(refreshedPreview.code),
+          }
+        : {
+            ...scannerDeletion,
+            preview: refreshedPreview,
+            status: 'error',
+            message: 'The scanner changed while you were reviewing it. Review the updated impact and confirm again.',
+          };
+      return;
+    }
+
+    if (result.code === 'INVALID_TARGET') {
+      const refreshedPreview = await previewScannerDeletion(currentPreview.scanner.id);
+      scannerDeletion = {
+        ...scannerDeletion,
+        preview: refreshedPreview?.ok === false ? currentPreview : refreshedPreview,
+        status: 'error',
+        message: scannerDeletionFailureMessage(result.code),
+      };
+      return;
+    }
+
+    if (result.code === 'PERSISTENCE_RECOVERY_REQUIRED') {
+      scannerDeletion = {
+        ...scannerDeletion,
+        status: 'recovery',
+        message: 'FlightDeck could not verify recovery after the save failed. Reload the app before making more changes.',
+      };
+      return;
+    }
+
+    scannerDeletion = {
+      ...scannerDeletion,
+      status: 'error',
+      message: scannerDeletionFailureMessage(result.code),
+    };
   }
 
   function createTask(data) {
@@ -573,7 +931,7 @@
     items.update((entries) => [item, ...entries]);
     smartView = 'inbox';
     scannerId = 'all';
-    selectedId = item.id;
+    setSelectedThreadId(item.id);
     mobileStep = 'detail';
     taskModalOpen = false;
     addHistory('action', `Added item "${item.title}"`, { itemId: item.id, scannerId: item.scannerId });
@@ -650,15 +1008,25 @@
             on:click={() => { scannerId = scanner.id; mobileStep = 'list'; }}>
             <i class:enabled={scanner.enabled}></i>
             <span>{scanner.name}</span>
-            <strong>{scanner.enabled ? 'On' : 'Paused'}</strong>
+            <strong>{scannerThreadCount(scanner.id)} · {scanner.enabled ? 'On' : 'Paused'}</strong>
           </button>
         {/each}
         {#if scannerId !== 'all'}
+          {@const currentScanner = $scanners.find((scanner) => scanner.id === scannerId)}
+          {#if currentScanner}
+            <dl class="radar-scanner-status">
+              <div><dt>Last run</dt><dd>{safeDate(currentScanner.lastRunAt, 'Never')}{currentScanner.lastRunStatus === 'success' ? ' · Completed' : currentScanner.lastRunStatus === 'failed' ? ' · Failed' : ''}</dd></div>
+              <div><dt>Next run</dt><dd>{safeDate(currentScanner.nextRunAt, 'Not scheduled')}</dd></div>
+            </dl>
+          {/if}
           <div class="radar-scanner-actions">
             <button type="button" class="small-btn" data-testid="radar-edit-scanner" on:click={openScannerSettings}>Settings</button>
             <button type="button" class="small-btn" data-testid="radar-toggle-scanner" on:click={toggleScanner}>
               {$scanners.find((scanner) => scanner.id === scannerId)?.enabled ? 'Pause' : 'Resume'}
             </button>
+            <button type="button" class="small-btn" disabled={!$connected || $isDemo}
+              title={$isDemo ? 'Scanner execution is disabled in demo mode' : !$connected ? 'Connect WorkIQ to run this scanner' : 'Run scanner now'}
+              on:click={runSelectedScanner}>Run scanner</button>
           </div>
         {/if}
       </section>
@@ -670,6 +1038,79 @@
         <strong>{VIEWS.find((entry) => entry.id === smartView)?.label}</strong>
         <span>{threads.length} {threads.length === 1 ? 'thread' : 'threads'}</span>
       </header>
+      <div class="inbox-filter-bar" aria-label="Inbox filters">
+        <div class="inbox-quick-filters" role="group" aria-label="Quick filters">
+          <button type="button" data-testid="inbox-quick-unread" aria-pressed={quickFilter === 'unread'} on:click={() => toggleQuickFilter('unread')}>Unread</button>
+          <button type="button" data-testid="inbox-quick-new" aria-pressed={quickFilter === 'new'} on:click={() => toggleQuickFilter('new')}>NEW</button>
+          <button type="button" data-testid="inbox-quick-updated" aria-pressed={quickFilter === 'updated'} on:click={() => toggleQuickFilter('updated')}>UPDATED</button>
+          <button type="button" data-testid="inbox-quick-critical" aria-pressed={quickFilter === 'critical'} on:click={() => toggleQuickFilter('critical')}>Critical</button>
+          <button type="button" data-testid="inbox-quick-blocked" aria-pressed={quickFilter === 'blocked'} on:click={() => toggleQuickFilter('blocked')}>Blocked</button>
+          <button type="button" data-testid="inbox-quick-due-soon" aria-pressed={quickFilter === 'due-soon'} on:click={() => toggleQuickFilter('due-soon')}>Due soon</button>
+        </div>
+        <details class="inbox-refine">
+          <summary>Refine</summary>
+          <div class="inbox-refine__panel">
+            <fieldset>
+              <legend>Severity</legend>
+              {#each ['Critical', 'Elevated', 'Observe'] as value}
+                <label><input type="checkbox" checked={refineFilters.severity?.includes(value)} on:change={(event) => toggleRefineFilter('severity', value, event.target.checked)} /> {value}</label>
+              {/each}
+            </fieldset>
+            <fieldset>
+              <legend>Lifecycle</legend>
+              {#each LIFECYCLE_STATUSES as value}
+                <label><input type="checkbox" checked={refineFilters.lifecycle?.includes(value)} on:change={(event) => toggleRefineFilter('lifecycle', value, event.target.checked)} /> {LIFECYCLE_LABELS[value]}</label>
+              {/each}
+            </fieldset>
+            <fieldset>
+              <legend>Scanner</legend>
+              <label><input type="checkbox" checked={refineFilters.scanner?.includes('unassigned')} on:change={(event) => toggleRefineFilter('scanner', 'unassigned', event.target.checked)} /> Unassigned</label>
+              {#each $scanners as scanner (scanner.id)}
+                <label><input type="checkbox" checked={refineFilters.scanner?.includes(scanner.id)} on:change={(event) => toggleRefineFilter('scanner', scanner.id, event.target.checked)} /> {scanner.name}</label>
+              {/each}
+            </fieldset>
+            <fieldset>
+              <legend>Read state</legend>
+              {#each ['unread', 'read'] as value}
+                <label><input type="checkbox" checked={refineFilters.read?.includes(value)} on:change={(event) => toggleRefineFilter('read', value, event.target.checked)} /> {filterLabel(value)}</label>
+              {/each}
+            </fieldset>
+            <fieldset>
+              <legend>Monitoring</legend>
+              {#each ['enabled', 'paused', 'disabled'] as value}
+                <label><input type="checkbox" checked={refineFilters.monitoring?.includes(value)} on:change={(event) => toggleRefineFilter('monitoring', value, event.target.checked)} /> {filterLabel(value)}</label>
+              {/each}
+            </fieldset>
+            <fieldset>
+              <legend>Due</legend>
+              {#each ['overdue', 'due-soon', 'later', 'none'] as value}
+                <label><input type="checkbox" checked={refineFilters.due?.includes(value)} on:change={(event) => toggleRefineFilter('due', value, event.target.checked)} /> {filterLabel(value)}</label>
+              {/each}
+            </fieldset>
+            <fieldset>
+              <legend>Signal</legend>
+              {#each ['email', 'chat', 'meeting', 'doc'] as value}
+                <label><input type="checkbox" checked={refineFilters.signal?.includes(value)} on:change={(event) => toggleRefineFilter('signal', value, event.target.checked)} /> {filterLabel(value)}</label>
+              {/each}
+            </fieldset>
+            <fieldset>
+              <legend>Activity age</legend>
+              {#each ['today', 'last-7-days', 'last-30-days', 'older', 'no-activity'] as value}
+                <label><input type="checkbox" checked={refineFilters['activity-age']?.includes(value)} on:change={(event) => toggleRefineFilter('activity-age', value, event.target.checked)} /> {filterLabel(value)}</label>
+              {/each}
+            </fieldset>
+          </div>
+        </details>
+        {#if activeFilters.length}
+          <div class="inbox-active-filters" aria-label="Active filters">
+            {#each activeFilters as filter (`${filter.facet}:${filter.value}`)}
+              <button type="button" data-testid="inbox-active-filter"
+                aria-label={`Remove ${filter.label} filter`}
+                on:click={() => removeActiveFilter(filter)}>{filter.label} <span aria-hidden="true">×</span></button>
+            {/each}
+          </div>
+        {/if}
+      </div>
       <div class="radar-thread-list">
         {#if threads.length}
           {#each threads as item (item.id)}
@@ -681,6 +1122,8 @@
               class:unread={isMailboxUnread(item)}
               data-thread-id={item.id}
               aria-current={selectedId === item.id ? 'true' : undefined}
+              tabindex={selectedId === item.id || (!selectedId && item.id === firstThreadId) ? 0 : -1}
+              use:onkeydown={item}
               on:click={(event) => selectThread(item, event.currentTarget, { markRead: true })}>
               <span class="mailbox-row-topline radar-thread__top">
                 <span class="mailbox-unread-dot" aria-label={isMailboxUnread(item) ? 'Unread' : 'Read'}></span>
@@ -690,6 +1133,10 @@
               <span class="mailbox-row-preview radar-thread__preview">{preview(item)}</span>
               <span class="mailbox-row-meta radar-thread__meta">
                 <span>{item.sourceType || 'Signal'}</span>
+                {#if item.isNew}<span class="inbox-state-cue inbox-state-cue--new">NEW</span>{/if}
+                {#if item.hasNewUpdate}<span class="inbox-state-cue inbox-state-cue--updated">UPDATED</span>{/if}
+                {#if isMailboxSnoozed(item, now)}<span title={`Snoozed until ${safeDate(item.snoozeUntil)}`}>Snoozed</span>{/if}
+                {#if item.monitorPaused}<span>Monitoring paused</span>{/if}
                 <span class="mailbox-status mailbox-status-{statusClass}" title={`Work status: ${statusLabel}`}>{statusLabel}</span>
                 <span class="mailbox-severity mailbox-severity-{severityLabel.toLowerCase()}" title={`Criticality: ${severityLabel}`}>{severityLabel}</span>
               </span>
@@ -736,6 +1183,31 @@
               </select>
             </span>
           </label>
+          <label class="radar-control-field">
+            <span>Scanner assignment</span>
+            <select aria-label="Scanner assignment"
+              bind:value={() => selected.scannerId || '', (value) => setItemField(selected.id, 'scannerId', value || null)}>
+              <option value="">Unassigned</option>
+              {#each $scanners as scanner (scanner.id)}
+                <option value={scanner.id}>{scanner.name}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="radar-control-field">
+            <span>Due date</span>
+            <input aria-label="Due date" type="datetime-local"
+              bind:value={() => dueInputValue(selected.dueAt), (value) => updateDueDate(selected.id, value)} />
+          </label>
+          <label class="radar-control-field radar-control-field--grow">
+            <span>Owner</span>
+            <input aria-label="Owner" type="text" maxlength="160"
+              bind:value={() => selected.owner || '', (value) => setItemField(selected.id, 'owner', value.trim())} />
+          </label>
+          <label class="radar-control-field radar-control-field--wide">
+            <span>Done criteria</span>
+            <input aria-label="Done criteria" type="text" maxlength="500"
+              bind:value={() => selected.doneCriteria || '', (value) => setItemField(selected.id, 'doneCriteria', value.trim())} />
+          </label>
           {#if isMailboxUnread(selected)}
             <button type="button" class="small-btn radar-utility-button" title="Mark this item as read" on:click={() => markItemRead(selected.id)}>Read</button>
           {/if}
@@ -766,7 +1238,7 @@
               {synthesisState.result.noCommunicationReason || synthesisState.result.recommendation}
             </p>
           {/if}
-          {#if teamsDraft}
+          {#if teamsDraft && teamsDraft.sourceItemId === selected.id}
             <section class="radar-teams-draft" data-testid="teams-draft-editor">
               <header>
                 <div>
@@ -789,6 +1261,11 @@
                   <textarea rows="7" maxlength="4000" bind:value={teamsDraft.message}></textarea>
                 </label>
               </div>
+              <dl class="radar-context-meta">
+                {#if teamsDraft.why}<div><dt>Why</dt><dd>{teamsDraft.why}</dd></div>{/if}
+                {#if teamsDraft.risk}<div><dt>Risk</dt><dd>{teamsDraft.risk}</dd></div>{/if}
+                {#if teamsDraft.reviewNote}<div><dt>Review note</dt><dd>{teamsDraft.reviewNote}</dd></div>{/if}
+              </dl>
               <p class="radar-teams-draft__note">Review the recipient and message before sending. FlightDeck will ask for confirmation.</p>
               <div class="command-buttons radar-teams-draft__actions">
                 <button type="button" class="small-btn primary" data-testid="teams-draft-send"
@@ -797,7 +1274,7 @@
                   {teamsSendState.status === 'sending' ? 'Sending…' : teamsSendState.status === 'sent' ? 'Sent' : 'Send message'}
                 </button>
                 <button type="button" class="small-btn" data-testid="teams-draft-copy" on:click={copyTeamsDraft}>Copy message</button>
-                <button type="button" class="small-btn" on:click={() => { teamsDraft = null; teamsCopyStatus = ''; teamsSendState = { status: 'idle', message: '' }; }}>Close</button>
+                <button type="button" class="small-btn" on:click={resetTeamsDraft}>Close</button>
                 {#if teamsCopyStatus}<span role="status">{teamsCopyStatus}</span>{/if}
               </div>
               {#if teamsSendState.message}
@@ -879,6 +1356,9 @@
               <div><dt>Owner</dt><dd>{selected.owner || 'You'}</dd></div>
               <div><dt>Due</dt><dd>{safeDate(selected.dueAt, 'No due date')}</dd></div>
               <div><dt>Last checked</dt><dd>{safeDate(selected.lastRunAt, 'Never')}</dd></div>
+              {#if selected.completionConfidence}
+                <div><dt>Completion confidence</dt><dd>{selected.completionConfidence}</dd></div>
+              {/if}
             </dl>
             <div class="radar-context-block" data-testid="radar-context-people">
               <h4>People <span>{selected.counterparties?.length || 0}</span></h4>
@@ -931,8 +1411,13 @@
 <ScannerSettingsModal open={scannerModalOpen} scanner={editingScanner}
   canRun={$connected && !$isDemo}
   runDisabledReason={$isDemo ? 'Scanner execution is disabled in demo mode' : 'Connect WorkIQ to run this scanner'}
-  onsave={saveScanner} onrunnow={runEditingScanner} ondelete={deleteEditingScanner}
+  onsave={saveScanner} onrunnow={runEditingScanner} ondelete={requestScannerDeletion}
   onclose={() => { scannerModalOpen = false; }} />
+
+<ScannerDeletionModal open={scannerDeletion.open} preview={scannerDeletion.preview}
+  status={scannerDeletion.status} message={scannerDeletion.message}
+  returnFocus={scannerDeletion.returnFocus}
+  onconfirm={confirmScannerDeletion} oncancel={cancelScannerDeletion} />
 
 <AddTaskModal open={taskModalOpen}
   scannerId={scannerId === 'all' ? $scanners[0]?.id : scannerId}

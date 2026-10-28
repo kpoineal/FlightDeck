@@ -11,8 +11,10 @@
     return (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3);
   }));
   let nextMove = $derived(ranked.find((item) => /meridian/i.test(item.title)) || ranked[0] || null);
-  let urgent = $derived(ranked.filter((item) => item.severity === 'Critical' || item.isBlocked).slice(0, 4));
-  let approvals = $derived($actionProposals.filter((proposal) => !proposal.archivedAt && ['Drafted', 'Awaiting review', 'Approved'].includes(proposal.state)));
+  let urgent = $derived(ranked.filter((item) => item.severity === 'Critical' || item.lifecycleStatus === 'blocked').slice(0, 4));
+  let approvals = $derived($actionProposals.filter((proposal) => proposal.auditOnly !== true
+    && !proposal.archivedAt
+    && ['Drafted', 'Awaiting review', 'Approved'].includes(proposal.state)));
 
   function propose(item, content = null, initiator = null) {
     if (!item) return;

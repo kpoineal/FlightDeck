@@ -6,6 +6,10 @@
   function handleBackdrop(e) {
     if (e.target === e.currentTarget) onclose?.();
   }
+
+  function handleDelete(event) {
+    ondelete?.({ scannerId: scanner.id, returnFocus: event.currentTarget });
+  }
 </script>
 
 {#if open}
@@ -20,8 +24,8 @@
         onrunnow={() => onrunnow?.()}
         oncancel={() => onclose?.()} />
       {#if scanner}
-        <button class="scanner-modal-delete"
-          on:click={() => ondelete?.({ scannerId: scanner.id })}>Delete this scanner</button>
+        <button type="button" class="scanner-modal-delete" data-testid="scanner-settings-delete"
+          on:click={handleDelete}>Delete this scanner</button>
       {/if}
     </div>
   </div>

@@ -8,6 +8,7 @@ const persistenceStub = `data:text/javascript,${encodeURIComponent(`
   export function pruneHistory() {}
   export function savePersistentState() {
     globalThis.__mailboxTestSaveCalls = (globalThis.__mailboxTestSaveCalls || 0) + 1;
+    globalThis.__mailboxTestOnMonitorCycleSaved?.();
   }
   export function isAcceptedPersistenceReceipt(receipt) {
     if (receipt === true) return true;
@@ -31,6 +32,9 @@ const persistenceStub = `data:text/javascript,${encodeURIComponent(`
 `)}`;
 const jsonParserStub = `data:text/javascript,${encodeURIComponent(`
   export async function runWorkiqJson() {
+    if (typeof globalThis.__mailboxTestRunWorkiqJson === 'function') {
+      return globalThis.__mailboxTestRunWorkiqJson();
+    }
     return globalThis.__mailboxTestMonitorPayload;
   }
 `)}`;
@@ -64,6 +68,9 @@ let markItemRead;
 let recordActionEvent;
 let setItemLifecycle;
 let runItemCheck;
+let startMonitoringLoop;
+let stopMonitoringLoop;
+let connected;
 
 function monitoredItem(overrides = {}) {
   return {
@@ -119,17 +126,20 @@ function matchingPayload(overrides = {}) {
 
 before(async () => {
   ({ get } = await import('svelte/store'));
-  ({ items, history, activeOperations } = await import('../src/svelte/lib/stores.js'));
+  ({ items, history, activeOperations, connected } = await import('../src/svelte/lib/stores.js'));
   ({ createActionEventId, markItemRead, recordActionEvent, setItemLifecycle } = await import('../src/svelte/lib/item-actions.js'));
-  ({ runItemCheck } = await import('../src/svelte/lib/monitor-engine.js'));
+  ({ runItemCheck, startMonitoringLoop, stopMonitoringLoop } = await import('../src/svelte/lib/monitor-engine.js'));
 });
 
 beforeEach(() => {
   items.set([]);
   history.set([]);
   activeOperations.set(new Map());
+  connected.set(false);
   globalThis.__mailboxTestSaveCalls = 0;
   globalThis.__mailboxTestMonitorPayload = null;
+  globalThis.__mailboxTestRunWorkiqJson = null;
+  globalThis.__mailboxTestOnMonitorCycleSaved = null;
   globalThis.__mailboxTestToasts = [];
   globalThis.window = {
     workiq: {
@@ -447,5 +457,89 @@ describe('monitor mailbox behavior', () => {
     const updated = get(items)[0];
     assert.equal(updated.updateHistory.filter((entry) => entry.kind !== 'action').length, 20);
     assert.equal(updated.updateHistory.some((entry) => entry.eventId === 'older-action'), true);
+  });
+
+  it('bounds concurrent due checks and continues the queue after one check rejects', { timeout: 5000 }, async () => {
+    const dueItems = Array.from({ length: 7 }, (_, index) => monitoredItem({
+      id: `thread-${index + 1}`,
+      title: `Review launch plan ${index + 1}`,
+      nextRunAt: '2000-01-01T00:00:00.000Z',
+    }));
+    items.set(dueItems);
+    connected.set(true);
+
+    let startedCount = 0;
+    let activeCount = 0;
+    let maxActiveCount = 0;
+    const initialChecks = [];
+    const startedWaiters = new Map();
+    let resolveInitialStarted;
+    const initialStarted = new Promise((resolve) => {
+      resolveInitialStarted = resolve;
+    });
+    let resolveCycleDone;
+    const cycleDone = new Promise((resolve) => {
+      resolveCycleDone = resolve;
+    });
+
+    const waitForStartedCount = (count) => {
+      if (startedCount >= count) return Promise.resolve();
+      return new Promise((resolve) => startedWaiters.set(count, resolve));
+    };
+
+    globalThis.__mailboxTestOnMonitorCycleSaved = resolveCycleDone;
+    globalThis.__mailboxTestRunWorkiqJson = () => {
+      const attempt = startedCount++;
+      activeCount += 1;
+      maxActiveCount = Math.max(maxActiveCount, activeCount);
+      for (const [count, resolve] of startedWaiters) {
+        if (startedCount >= count) {
+          startedWaiters.delete(count);
+          resolve();
+        }
+      }
+      if (startedCount === 3) resolveInitialStarted();
+
+      if (attempt < 3) {
+        let settled = false;
+        const settle = (finish) => {
+          if (settled) return;
+          settled = true;
+          activeCount -= 1;
+          finish();
+        };
+        return new Promise((resolve, reject) => {
+          initialChecks[attempt] = {
+            resolve: () => settle(() => resolve(matchingPayload())),
+            reject: () => settle(() => reject(new Error('simulated monitor failure'))),
+          };
+        });
+      }
+
+      return Promise.resolve(matchingPayload()).finally(() => {
+        activeCount -= 1;
+      });
+    };
+
+    try {
+      startMonitoringLoop();
+      await initialStarted;
+      assert.equal(startedCount, 3);
+      assert.equal(maxActiveCount, 3);
+
+      initialChecks[0].reject();
+      await waitForStartedCount(4);
+      initialChecks[1].resolve();
+      initialChecks[2].resolve();
+      await cycleDone;
+
+      assert.equal(startedCount, dueItems.length);
+      assert.equal(maxActiveCount, 3);
+      assert.ok(get(items).every((item) => item.lastRunAt));
+      assert.equal(globalThis.__mailboxTestSaveCalls, 1);
+    } finally {
+      for (const check of initialChecks) check?.resolve();
+      stopMonitoringLoop();
+    }
   });
 });

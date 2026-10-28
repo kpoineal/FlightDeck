@@ -20,6 +20,10 @@ let get;
 let isAcceptedPersistenceReceipt;
 let items;
 let loadPersistentState;
+let MAX_ACTIVE_ITEMS;
+let savePersistentState;
+let coldState;
+let coldWrites;
 let storedState;
 let storeSetReceipts;
 let writes;
@@ -53,10 +57,17 @@ before(async () => {
   ({ get } = await import('svelte/store'));
   ({ deletedItemIds, items } = await import('../src/svelte/lib/stores.js'));
   ({ deleteItem } = await import('../src/svelte/lib/item-actions.js'));
-  ({ isAcceptedPersistenceReceipt, loadPersistentState } = await import('../src/svelte/lib/persistence.js'));
+  ({ MAX_ACTIVE_ITEMS } = await import('../src/svelte/lib/constants.js'));
+  ({
+    isAcceptedPersistenceReceipt,
+    loadPersistentState,
+    savePersistentState,
+  } = await import('../src/svelte/lib/persistence.js'));
 });
 
 beforeEach(() => {
+  coldState = [];
+  coldWrites = [];
   storedState = persistedFixture();
   storeSetReceipts = [];
   writes = [];
@@ -70,8 +81,12 @@ beforeEach(() => {
       },
       storeDelete: async () => ({ success: true }),
       readPromptFile: async () => ({ success: false }),
-      getColdItems: async () => [],
-      setColdItems: async () => ({ success: true }),
+      getColdItems: async () => structuredClone(coldState),
+      setColdItems: async (entries) => {
+        coldState = structuredClone(entries);
+        coldWrites.push(structuredClone(entries));
+        return { success: true };
+      },
       broadcastStateChanged: () => {},
     },
   };
@@ -156,5 +171,73 @@ describe('permanent card deletion persistence boundary', () => {
     assert.deepEqual(get(items), []);
     assert.deepEqual(get(deletedItemIds), ['card-1']);
     assert.deepEqual(storedState.deletedItemIds, ['card-1']);
+  });
+});
+
+describe('eviction convergence', () => {
+  it('removes accepted age eviction from live and canonical state without repeating the cold write', async () => {
+    await loadPersistentState();
+    items.set([
+      card(),
+      {
+        ...card(),
+        id: 'age-evicted',
+        title: 'Old archived work',
+        lifecycleStatus: 'archived',
+        lastChangedAt: '2000-01-01T00:00:00Z',
+      },
+    ]);
+    writes = [];
+
+    const firstSave = await savePersistentState();
+    const secondSave = await savePersistentState();
+
+    assert.deepEqual({
+      firstSave,
+      secondSave,
+      liveIds: get(items).map((item) => item.id),
+      canonicalIds: storedState.items.map((item) => item.id),
+      coldIds: coldState.map((item) => item.id),
+      coldWriteCount: coldWrites.length,
+    }, {
+      firstSave: true,
+      secondSave: true,
+      liveIds: ['card-1'],
+      canonicalIds: ['card-1'],
+      coldIds: ['age-evicted'],
+      coldWriteCount: 1,
+    });
+  });
+
+  it('removes accepted cap eviction from live and canonical state without repeating the cold write', async () => {
+    await loadPersistentState();
+    const activeItems = Array.from({ length: MAX_ACTIVE_ITEMS + 1 }, (_, index) => ({
+      ...card(),
+      id: `cap-${String(index).padStart(3, '0')}`,
+      title: `Cap item ${index}`,
+      lifecycleStatus: 'in-progress',
+      discoveredAt: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+    }));
+    items.set(activeItems);
+    writes = [];
+
+    const firstSave = await savePersistentState();
+    const secondSave = await savePersistentState();
+
+    assert.deepEqual({
+      firstSave,
+      secondSave,
+      liveCount: get(items).length,
+      canonicalCount: storedState.items.length,
+      coldIds: coldState.map((item) => item.id),
+      coldWriteCount: coldWrites.length,
+    }, {
+      firstSave: true,
+      secondSave: true,
+      liveCount: MAX_ACTIVE_ITEMS,
+      canonicalCount: MAX_ACTIVE_ITEMS,
+      coldIds: ['cap-000'],
+      coldWriteCount: 1,
+    });
   });
 });

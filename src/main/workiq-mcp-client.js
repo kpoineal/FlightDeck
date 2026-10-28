@@ -277,13 +277,13 @@ function createWorkiqMcpClient(options = {}) {
     if (launcher.toLowerCase().endsWith('.js')) {
       return {
         executable: options.nodeExecutable || getNodeExecutable(),
-        args: [launcher, 'mcp', '--log-level', 'Error'],
+        args: [launcher, '--log-level', 'Error', 'mcp'],
       };
     }
 
     return {
       executable: launcher,
-      args: ['mcp', '--log-level', 'Error'],
+      args: ['--log-level', 'Error', 'mcp'],
     };
   }
 
@@ -728,6 +728,7 @@ function hasCreatedTeamsMessageEvidence(result, expectedChatId, expectedContent)
 function resolveAskTool(tools) {
   if (!(tools instanceof Set)) return null;
   if (tools.has('ask')) return 'ask';
+  if (tools.has('ask_work_iq')) return 'ask_work_iq';
   return [...tools].find((name) => /(?:^|[-_.:])ask$/i.test(name) && /workiq/i.test(name)) || null;
 }
 

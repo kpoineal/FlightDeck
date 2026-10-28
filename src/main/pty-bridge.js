@@ -116,6 +116,10 @@ function stripAnsi(text) {
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
+function isWorkiqDiagnostic(output) {
+  return /^(?:error|ERROR):\s/i.test(String(output || '').trim());
+}
+
 function runWorkiqCommand(question) {
   log('[main] Received WorkIQ question, length:', String(question || '').length);
 
@@ -168,7 +172,7 @@ function runWorkiqCommand(question) {
       log('[main] Effective exit code:', effectiveExitCode);
       log('[main] Final visible output length:', output.length);
 
-      if (effectiveExitCode === 0 && output) {
+      if (effectiveExitCode === 0 && output && !isWorkiqDiagnostic(output)) {
         resolve({ success: true, answer: output });
       } else if (output) {
         resolve({ success: false, error: output });
@@ -314,6 +318,7 @@ module.exports = {
   workiqLauncher,
   getNodeExecutable,
   stripAnsi,
+  isWorkiqDiagnostic,
   runWorkiqCommand,
   runWorkiqAcceptEula,
 };

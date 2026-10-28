@@ -70,6 +70,42 @@ test('RadarView source uses helper and has no fallback to first visible thread',
   assert.doesNotMatch(source, /threads\[0\]/);
 });
 
+test('RadarView imports normalizeItem for the mounted Add Item path', () => {
+  const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+  const createTask = source.match(/function createTask\(data\).*?\n  \}/s)?.[0] || '';
+
+  assert.match(source, /import\s*\{[^}]*\bnormalizeItem\b[^}]*\}\s*from '\.\.\/lib\/models\/item\.js'/s);
+  assert.match(createTask, /const item = normalizeItem\(\{/);
+});
+
+test('Today urgent work uses the canonical blocked lifecycle regardless of severity', () => {
+  const source = fs.readFileSync(new URL('../src/svelte/components/TodayView.svelte', import.meta.url), 'utf8');
+  const urgent = source.match(/let urgent = \$derived\((.*?)\);/s)?.[1] || '';
+
+  assert.match(urgent, /item\.lifecycleStatus === 'blocked'/);
+  assert.doesNotMatch(urgent, /item\.isBlocked/);
+});
+
+test('Radar Teams review preserves and displays synthesis rationale, risk, and review note', () => {
+  const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+  const assignment = source.match(/teamsDraft = \{\s*proposalId:.*?needsTargetResolution:.*?\n\s*\};/s)?.[0] || '';
+  const editor = source.match(/<section class="radar-teams-draft".*?<\/section>/s)?.[0] || '';
+
+  assert.match(assignment, /why:\s*result\.why/);
+  assert.match(assignment, /risk:\s*proposal\.risk/);
+  assert.match(assignment, /reviewNote:\s*proposal\.reviewNote/);
+  assert.match(editor, /teamsDraft\.why/);
+  assert.match(editor, /teamsDraft\.risk/);
+  assert.match(editor, /teamsDraft\.reviewNote/);
+});
+
+test('Radar approved detail surfaces completion confidence', () => {
+  const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+
+  assert.match(source, /Completion confidence/i);
+  assert.match(source, /selected\.completionConfidence/);
+});
+
 test('RadarView external navigation focuses and scrolls the matching rendered row', () => {
   const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
 
@@ -204,10 +240,76 @@ test('Radar Inbox rows use Mailbox row classes and canonical criticality and wor
 
 test('Radar Inbox preserves chronological sorting independently of status and read state', () => {
   const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
-  const inboxSort = source.match(/if \(smartView === 'inbox'\)[^\n]*/)?.[0] || '';
+  const threadProjection = source.match(/let threads = \$derived\.by\(\(\) => \{.*?\n  \}\);/s)?.[0] || '';
 
-  assert.match(inboxSort, /sort\(compareInboxThreads\)/);
-  assert.doesNotMatch(inboxSort, /isMailboxUnread|lifecycleStatus|severity/);
+  assert.match(source, /let sort = \$state\('recent'\)/);
+  assert.match(threadProjection, /sort === 'recent'/);
+  assert.match(threadProjection, /sort\(compareInboxThreads\)/);
+  assert.match(threadProjection, /sort\(compareMailboxThreads\)/);
+  assert.doesNotMatch(threadProjection, /smartView === 'inbox'\) return .*sort\(compareInboxThreads\)/);
+});
+
+test('Radar Inbox composes independent sort, quick filter, Refine, search, smart view, and scanner state', () => {
+  const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+  const threadProjection = source.match(/let threads = \$derived\.by\(\(\) => \{.*?\n  \}\);/s)?.[0] || '';
+
+  assert.match(source, /from '\.\.\/lib\/inbox-filters\.js'/);
+  assert.match(source, /let quickFilter = \$state\(/);
+  assert.match(source, /let refineFilters = \$state\(/);
+  assert.match(threadProjection, /quickFilter/);
+  assert.match(threadProjection, /refineFilters/);
+  assert.match(threadProjection, /filterInboxItems|matchesInboxFilters/);
+  assert.match(threadProjection, /view\.predicate/);
+  assert.match(threadProjection, /scannerId === 'all'/);
+  assert.match(threadProjection, /query\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(source, /data-testid="inbox-quick-(?:unread|new|updated|critical|blocked|due-soon)"/);
+  assert.match(source, />Refine</);
+  assert.match(source, /data-testid="inbox-active-filter"/);
+  assert.match(source, /aria-label=\{`Remove .* filter`\}/);
+});
+
+test('Radar Inbox restores frequent item and scanner controls with state cues', () => {
+  const radar = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+
+  for (const label of ['Scanner assignment', 'Due date', 'Owner', 'Done criteria']) {
+    assert.match(radar, new RegExp(label, 'i'), `${label} is not editable in the mounted Inbox`);
+  }
+  assert.match(radar, /\bNEW\b/);
+  assert.match(radar, /\bUPDATED\b/);
+  assert.match(radar, /snoozeUntil/);
+  assert.match(radar, /monitorPaused/);
+  assert.match(radar, /lastRunAt/);
+  assert.match(radar, /nextRunAt/);
+  assert.match(radar, /runScanner/);
+  assert.match(radar, /Run (?:scanner|now)/i);
+  assert.match(radar, /viewCount\(view\)|scanner.*count/i);
+});
+
+test('Radar Inbox supports roving keyboard selection without coupling it to read state', () => {
+  const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+  const keyboardHandler = source.match(/function (?:handleThreadKeydown|onThreadKeydown)\(.*?\n  \}/s)?.[0] || '';
+  const row = source.match(/<button type="button" class="radar-thread mailbox-thread-row".*?<\/button>/s)?.[0] || '';
+
+  for (const key of ['ArrowUp', 'ArrowDown', 'Home', 'End']) assert.match(keyboardHandler, new RegExp(`['"]${key}['"]`));
+  assert.match(row, /on:keydown|onkeydown/);
+  assert.match(row, /tabindex=/);
+  assert.doesNotMatch(keyboardHandler, /markItemRead/);
+});
+
+test('Advanced or popout keeps prompt, schedule, signal, and notification controls accessible without prompt regeneration', () => {
+  const radar = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+  const popout = fs.readFileSync(new URL('../src/svelte/components/PopoutView.svelte', import.meta.url), 'utf8');
+  const schedule = fs.readFileSync(new URL('../src/svelte/components/ScheduleControls.svelte', import.meta.url), 'utf8');
+  const advancedSurfaces = `${radar}\n${popout}`;
+
+  assert.match(advancedSurfaces, /Advanced|Edit monitoring prompt/);
+  assert.match(advancedSurfaces, /monitorPrompt/);
+  assert.match(advancedSurfaces, /ScheduleControls/);
+  assert.match(schedule, /monitorSignals/);
+  assert.match(schedule, /notifyEnabled/);
+  assert.match(schedule, /weeklyDays/);
+  assert.match(schedule, /weeklyTimes/);
+  assert.doesNotMatch(advancedSurfaces, /buildDefaultMonitorPrompt/);
 });
 
 test('Radar Inbox keeps compact rows bounded and readable', () => {
