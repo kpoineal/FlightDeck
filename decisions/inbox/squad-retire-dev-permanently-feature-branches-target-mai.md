@@ -1,0 +1,4 @@
+### 2026-10-28T20-53-50: Retire dev permanently; feature branches target main
+**By:** Squad
+**What:** Retire dev permanently; feature branches target main
+**Why:** The project owner explicitly requested on 2026-10-28: "ok can you remove the dev branch now? I want to create feature branches and merge to main, not dev. Not sure why we even have dev." Both local and remote dev were fully merged into main through #170, with no open PRs targeting dev, before deletion. Future changes must branch from main and open PRs targeting main. Do not recreate dev or use generic Squad dev-first guidance. Retire the obsolete dev-based promotion workflow, retain existing tag-based FlightDeck releases, and do not treat unrelated preview/insider branches as integration requirements. The local git-workflow skill is ignored by git; its guidance is being updated locally, while CONTRIBUTING.md records the shared main-first policy.
