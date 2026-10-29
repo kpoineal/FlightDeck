@@ -28,11 +28,12 @@ let mainWindow = null;
 let appTray = null;
 let isQuitting = false;
 let shutdownComplete = false;
+let shutdownStarted = false;
 const popoutWindows = new Set();
 const workiqMcpClient = createWorkiqMcpClient();
 
 // Register IPC handlers — pass getter for mainWindow since it's set after createWindow()
-registerIpcHandlers(() => mainWindow, popoutWindows, { workiqMcpClient });
+const cleanupIpc = registerIpcHandlers(() => mainWindow, popoutWindows, { workiqMcpClient });
 
 const { IPC_CHANNELS } = require('../shared/ipc-contract');
 
@@ -173,6 +174,9 @@ app.on('before-quit', (event) => {
   if (shutdownComplete) return;
 
   event.preventDefault();
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  cleanupIpc();
   workiqMcpClient.shutdown().finally(() => {
     shutdownComplete = true;
     app.quit();

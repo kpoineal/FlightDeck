@@ -116,6 +116,27 @@ describe('preload IPC contract', () => {
     unsubscribe();
     assert.deepEqual(removeCalls, [[IPC_CHANNELS.APP_RESUMED, listener]]);
   });
+
+  it('forwards ask scheduling metadata and queue snapshots/events with listener cleanup', async () => {
+    const options = { priority: 'background', key: 'scanner:one', maxAttempts: 1 };
+    await exposedApi.ask('question', options);
+    await exposedApi.getWorkiqQueueStatus();
+    assert.deepEqual(invokeCalls, [
+      [IPC_CHANNELS.ASK_WORKIQ, 'question', options],
+      [IPC_CHANNELS.GET_WORKIQ_QUEUE_STATUS],
+    ]);
+    const statuses = [];
+    const off = exposedApi.onWorkiqQueueStatus((status) => statuses.push(status));
+    const [channel, listener] = onCalls[0];
+    assert.equal(channel, IPC_CHANNELS.WORKIQ_QUEUE_STATUS_CHANGED);
+    const status = { active: 2, pending: 3, limit: 5, backgroundLimit: 4, cooldownUntil: 0 };
+    listener({}, status);
+    assert.deepEqual(statuses, [status]);
+    off();
+    assert.deepEqual(removeCalls, [[channel, listener]]);
+    exposedApi.onWorkiqQueueStatus(null)();
+    assert.equal(onCalls.length, 1);
+  });
 });
 
 describe('registerIpcHandlers()', () => {
@@ -130,6 +151,11 @@ describe('registerIpcHandlers()', () => {
   let workiqTeamsCalls;
   let dialogCalls;
   let dialogResponse;
+  let workiqAskCalls;
+  let queueListener;
+  let cleanup;
+  let queueUnsubscribed;
+  let popouts;
 
   beforeEach(() => {
     handlers = new Map();
@@ -143,6 +169,10 @@ describe('registerIpcHandlers()', () => {
     workiqTeamsCalls = [];
     dialogCalls = [];
     dialogResponse = 0;
+    workiqAskCalls = [];
+    queueListener = null;
+    queueUnsubscribed = false;
+    popouts = new Set();
 
     electronMock.ipcMain.handle = (channel, handler) => {
       handlers.set(channel, handler);
@@ -214,8 +244,17 @@ describe('registerIpcHandlers()', () => {
     const handlersPath = path.resolve(__dirname, '../src/main/ipc-handlers.js');
     delete require.cache[handlersPath];
     const { registerIpcHandlers } = require(handlersPath);
-    registerIpcHandlers(() => currentMainWindow, new Set(), {
+    cleanup = registerIpcHandlers(() => currentMainWindow, popouts, {
       workiqMcpClient: {
+        ask: async (...args) => {
+          workiqAskCalls.push(args);
+          return { success: true, answer: 'MCP answer', attempts: 1 };
+        },
+        getQueueStatus: () => ({ active: 2, pending: 1, limit: 5, backgroundLimit: 4, cooldownUntil: 0 }),
+        onQueueStatus: (listener) => {
+          queueListener = listener;
+          return () => { queueUnsubscribed = true; };
+        },
         probe: async () => {
           workiqMcpProbeCalls += 1;
           return { ok: true, readOnly: true, mcp: 'available', auth: 'unknown' };
@@ -239,6 +278,7 @@ describe('registerIpcHandlers()', () => {
   it('registers IPC handlers using canonical channel constants', () => {
     assert.equal(typeof handlers.get(IPC_CHANNELS.GET_APP_VERSION), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.ASK_WORKIQ), 'function');
+    assert.equal(typeof handlers.get(IPC_CHANNELS.GET_WORKIQ_QUEUE_STATUS), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.ACCEPT_WORKIQ_EULA), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.PROBE_WORKIQ_MCP), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.PROPOSE_THREAD_ACTIONS), 'function');
@@ -250,6 +290,37 @@ describe('registerIpcHandlers()', () => {
     assert.equal(typeof handlers.get(IPC_CHANNELS.OPEN_EXTERNAL), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.SHOW_DESKTOP_NOTIFICATION), 'function');
     assert.equal(typeof eventHandlers.get(IPC_CHANNELS.TRACKER_STATE_CHANGED), 'function');
+  });
+
+  it('routes reads and scheduling metadata to MCP without PTY fallback', async () => {
+    const options = { priority: 'background', key: 'item:one', maxAttempts: 1 };
+    assert.deepEqual(await handlers.get(IPC_CHANNELS.ASK_WORKIQ)(null, 'question', options), {
+      success: true, answer: 'MCP answer', attempts: 1,
+    });
+    assert.deepEqual(workiqAskCalls, [['question', options]]);
+    assert.equal(dialogCalls.length, 0);
+  });
+
+  it('provides an initial queue snapshot, broadcasts safely to all windows, and unsubscribes', () => {
+    const status = handlers.get(IPC_CHANNELS.GET_WORKIQ_QUEUE_STATUS)();
+    const deliveries = [];
+    currentMainWindow = {
+      isDestroyed: () => false,
+      webContents: { send: (...args) => deliveries.push(['main', ...args]) },
+    };
+    popouts.add({
+      isDestroyed: () => false,
+      webContents: { send: (...args) => deliveries.push(['popout', ...args]) },
+    });
+    popouts.add({ isDestroyed: () => true });
+    popouts.add({ isDestroyed: () => false, webContents: { send: () => { throw new Error('private'); } } });
+    queueListener(status);
+    assert.deepEqual(deliveries, [
+      ['main', IPC_CHANNELS.WORKIQ_QUEUE_STATUS_CHANGED, status],
+      ['popout', IPC_CHANNELS.WORKIQ_QUEUE_STATUS_CHANGED, status],
+    ]);
+    cleanup();
+    assert.equal(queueUnsubscribed, true);
   });
 
   it('runs the read-only WorkIQ MCP probe without accepting renderer input', async () => {

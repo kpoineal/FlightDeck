@@ -313,12 +313,14 @@ const _parseFailureCounts = {};
  * @param {function} validator - Validates parsed JSON; return true if valid
  * @param {string} label - Label for logging/diagnostics
  * @param {object} [options]
- * @param {number} [options.maxRetries=1]
+ * @param {number} [options.maxRetries=1] - Extra attempts, capped at two total including backend retries
  * @param {number} [options.retryDelayMs=2000]
  * @param {function} [options.onRetry]
+ * @param {'background'|'interactive'} [options.priority='interactive']
+ * @param {string} [options.key] - Shared queue coalescing key
  * @returns {Promise<object>} Parsed and validated JSON payload
  */
-export async function runWorkiqJson(prompt, validator, label, { maxRetries = 1, retryDelayMs = 2000, onRetry } = {}) {
+export async function runWorkiqJson(prompt, validator, label, { maxRetries = 1, retryDelayMs = 2000, onRetry, priority = 'interactive', key } = {}) {
   // Demo mode: skip all WorkIQ calls
   const { get } = await import('svelte/store');
   const { isDemo } = await import('./stores.js');
@@ -327,16 +329,18 @@ export async function runWorkiqJson(prompt, validator, label, { maxRetries = 1, 
     return null;
   }
 
-  let lastError;
+  // Network retries and JSON retries share one budget, not nested budgets.
+  let remainingAttempts = Math.min(2, Math.max(1, Math.floor(maxRetries) + 1));
 
-  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+  for (let attempt = 0; remainingAttempts > 0; attempt += 1) {
     if (attempt > 0) {
       console.warn(`[flightdeck] ${label}: retry ${attempt}/${maxRetries} after parse failure`);
       if (typeof onRetry === 'function') onRetry(attempt, maxRetries);
       await new Promise((r) => setTimeout(r, retryDelayMs));
     }
 
-    const result = await window.workiq.ask(prompt);
+    const result = await window.workiq.ask(prompt, { priority, ...(key ? { key } : {}), maxAttempts: remainingAttempts });
+    remainingAttempts -= Number.isInteger(result.attempts) && result.attempts > 0 ? result.attempts : 1;
     const raw = result.success ? result.answer : result.error;
 
     // Detect EULA gate: WorkIQ returns EULA text instead of data
@@ -346,7 +350,9 @@ export async function runWorkiqJson(prompt, validator, label, { maxRetries = 1, 
     }
 
     if (!result.success) {
-      throw new Error(result.error || `${label} query failed.`);
+      const error = new Error(result.error || `${label} query failed.`);
+      if (result.code) error.code = result.code;
+      throw error;
     }
 
     try {
@@ -357,7 +363,6 @@ export async function runWorkiqJson(prompt, validator, label, { maxRetries = 1, 
         `[flightdeck] ${label}: parse failure #${_parseFailureCounts[label]} (attempt ${attempt + 1}/${maxRetries + 1})`,
         parseErr.message
       );
-      lastError = parseErr;
     }
   }
 

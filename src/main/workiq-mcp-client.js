@@ -4,12 +4,16 @@ const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { spawn } = require('child_process');
+const { StringDecoder } = require('string_decoder');
+const { AsyncLocalStorage } = require('async_hooks');
 const { workiqLauncher, getNodeExecutable } = require('./pty-bridge');
 const { log, logError } = require('./utils');
+const { createWorkiqRequestQueue } = require('./workiq-request-queue');
 
 const DEFAULT_INITIALIZE_TIMEOUT = 30000;
 const DEFAULT_PROBE_TIMEOUT = 10000;
 const DEFAULT_SEMANTIC_TIMEOUT = 60000;
+const DEFAULT_READ_TIMEOUT = 300000;
 const DEFAULT_SHUTDOWN_GRACE = 1000;
 const DEFAULT_MAX_MESSAGE_BYTES = 1024 * 1024;
 const MCP_PROTOCOL_VERSION = '2025-03-26';
@@ -115,18 +119,25 @@ function createWorkiqMcpClient(options = {}) {
   const initializeTimeout = options.initializeTimeout || DEFAULT_INITIALIZE_TIMEOUT;
   const probeTimeout = options.probeTimeout || DEFAULT_PROBE_TIMEOUT;
   const semanticTimeout = options.semanticTimeout || DEFAULT_SEMANTIC_TIMEOUT;
+  const readTimeout = options.readTimeout || DEFAULT_READ_TIMEOUT;
   const shutdownGrace = options.shutdownGrace || DEFAULT_SHUTDOWN_GRACE;
   const maxMessageBytes = options.maxMessageBytes || DEFAULT_MAX_MESSAGE_BYTES;
+  const queue = createWorkiqRequestQueue(options.queueOptions);
+  const transportLease = new AsyncLocalStorage();
+  const outstandingTransports = new Map();
 
   let child = null;
   let stdoutBuffer = '';
+  let stdoutDecoder = new StringDecoder('utf8');
   let nextRequestId = 1;
   let initializePromise = null;
   let probePromise = null;
   let availableTools = null;
+  let toolsPromise = null;
   let shuttingDown = false;
   let synthesisModulePromise = null;
   const pendingRequests = new Map();
+  const tombstones = new Set();
 
   function publicFailure(code) {
     return {
@@ -180,6 +191,8 @@ function createWorkiqMcpClient(options = {}) {
     stdoutBuffer = '';
     initializePromise = null;
     availableTools = null;
+    toolsPromise = null;
+    tombstones.clear();
     rejectPending(code);
   }
 
@@ -222,33 +235,59 @@ function createWorkiqMcpClient(options = {}) {
     }
 
     if (message.id === undefined) {
+      if (typeof message.method !== 'string' || !message.method
+        || 'result' in message || 'error' in message) protocolFailure();
       return;
     }
 
     const request = pendingRequests.get(message.id);
     if (!request) {
+      if (tombstones.has(message.id)) return;
       protocolFailure();
       return;
     }
 
     pendingRequests.delete(message.id);
     clearTimeout(request.timeout);
+    request.releaseTransport();
+    if (request.timedOut) {
+      tombstones.add(message.id);
+      if (tombstones.size > 256) tombstones.delete(tombstones.values().next().value);
+    }
 
-    if (message.error) {
-      request.reject(createClientError('PROTOCOL_ERROR'));
+    if (Object.prototype.hasOwnProperty.call(message, 'error')) {
+      if (!message.error || typeof message.error !== 'object'
+        || !Number.isInteger(message.error.code) || typeof message.error.message !== 'string'
+        || Object.prototype.hasOwnProperty.call(message, 'result')) {
+        request.reject(createClientError('PROTOCOL_ERROR'));
+        protocolFailure();
+        return;
+      }
+      const failure = classifyRemoteFailure(message.error, 'RPC_ERROR');
+      queue.observeFailure(failure);
+      request.reject(failure);
       return;
     }
 
     if (!Object.prototype.hasOwnProperty.call(message, 'result')) {
       request.reject(createClientError('PROTOCOL_ERROR'));
+      protocolFailure();
       return;
     }
 
+    if (message.result?.isError === true || message.result?.structuredContent?.isError === true
+      || message.result?.structuredContent?.error) {
+      const structuredError = message.result?.structuredContent?.error;
+      queue.observeFailure(classifyRemoteFailure({
+        message: `${extractToolText(message.result)} ${typeof structuredError?.message === 'string' ? structuredError.message : ''}`,
+        data: structuredError?.data,
+      }, 'TOOL_ERROR'));
+    }
     request.resolve(message.result);
   }
 
   function handleStdout(chunk) {
-    stdoutBuffer += chunk.toString('utf8');
+    stdoutBuffer += stdoutDecoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
 
     if (Buffer.byteLength(stdoutBuffer, 'utf8') > maxMessageBytes && !stdoutBuffer.includes('\n')) {
       protocolFailure();
@@ -306,8 +345,11 @@ function createWorkiqMcpClient(options = {}) {
 
     child = startedChild;
     stdoutBuffer = '';
+    stdoutDecoder = new StringDecoder('utf8');
 
-    startedChild.stdout.on('data', handleStdout);
+    startedChild.stdout.on('data', (chunk) => {
+      if (child === startedChild) handleStdout(chunk);
+    });
     startedChild.stderr.on('data', () => {});
     startedChild.stdin.on('error', () => {
       logError('[main] WorkIQ MCP stream error');
@@ -316,6 +358,9 @@ function createWorkiqMcpClient(options = {}) {
     startedChild.stdout.on('error', () => {
       logError('[main] WorkIQ MCP stream error');
       failProcess(startedChild, 'PROCESS_EXITED');
+    });
+    startedChild.stdout.on('end', () => {
+      if (!shuttingDown) failProcess(startedChild, 'PROCESS_EXITED');
     });
     startedChild.stderr.on('error', () => {
       logError('[main] WorkIQ MCP stream error');
@@ -328,6 +373,7 @@ function createWorkiqMcpClient(options = {}) {
     startedChild.on('exit', () => {
       log('[main] WorkIQ MCP process exited');
       clearProcess(startedChild, 'PROCESS_EXITED');
+      for (const release of outstandingTransports.get(startedChild) || []) release();
     });
     log('[main] WorkIQ MCP process started');
 
@@ -345,15 +391,24 @@ function createWorkiqMcpClient(options = {}) {
   function sendRequest(method, params, timeoutMs) {
     const activeChild = startProcess();
     const id = nextRequestId++;
+    const releaseSlot = transportLease.getStore()?.retain() || (() => {});
+    if (!outstandingTransports.has(activeChild)) outstandingTransports.set(activeChild, new Set());
+    const transports = outstandingTransports.get(activeChild);
+    const releaseTransport = () => {
+      if (!transports.delete(releaseTransport)) return;
+      if (!transports.size) outstandingTransports.delete(activeChild);
+      releaseSlot();
+    };
+    transports.add(releaseTransport);
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        pendingRequests.delete(id);
+        const request = pendingRequests.get(id);
+        if (request) request.timedOut = true;
         reject(createClientError('TIMEOUT'));
-        terminateProcess('TIMEOUT');
       }, timeoutMs);
 
-      pendingRequests.set(id, { resolve, reject, timeout });
+      pendingRequests.set(id, { resolve, reject, timeout, releaseTransport, timedOut: false });
 
       try {
         activeChild.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
@@ -361,7 +416,7 @@ function createWorkiqMcpClient(options = {}) {
         clearTimeout(timeout);
         pendingRequests.delete(id);
         reject(createClientError('PROCESS_EXITED'));
-        terminateProcess('PROCESS_EXITED');
+        failProcess(activeChild, 'PROCESS_EXITED');
       }
     });
   }
@@ -369,20 +424,26 @@ function createWorkiqMcpClient(options = {}) {
   function ensureInitialized() {
     if (initializePromise) return initializePromise;
 
-    initializePromise = sendRequest('initialize', {
+    const activeChild = startProcess();
+    const promise = sendRequest('initialize', {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: { name: 'FlightDeck', version: '2.0.0' },
     }, initializeTimeout).then((result) => {
-      if (!result || typeof result !== 'object' || typeof result.protocolVersion !== 'string') {
+      if (child !== activeChild) throw createClientError('PROCESS_EXITED');
+      if (!result || typeof result !== 'object' || result.protocolVersion !== MCP_PROTOCOL_VERSION) {
+        failProcess(activeChild, 'PROTOCOL_ERROR');
         throw createClientError('PROTOCOL_ERROR');
       }
       sendNotification('notifications/initialized');
     }).catch((error) => {
-      initializePromise = null;
+      if (child === activeChild) {
+        failProcess(activeChild, error.code || 'PROTOCOL_ERROR');
+      }
       throw error;
     });
 
+    initializePromise = promise;
     return initializePromise;
   }
 
@@ -399,20 +460,30 @@ function createWorkiqMcpClient(options = {}) {
   async function ensureTools() {
     await ensureInitialized();
     if (availableTools) return availableTools;
-
-    const result = await sendRequest('tools/list', {}, probeTimeout);
-    if (!result || typeof result !== 'object' || !Array.isArray(result.tools)) {
-      throw createClientError('PROTOCOL_ERROR');
-    }
-
-    availableTools = new Set();
-    for (const tool of result.tools) {
-      if (!tool || typeof tool !== 'object' || typeof tool.name !== 'string') {
+    if (toolsPromise) return toolsPromise;
+    const activeChild = child;
+    const promise = sendRequest('tools/list', {}, probeTimeout).then((result) => {
+      if (child !== activeChild) throw createClientError('PROCESS_EXITED');
+      if (!result || typeof result !== 'object' || !Array.isArray(result.tools)) {
+        failProcess(activeChild, 'PROTOCOL_ERROR');
         throw createClientError('PROTOCOL_ERROR');
       }
-      availableTools.add(tool.name);
-    }
-    return availableTools;
+      const tools = new Set();
+      for (const tool of result.tools) {
+        if (!tool || typeof tool !== 'object' || typeof tool.name !== 'string'
+          || !tool.name.trim() || tools.has(tool.name)) {
+          failProcess(activeChild, 'PROTOCOL_ERROR');
+          throw createClientError('PROTOCOL_ERROR');
+        }
+        tools.add(tool.name);
+      }
+      availableTools = tools;
+      return tools;
+    }).finally(() => {
+      if (toolsPromise === promise) toolsPromise = null;
+    });
+    toolsPromise = promise;
+    return promise;
   }
 
   function probe() {
@@ -422,7 +493,6 @@ function createWorkiqMcpClient(options = {}) {
     probePromise = runProbe()
       .catch((error) => {
         const code = error && typeof error.code === 'string' ? error.code : 'PROTOCOL_ERROR';
-        if (child) terminateProcess(code);
         return publicFailure(code);
       })
       .finally(() => {
@@ -454,7 +524,8 @@ function createWorkiqMcpClient(options = {}) {
       createDispatched = true;
       const result = await createPromise;
 
-      if (!result || typeof result !== 'object' || result.isError === true) {
+      if (!result || typeof result !== 'object' || result.isError === true
+        || result.structuredContent?.isError === true || result.structuredContent?.error) {
         const content = Array.isArray(result?.content)
           ? result.content.map((item) => typeof item?.text === 'string' ? item.text : '').join(' ')
           : '';
@@ -474,7 +545,6 @@ function createWorkiqMcpClient(options = {}) {
       };
     } catch (error) {
       const code = error && typeof error.code === 'string' ? error.code : 'CREATE_FAILED';
-      if (code !== 'INVALID_DRAFT' && child) terminateProcess(code);
       return actionFailure(code, createDispatched);
     }
   }
@@ -495,7 +565,10 @@ function createWorkiqMcpClient(options = {}) {
         name: fetchTool,
         arguments: { entityUrls: ['/me/chats?$expand=members'] },
       }, probeTimeout);
-      if (!chatsResult || chatsResult.isError === true) return teamsFailure('RESOLUTION_FAILED');
+      if (!chatsResult || chatsResult.isError === true
+        || chatsResult.structuredContent?.isError === true || chatsResult.structuredContent?.error) {
+        return teamsFailure('RESOLUTION_FAILED');
+      }
 
       const chats = extractEntityValues(chatsResult);
       const targetName = payload.targetDisplayName.toLocaleLowerCase();
@@ -520,6 +593,7 @@ function createWorkiqMcpClient(options = {}) {
       createDispatched = true;
       const sendResult = await sendPromise;
       if (!sendResult || typeof sendResult !== 'object' || Array.isArray(sendResult)
+        || sendResult.structuredContent?.isError === true || sendResult.structuredContent?.error
         || (Object.prototype.hasOwnProperty.call(sendResult, 'isError') && sendResult.isError !== false)) {
         return teamsFailure('SEND_UNCONFIRMED');
       }
@@ -529,7 +603,6 @@ function createWorkiqMcpClient(options = {}) {
       return { ok: true, action: 'teams-message-sent' };
     } catch (error) {
       const code = error && typeof error.code === 'string' ? error.code : 'SEND_FAILED';
-      if (code !== 'INVALID_MESSAGE' && child) terminateProcess(code);
       return teamsFailure(createDispatched ? 'SEND_UNCONFIRMED' : code);
     }
   }
@@ -553,7 +626,8 @@ function createWorkiqMcpClient(options = {}) {
         arguments: { question },
       }, semanticTimeout);
 
-      if (!result || typeof result !== 'object' || result.isError === true) {
+      if (!result || typeof result !== 'object' || result.isError === true
+        || result.structuredContent?.isError === true || result.structuredContent?.error) {
         const content = extractToolText(result);
         return synthesisFailure(/auth|sign[ -]?in|login|unauthorized|consent/i.test(content)
           ? 'AUTH_REQUIRED'
@@ -569,7 +643,6 @@ function createWorkiqMcpClient(options = {}) {
       };
     } catch (error) {
       const code = error && typeof error.code === 'string' ? error.code : 'SYNTHESIS_FAILED';
-      if (!['INVALID_CONTEXT', 'INVALID_RESPONSE'].includes(code) && child) terminateProcess(code);
       return synthesisFailure(code);
     }
   }
@@ -577,6 +650,7 @@ function createWorkiqMcpClient(options = {}) {
   async function shutdown() {
     if (shuttingDown) return;
     shuttingDown = true;
+    queue.shutdown();
     probePromise = null;
     initializePromise = null;
 
@@ -614,7 +688,122 @@ function createWorkiqMcpClient(options = {}) {
     });
   }
 
-  return { probe, proposeThreadActions, createOutlookDraft, sendTeamsMessage, shutdown };
+  async function ask(question, metadata = {}) {
+    if (typeof question !== 'string' || !question.trim() || question.length > 200000
+      || !metadata || typeof metadata !== 'object' || Array.isArray(metadata)
+      || Object.keys(metadata).some((key) => !['priority', 'key', 'maxAttempts'].includes(key))
+      || (metadata.priority !== undefined && !['interactive', 'background'].includes(metadata.priority))
+      || (metadata.key !== undefined && (typeof metadata.key !== 'string' || !metadata.key.trim() || metadata.key.length > 256))
+      || (metadata.maxAttempts !== undefined && ![1, 2].includes(metadata.maxAttempts))) {
+      return readFailure('INVALID_REQUEST', 0);
+    }
+    try {
+      const { value, attempts } = await scheduleRequest(async () => {
+        const tools = await ensureTools();
+        const name = resolveAskTool(tools);
+        if (!name) throw createClientError('UNSUPPORTED');
+        const result = await sendRequest('tools/call', { name, arguments: { question } }, readTimeout);
+        assertReadResult(result);
+        const answer = normalizeAskAnswer(result);
+        if (!answer) throw createClientError('INVALID_RESPONSE');
+        return { success: true, answer };
+      }, {
+        ...metadata,
+        // Never coalesce different prompts or attempt budgets, even when a caller reuses its key.
+        key: JSON.stringify(['ask', metadata.key || '', question, metadata.maxAttempts ?? 2]),
+      });
+      return { ...value, attempts };
+    } catch (error) {
+      return readFailure(error.code || 'REQUEST_FAILED', error.attempts || 0);
+    }
+  }
+
+  function scheduled(run, failure, readOnly = false) {
+    return scheduleRequest(run, { readOnly, maxAttempts: 1 })
+      .then(({ value }) => value)
+      .catch((error) => failure(error.code || 'REQUEST_FAILED'));
+  }
+
+  function scheduleRequest(run, metadata) {
+    return queue.schedule((lease) => transportLease.run(lease, run), metadata);
+  }
+
+  return {
+    ask,
+    probe: () => scheduled(probe, publicFailure, true),
+    proposeThreadActions: (context) => scheduled(() => proposeThreadActions(context), synthesisFailure, true),
+    createOutlookDraft: (draft) => scheduled(() => createOutlookDraft(draft), actionFailure),
+    sendTeamsMessage: (input) => scheduled(() => sendTeamsMessage(input), teamsFailure),
+    getQueueStatus: queue.getStatus,
+    onQueueStatus: queue.subscribe,
+    shutdown,
+  };
+}
+
+const READ_ERRORS = {
+  INVALID_REQUEST: 'Invalid WorkIQ request.',
+  QUEUE_FULL: 'WorkIQ is busy. Please try again shortly.',
+  THROTTLED: 'WorkIQ is temporarily rate limited.',
+  TIMEOUT: 'WorkIQ request timed out.',
+  SHUTTING_DOWN: 'WorkIQ is shutting down.',
+  AUTH_REQUIRED: 'WorkIQ sign-in is required.',
+};
+
+function readFailure(code, attempts) {
+  return { success: false, error: READ_ERRORS[code] || 'WorkIQ request failed.', code, attempts };
+}
+
+function classifyRemoteFailure(remote, fallback) {
+  const text = typeof remote?.message === 'string' ? remote.message : '';
+  const data = remote?.data;
+  const status = data?.status ?? data?.statusCode;
+  const code = status === 429 || /throttl|rate.?limit|too many requests/i.test(text)
+    ? 'THROTTLED'
+    : /auth|sign[ -]?in|login|unauthorized|consent/i.test(text) ? 'AUTH_REQUIRED' : fallback;
+  const error = createClientError(code);
+  // Only an actual HTTP Retry-After header establishes a shared server cooldown.
+  const headers = data?.headers;
+  if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+    const name = Object.keys(headers).find((key) => key.toLowerCase() === 'retry-after');
+    const value = name && headers[name];
+    if ((typeof value === 'string' && value.trim()) || typeof value === 'number') {
+      const seconds = Number(value);
+      const milliseconds = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
+      if (Number.isFinite(milliseconds) && milliseconds >= 0) error.retryAfterMs = milliseconds;
+    }
+  }
+  return error;
+}
+
+function assertReadResult(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) throw createClientError('INVALID_RESPONSE');
+  const structured = result.structuredContent;
+  if ((result.isError !== undefined && result.isError !== false)
+    || structured?.isError === true || structured?.error) {
+    throw classifyRemoteFailure({
+      message: `${extractToolText(result)} ${typeof structured?.error?.message === 'string' ? structured.error.message : ''}`,
+      data: structured?.error?.data,
+    }, 'TOOL_ERROR');
+  }
+}
+
+function normalizeAskAnswer(result) {
+  const text = extractToolText(result).trim();
+  if (text) {
+    try {
+      const value = JSON.parse(text);
+      if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'response')) {
+        return typeof value.response === 'string' ? value.response.trim() : '';
+      }
+      if (typeof value === 'string') return value.trim();
+      return value && typeof value === 'object' ? text : '';
+    } catch (_) {
+      return text;
+    }
+  }
+  // WorkIQ's verified ask envelope, not arbitrary structured entity payloads.
+  return typeof result.structuredContent?.response === 'string'
+    ? result.structuredContent.response.trim() : '';
 }
 
 function resolveEntityTool(tools, logicalName) {

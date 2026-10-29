@@ -11,7 +11,7 @@ const {
   getRuntimeWindowIcon,
   applyRuntimeWindowIcon,
 } = require('./utils');
-const { runWorkiqCommand, runWorkiqAcceptEula } = require('./pty-bridge');
+const { runWorkiqAcceptEula } = require('./pty-bridge');
 const { registerTrackerPopoutIpc } = require('./ipc/tracker-popout');
 const { IPC_CHANNELS } = require('../shared/ipc-contract');
 const { storeGet, storeSet, storeDelete, storeGetAll, storeGetSize, coldStoreGet, coldStoreSet } = require('./store');
@@ -72,6 +72,22 @@ function fetchLatestRelease() {
 
 function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
   const workiqMcpClient = dependencies.workiqMcpClient;
+  const unsubscribeQueue = workiqMcpClient?.onQueueStatus?.((status) => {
+    const windows = new Set([getMainWindow(), ...popoutWindows]);
+    for (const window of windows) {
+      try {
+        if (window && !window.isDestroyed() && !window.webContents.isDestroyed?.()) {
+          window.webContents.send(IPC_CHANNELS.WORKIQ_QUEUE_STATUS_CHANGED, status);
+        }
+      } catch (_) {
+        logError('[main] WorkIQ queue status delivery failed');
+      }
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GET_WORKIQ_QUEUE_STATUS, () =>
+    workiqMcpClient?.getQueueStatus?.()
+    || { active: 0, pending: 0, limit: 5, backgroundLimit: 4, cooldownUntil: 0 });
 
   ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
     try {
@@ -82,8 +98,15 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.ASK_WORKIQ, async (_event, question) => {
-    return runWorkiqCommand(question);
+  ipcMain.handle(IPC_CHANNELS.ASK_WORKIQ, async (_event, question, options) => {
+    try {
+      if (typeof workiqMcpClient?.ask !== 'function') {
+        return { success: false, error: 'WorkIQ is unavailable.', code: 'START_FAILED', attempts: 0 };
+      }
+      return await workiqMcpClient.ask(question, options);
+    } catch (_) {
+      return { success: false, error: 'WorkIQ request failed.', code: 'REQUEST_FAILED', attempts: 0 };
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.ACCEPT_WORKIQ_EULA, async () => {
@@ -555,6 +578,7 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
       return { available: false, error: e.message };
     }
   });
+  return () => unsubscribeQueue?.();
 }
 
 module.exports = { registerIpcHandlers };

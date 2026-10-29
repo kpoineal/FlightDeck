@@ -10,14 +10,15 @@ const persistenceStub = `data:text/javascript,${encodeURIComponent(`
   export function savePersistentState() {}
 `)}`;
 const actionsStub = `data:text/javascript,${encodeURIComponent(`
-  export function addHistory() {}
+  export function addHistory(...args) { globalThis.__scannerTriggerHistory.push(args); }
 `)}`;
 const toastStub = `data:text/javascript,${encodeURIComponent(`
   export function showToast() {}
 `)}`;
 const jsonParserStub = `data:text/javascript,${encodeURIComponent(`
-  export async function runWorkiqJson(prompt) {
+  export async function runWorkiqJson(prompt, validator, label, options) {
     globalThis.__scannerTriggerPrompts.push(prompt);
+    globalThis.__scannerTriggerOptions.push(options);
     const transport = globalThis.__scannerTriggerTransport;
     return typeof transport === 'function' ? transport(prompt) : { radarItems: [] };
   }
@@ -128,6 +129,8 @@ test.beforeEach(() => {
   originalWindow = globalThis.window;
   globalThis.window = { workiq: { showDesktopNotification: async () => {} } };
   globalThis.__scannerTriggerPrompts = [];
+  globalThis.__scannerTriggerOptions = [];
+  globalThis.__scannerTriggerHistory = [];
   globalThis.__scannerTriggerTransport = null;
   activeOperations.set(new Map());
   connected.set(false);
@@ -142,6 +145,8 @@ test.afterEach(() => {
   if (originalWindow === undefined) delete globalThis.window;
   else globalThis.window = originalWindow;
   delete globalThis.__scannerTriggerPrompts;
+  delete globalThis.__scannerTriggerOptions;
+  delete globalThis.__scannerTriggerHistory;
   delete globalThis.__scannerTriggerTransport;
   activeOperations.set(new Map());
   connected.set(false);
@@ -162,6 +167,7 @@ test('scanner start performs an immediate guarded due check before the 60-second
   assert.equal(timers.size, 1);
   assert.equal([...timers.values()][0].delay, 60_000);
   assert.equal(globalThis.__scannerTriggerPrompts.length, 1);
+  assert.deepEqual(globalThis.__scannerTriggerOptions[0], { priority: 'background', key: `scanner:${scanner.id}` });
   assert.equal(globalThis.__scannerTriggerPrompts[0], buildScannerPrompt(scanner, [], [scanner]));
   assert.equal(get(items).length, 0);
   assert.ok(get(scanners)[0].lastRunAt);
@@ -225,6 +231,7 @@ test('a valid zero-item scan updates scanner run bookkeeping without creating a 
   globalThis.__scannerTriggerTransport = async () => ({ radarItems: [] });
 
   await engine.runScanner(scanner);
+  assert.deepEqual(globalThis.__scannerTriggerOptions[0], { priority: 'interactive', key: `scanner:${scanner.id}` });
 
   const updatedScanner = get(scanners)[0];
   assert.equal(get(items).length, 0);
@@ -233,6 +240,111 @@ test('a valid zero-item scan updates scanner run bookkeeping without creating a 
   assert.ok(updatedScanner.lastRunAt);
   assert.notEqual(updatedScanner.lastRunAt, scanner.lastRunAt);
   assert.ok(updatedScanner.nextRunAt);
+});
+
+test('five scanner workers start in parallel, revalidate deferred jobs, and do not stack ticks', async () => {
+  const due = Array.from({ length: 9 }, (_, index) => makeScanner({ id: `parallel-${index}`, name: `Scanner ${index}` }));
+  scanners.set(due);
+  connected.set(true);
+  const releases = [];
+  let active = 0;
+  let peak = 0;
+  globalThis.__scannerTriggerTransport = () => {
+    active++;
+    peak = Math.max(peak, active);
+    return new Promise((resolve) => releases.push(() => { active--; resolve({ radarItems: [] }); }));
+  };
+  engine.startScannerEngine();
+  await waitForPromptCount(5);
+  assert.equal(globalThis.__scannerTriggerPrompts.length, 5);
+  assert.equal(peak, 5);
+  fireIntervals();
+  engine.resumeScannerEngine();
+  assert.equal(globalThis.__scannerTriggerPrompts.length, 5);
+  scanners.update((current) => current.filter((s) => s.id !== 'parallel-5').map((s) =>
+    s.id === 'parallel-6' ? { ...s, enabled: false } :
+    s.id === 'parallel-7' ? { ...s, nextRunAt: new Date(Date.now() + 3600000).toISOString() } :
+    s.id === 'parallel-8' ? { ...s, prompt: 'Latest deferred prompt' } : s));
+  releases[0]();
+  await waitForPromptCount(6);
+  assert.equal(globalThis.__scannerTriggerPrompts.length, 6);
+  assert.match(globalThis.__scannerTriggerPrompts[5], /Latest deferred prompt/);
+  assert.deepEqual(globalThis.__scannerTriggerOptions[5], { priority: 'background', key: 'scanner:parallel-8' });
+  releases.slice(1).forEach((release) => release());
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(get(activeOperations).size, 0);
+  assert.equal(peak, 5);
+});
+
+test('QUEUE_FULL leaves automatic scanner due without recording failure and retries next tick', async () => {
+  const scanner = makeScanner();
+  scanners.set([scanner]);
+  connected.set(true);
+  globalThis.__scannerTriggerTransport = () => { throw Object.assign(new Error('Full'), { code: 'QUEUE_FULL' }); };
+  engine.startScannerEngine();
+  await waitForPromptCount(1);
+  await new Promise((resolve) => setImmediate(resolve));
+  const deferred = get(scanners)[0];
+  assert.equal(deferred.lastRunAt, scanner.lastRunAt);
+  assert.notEqual(deferred.lastRunStatus, 'failed');
+  assert.equal(globalThis.__scannerTriggerHistory.length, 0);
+  assert.ok(new Date(deferred.nextRunAt).getTime() <= Date.now());
+  assert.equal(get(activeOperations).size, 0);
+  globalThis.__scannerTriggerTransport = async () => ({ radarItems: [] });
+  fireIntervals();
+  await waitForPromptCount(2);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(get(scanners)[0].lastRunStatus, 'success');
+});
+
+test('parallel scanner results still deduplicate before synchronous store merge', async () => {
+  const due = [makeScanner({ id: 'dedup-a' }), makeScanner({ id: 'dedup-b' })];
+  scanners.set(due);
+  connected.set(true);
+  const releases = [];
+  globalThis.__scannerTriggerTransport = () => new Promise((resolve) => releases.push(resolve));
+  engine.startScannerEngine();
+  await waitForPromptCount(2);
+  const payload = { radarItems: [{ id: 'shared-result', title: 'One shared result', summary: 'Shared evidence' }] };
+  releases.forEach((resolve) => resolve(payload));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(get(items).length, 1);
+  assert.equal(get(items)[0].id, 'shared-result');
+  assert.equal(get(scanners).filter((s) => s.lastRunStatus === 'success').length, 2);
+});
+
+test('same-scanner lease prevents a manual duplicate while the first call is pending', async () => {
+  const scanner = makeScanner();
+  scanners.set([scanner]);
+  let release;
+  globalThis.__scannerTriggerTransport = () => new Promise((resolve) => { release = resolve; });
+  const first = engine.runScanner(scanner);
+  await waitForPromptCount(1);
+  assert.deepEqual(await engine.runScanner(scanner), { ok: false, code: 'BUSY' });
+  assert.equal(globalThis.__scannerTriggerPrompts.length, 1);
+  release({ radarItems: [] });
+  await first;
+  assert.equal(get(activeOperations).size, 0);
+});
+
+test('EULA failure disconnects scanner cycle and stops dispatching deferred work', async () => {
+  scanners.set(Array.from({ length: 7 }, (_, index) => makeScanner({ id: `eula-${index}` })));
+  connected.set(true);
+  const releases = [];
+  let rejectFirst;
+  globalThis.__scannerTriggerTransport = () => new Promise((resolve, reject) => {
+    if (!rejectFirst) rejectFirst = reject;
+    releases.push(() => resolve({ radarItems: [] }));
+  });
+  engine.startScannerEngine();
+  await waitForPromptCount(5);
+  rejectFirst(new Error('WorkIQ EULA not accepted'));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(get(connected), false);
+  assert.equal(timers.size, 0);
+  releases.forEach((release) => release());
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(globalThis.__scannerTriggerPrompts.length, 5);
 });
 
 test('scanner execution passes the unchanged generated prompt to mocked WorkIQ transport', async () => {

@@ -1,5 +1,7 @@
 <script>
-  import { mode, connected, activeOperations, actionProposals, actionsQueueOpen, openActionsQueue } from '../lib/stores.js';
+  import { onMount } from 'svelte';
+  import { mode, connected, actionProposals, actionsQueueOpen, openActionsQueue } from '../lib/stores.js';
+  import { queuePresentation, watchWorkiqQueue } from '../lib/workiq-queue-status.js';
   import { setMode } from '../lib/actions.js';
   import SearchOverlay from './SearchOverlay.svelte';
   import iconUrl from '../../icon.png';
@@ -34,13 +36,9 @@
     }
   }
 
-  let activeCount = $derived($activeOperations.size);
-  let statusLabel = $derived(
-    activeCount > 1 ? `${activeCount} active` :
-    activeCount === 1 ? 'Scanning\u2026' :
-    $connected ? 'Connected' : 'Ready'
-  );
-  let statusClass = $derived(activeCount > 0 ? 'loading' : ($connected ? 'connected' : ''));
+  let queueStatus = $state(null);
+  onMount(() => watchWorkiqQueue(window.workiq, (snapshot) => { queueStatus = snapshot; }));
+  let queueView = $derived(queuePresentation(queueStatus, $connected));
   let actionCount = $derived($actionProposals.filter((proposal) => proposal.auditOnly !== true && !proposal.archivedAt).length);
 </script>
 
@@ -88,7 +86,7 @@
   </nav>
 
   <div class="topbar-controls">
-    <span class="status-pill {statusClass}">{statusLabel}</span>
+    <span class="status-pill {queueView.className}" title={queueView.label}>{queueView.label}</span>
     <button class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle theme"
       on:click={toggleTheme}>
       <svg class="theme-icon sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

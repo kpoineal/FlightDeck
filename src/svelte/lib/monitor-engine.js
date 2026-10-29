@@ -16,7 +16,7 @@ import { showToast } from '../components/Toast.svelte';import { buildMonitorProm
 import { runWorkiqJson } from './json-parser.js';
 const TICK_MS = 30_000; // 30s
 // Bound concurrent WorkIQ requests to keep scheduled monitoring predictable.
-const MAX_CONCURRENT_MONITOR_CHECKS = 3;
+const MAX_CONCURRENT_MONITOR_CHECKS = 5;
 let intervalHandle = null;
 let cycleInProgress = false;
 
@@ -37,16 +37,15 @@ export function stopMonitoringLoop() {
 async function checkDueItems() {
   if (!get(connected) || cycleInProgress) return;
 
-  const nowMs = Date.now();
   const currentItems = get(items);
-  const due = currentItems.filter((i) =>
+  const isDue = (i) =>
     i.monitorEnabled &&
-    (!i.snoozeUntil || !Number.isFinite(new Date(i.snoozeUntil).getTime()) || new Date(i.snoozeUntil).getTime() <= nowMs) &&
+    (!i.snoozeUntil || !Number.isFinite(new Date(i.snoozeUntil).getTime()) || new Date(i.snoozeUntil).getTime() <= Date.now()) &&
     i.nextRunAt &&
-    new Date(i.nextRunAt).getTime() <= nowMs &&
+    new Date(i.nextRunAt).getTime() <= Date.now() &&
     i.lifecycleStatus !== 'complete' &&
-    i.lifecycleStatus !== 'archived'
-  );
+    i.lifecycleStatus !== 'archived';
+  const due = currentItems.filter(isDue);
   if (!due.length) return;
 
   cycleInProgress = true;
@@ -54,12 +53,15 @@ async function checkDueItems() {
     let nextDueIndex = 0;
     const workerCount = Math.min(MAX_CONCURRENT_MONITOR_CHECKS, due.length);
     await Promise.all(Array.from({ length: workerCount }, async () => {
-      while (nextDueIndex < due.length) {
-        const item = due[nextDueIndex++];
+      while (nextDueIndex < due.length && get(connected)) {
+        const candidate = due[nextDueIndex++];
+        const item = get(items).find((i) => i.id === candidate.id);
+        if (!item || !isDue(item)) continue;
         try {
           logInfo('monitor', `Checking "${item.title}"`, { itemId: item.id });
-          await runItemCheck(item);
+          await runItemCheck(item, { priority: 'background' });
         } catch (err) {
+          if (err.code === 'QUEUE_FULL') continue;
           logError('monitor', `Check failed for "${item.title}": ${err.message}`, { itemId: item.id });
           // Reschedule on failure
           items.update(($i) =>
@@ -81,7 +83,7 @@ async function checkDueItems() {
 
 
 
-export async function runItemCheck(item) {
+export async function runItemCheck(item, { priority = 'interactive' } = {}) {
   const lease = tryAcquireOperationGuards(itemOperationKey(item?.id), {
     type: 'monitor',
     id: item?.id,
@@ -94,7 +96,8 @@ export async function runItemCheck(item) {
   const payload = await runWorkiqJson(
     prompt,
     (candidate) => candidate && typeof candidate.summary === 'string' && typeof candidate.status === 'string',
-    'task-monitor'
+    'task-monitor',
+    { priority, key: `item:${item.id}` }
   );
 
   if (!payload || typeof payload.summary !== 'string') return;

@@ -67,8 +67,8 @@ async function startRendererServer() {
   };
 }
 
-async function installLocalBridge(context, draftMode, proposalMode, teamsSendMode) {
-  await context.addInitScript(({ mode, synthesisMode, sendMode, itemTitle }) => {
+async function installLocalBridge(context, draftMode, proposalMode, teamsSendMode, queueStatus) {
+  await context.addInitScript(({ mode, synthesisMode, sendMode, itemTitle, initialQueueStatus }) => {
     const prefix = '__flightdeck_browser_acceptance__:';
     const read = (key, fallback = null) => {
       const raw = localStorage.getItem(prefix + key);
@@ -209,12 +209,30 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
         return { ok: true, action: 'teams-message-sent' };
       },
     };
-  }, { mode: draftMode, synthesisMode: proposalMode, sendMode: teamsSendMode, itemTitle: FIXTURE_ITEM_TITLE });
+    if (initialQueueStatus) {
+      let snapshot = structuredClone(initialQueueStatus);
+      const listeners = new Set();
+      window.__queueStatusReads = 0;
+      window.__queueStatusListenerCount = () => listeners.size;
+      window.__emitQueueStatus = (next) => {
+        snapshot = structuredClone(next);
+        for (const listener of listeners) listener(structuredClone(snapshot));
+      };
+      window.workiq.getWorkiqQueueStatus = async () => {
+        window.__queueStatusReads++;
+        return structuredClone(snapshot);
+      };
+      window.workiq.onWorkiqQueueStatus = (callback) => {
+        listeners.add(callback);
+        return () => listeners.delete(callback);
+      };
+    }
+  }, { mode: draftMode, synthesisMode: proposalMode, sendMode: teamsSendMode, itemTitle: FIXTURE_ITEM_TITLE, initialQueueStatus: queueStatus });
 }
 
-async function createSession(browser, baseUrl, { draftMode = 'success', proposalMode = 'email', teamsSendMode = 'success', viewport = { width: 1440, height: 1000 } } = {}) {
+async function createSession(browser, baseUrl, { draftMode = 'success', proposalMode = 'email', teamsSendMode = 'success', queueStatus = null, viewport = { width: 1440, height: 1000 } } = {}) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
-  await installLocalBridge(context, draftMode, proposalMode, teamsSendMode);
+  await installLocalBridge(context, draftMode, proposalMode, teamsSendMode, queueStatus);
   const diagnostics = { external: [], pageErrors: [], consoleErrors: [] };
   await context.route('**/*', async (route) => {
     const requestUrl = route.request().url();
@@ -316,6 +334,51 @@ async function runScenario(name, browser, baseUrl, callback, options) {
   } finally {
     await session.context.close();
   }
+}
+
+async function workiqQueueStatusScenario(session) {
+  await openApp(session);
+  const { page } = session;
+  const pill = page.locator('.topbar .status-pill');
+  assert.equal(await pill.textContent(), '4 running / 12 queued');
+  assert.equal(await page.evaluate(() => window.__queueStatusReads), 1);
+  assert.equal(await page.evaluate(() => window.__queueStatusListenerCount()), 1);
+  await assertHealthy(session, 'desktop');
+
+  await page.evaluate(() => window.__emitQueueStatus({
+    active: 2, pending: 7, limit: 5, backgroundLimit: 4, cooldownUntil: 0,
+  }));
+  assert.equal(await pill.textContent(), '2 running / 7 queued');
+
+  await page.clock.install({ time: new Date('2026-10-28T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-10-28T12:00:01Z'));
+  await page.evaluate(() => window.__emitQueueStatus({
+    active: 4, pending: 12, limit: 5, backgroundLimit: 4, cooldownUntil: Date.now() + 3000,
+  }));
+  assert.equal(await pill.textContent(), '4 running / 12 queued · retry in 3s');
+  await assertHealthy(session, 'desktop');
+  await page.setViewportSize({ width: 360, height: 900 });
+  await assertHealthy(session, 'mobile');
+  const bounds = await pill.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, width: innerWidth, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth };
+  });
+  assert.ok(bounds.left >= 0 && bounds.right <= bounds.width, `Queue status escaped mobile viewport: ${JSON.stringify(bounds)}`);
+  assert.ok(bounds.scrollWidth <= bounds.clientWidth + 1, `Queue status text overflowed: ${JSON.stringify(bounds)}`);
+
+  await page.clock.runFor(1000);
+  assert.equal(await pill.textContent(), '4 running / 12 queued · retry in 2s');
+  await page.clock.runFor(2000);
+  assert.equal(await pill.textContent(), '4 running / 12 queued');
+  await page.evaluate(() => window.__emitQueueStatus({
+    active: 0, pending: 0, limit: 5, backgroundLimit: 4, cooldownUntil: 0,
+  }));
+  assert.match(await pill.textContent(), /^(Connected|Ready)$/);
+  assert.equal(await pill.evaluate((element) => element.classList.contains('loading')), false);
+  const idleLabel = await pill.textContent();
+  await page.clock.runFor(3000);
+  assert.equal(await pill.textContent(), idleLabel, 'A stale cooldown timer restored busy status');
+  await assertHealthy(session, 'mobile');
 }
 
 async function themeScenario(session) {
@@ -2265,6 +2328,9 @@ async function radarRichContextScenario(session) {
     rendererServer = await startRendererServer();
     browser = await chromium.launch({ executablePath, headless: true });
     process.stdout.write(`EDGE_EXECUTABLE=${executablePath}\nLOCAL_RENDERER=${rendererServer.baseUrl}\n`);
+    await runScenario('workiq-queue-status', browser, rendererServer.baseUrl, workiqQueueStatusScenario, {
+      queueStatus: { active: 4, pending: 12, limit: 5, backgroundLimit: 4, cooldownUntil: 0 },
+    });
     await runScenario('theme-continuity-and-switching', browser, rendererServer.baseUrl, themeScenario);
     await runScenario('scanner-create-and-persist', browser, rendererServer.baseUrl, scannerScenario);
     await runScenario('add-item-submit-persist-reload', browser, rendererServer.baseUrl, addItemPersistScenario);
