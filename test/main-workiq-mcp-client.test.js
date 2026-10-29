@@ -46,6 +46,7 @@ function createHarness(onMessage, options = {}) {
     initializeTimeout: 30,
     probeTimeout: 30,
     shutdownGrace: 5,
+    queueOptions: { pacingMs: 0 },
     spawnProcess: (executable, args, spawnOptions) => {
       const child = new FakeChild(onMessage);
       children.push(child);
@@ -88,6 +89,353 @@ function createTeamsHarness(onCreate, options = {}) {
 }
 
 describe('createWorkiqMcpClient()', () => {
+  it('normalizes natural-language, JSON and verified response envelopes on one persistent connection', async () => {
+    const fixtures = [
+      { content: [{ type: 'text', text: 'Natural answer' }] },
+      { content: [{ type: 'text', text: '{"items":[{"id":"one"}]}' }] },
+      { content: [{ type: 'text', text: '{"response":"Envelope answer"}' }] },
+      { content: [], structuredContent: { response: 'Structured envelope' }, isError: false },
+    ];
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') queueMicrotask(() => child.respond(message.id, fixtures.shift()));
+    });
+    for (const answer of ['Natural answer', '{"items":[{"id":"one"}]}', 'Envelope answer', 'Structured envelope']) {
+      assert.deepEqual(await client.ask('Question'), { success: true, answer, attempts: 1 });
+    }
+    assert.equal(children.length, 1);
+    assert.equal(children[0].messages.filter((message) => message.method === 'initialize').length, 1);
+    assert.equal(children[0].messages.filter((message) => message.method === 'tools/list').length, 1);
+    await client.shutdown();
+  });
+
+  it('validates ask metadata and does not start a child for invalid requests', async () => {
+    const { client, children } = createHarness(successfulServer);
+    for (const [question, metadata] of [
+      ['', {}], [null, {}], ['Question', null], ['Question', []],
+      ['Question', { priority: 'urgent' }], ['Question', { key: '' }],
+      ['Question', { maxAttempts: 3 }], ['Question', { maxAttempts: 0 }],
+      ['Question', { secret: true }],
+    ]) {
+      const result = await client.ask(question, metadata);
+      assert.equal(result.success, false);
+      assert.equal(result.code, 'INVALID_REQUEST');
+      assert.equal(result.attempts, 0);
+    }
+    assert.equal(children.length, 0);
+  });
+
+  it('coalesces equal queued/running reads but not changed prompts or attempt budgets', async () => {
+    const calls = [];
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') {
+        calls.push(message);
+        if (calls.length === 3) {
+          queueMicrotask(() => calls.forEach((call) => child.respond(call.id, {
+            content: [{ type: 'text', text: call.params.arguments.question }],
+          })));
+        }
+      }
+    });
+    const results = await Promise.all([
+      client.ask('same', { priority: 'background', key: 'id' }),
+      client.ask('same', { key: 'id' }),
+      client.ask('changed', { key: 'id' }),
+      client.ask('same', { key: 'id', maxAttempts: 1 }),
+    ]);
+    assert.deepEqual(results.map((result) => result.answer), ['same', 'same', 'changed', 'same']);
+    assert.equal(calls.length, 3);
+    assert.equal(children[0].messages.filter((message) => message.method === 'tools/list').length, 1);
+    await client.shutdown();
+  });
+
+  it('isolates a timed-out ID and its late reply from unrelated pending calls', async () => {
+    let slowCall;
+    let healthyCall;
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call') return;
+      if (message.params.arguments.question === 'slow') slowCall = message;
+      else healthyCall = message;
+    }, { readTimeout: 40 });
+    const slow = client.ask('slow', { maxAttempts: 1 });
+    while (!slowCall) await new Promise((resolve) => setImmediate(resolve));
+    const healthy = client.ask('healthy', { maxAttempts: 1 });
+    while (!healthyCall) await new Promise((resolve) => setImmediate(resolve));
+    const result = await slow;
+    children[0].respond(slowCall.id, { content: [{ type: 'text', text: 'late' }] });
+    children[0].respond(healthyCall.id, { content: [{ type: 'text', text: 'healthy answer' }] });
+    assert.equal(result.code, 'TIMEOUT');
+    assert.equal(result.attempts, 1);
+    assert.equal((await healthy).answer, 'healthy answer');
+    assert.equal(children[0].killCalls, 0);
+    await client.shutdown();
+  });
+
+  it('retains five timed-out transports, queues a sixth, and releases only on a late terminal reply', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const calls = [];
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') calls.push(message);
+    }, { readTimeout: 40 });
+    const jobs = Array.from({ length: 6 }, (_, index) => client.ask(`unanswered-${index}`, { maxAttempts: 1 }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 5);
+    t.mock.timers.tick(40);
+    const timedOut = await Promise.all(jobs.slice(0, 5));
+    assert.ok(timedOut.every((result) => result.code === 'TIMEOUT' && result.attempts === 1));
+    t.mock.timers.tick(1000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 5, 'Caller timeouts must not permit a sixth outstanding remote call');
+    assert.deepEqual(client.getQueueStatus(), {
+      active: 5, pending: 1, limit: 5, backgroundLimit: 4, cooldownUntil: 0,
+    });
+    assert.equal(children[0].killCalls, 0, 'Semantic timeouts must not kill unrelated calls');
+
+    children[0].respond(calls[0].id, { content: [{ type: 'text', text: 'late terminal answer' }] });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 6);
+    assert.equal(client.getQueueStatus().active, 5);
+    assert.equal(client.getQueueStatus().pending, 0);
+    children[0].respond(calls[5].id, { content: [{ type: 'text', text: 'sixth answer' }] });
+    assert.equal((await jobs[5]).answer, 'sixth answer');
+    assert.equal(client.getQueueStatus().active, 4);
+    const shutdown = client.shutdown();
+    t.mock.timers.tick(5);
+    await shutdown;
+    assert.equal(client.getQueueStatus().active, 0);
+    assert.equal(client.getQueueStatus().pending, 0);
+    assert.equal(children[0].killCalls, 1);
+  });
+
+  it('does not retry or bypass an unresolved timed-out read even with a two-attempt budget', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const calls = [];
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') calls.push(message);
+    }, { readTimeout: 40 });
+    const first = client.ask('retained', { key: 'same-resource' });
+    await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(40);
+    assert.equal((await first).attempts, 1);
+    assert.equal((await client.ask('retained', { key: 'same-resource' })).code, 'TIMEOUT');
+    t.mock.timers.tick(10000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 1);
+    assert.equal(client.getQueueStatus().active, 1);
+    children[0].respond(calls[0].id, { content: [{ type: 'text', text: 'late' }] });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(client.getQueueStatus().active, 0);
+    assert.equal(calls.length, 1, 'Late completion must not replay the already timed-out caller');
+    const shutdown = client.shutdown();
+    t.mock.timers.tick(5);
+    await shutdown;
+  });
+
+  it('defaults generic reads to 300 seconds independently of the 60-second proposal timeout', { timeout: 5000 }, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const calls = [];
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') calls.push(message);
+    });
+    let readSettled = false;
+    const read = client.ask('long scanner/monitor read', { maxAttempts: 1 }).then((result) => {
+      readSettled = true;
+      return result;
+    });
+    const proposal = client.proposeThreadActions({
+      schemaVersion: 1,
+      thread: { id: 'timeout-defaults', title: 'Synthetic timeout policy test' },
+    });
+    while (calls.length < 2) await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(60000);
+    assert.equal((await proposal).code, 'TIMEOUT');
+    assert.equal(readSettled, false, 'Proposal timeout must not shorten generic reads');
+    t.mock.timers.tick(239999);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(readSettled, false);
+    t.mock.timers.tick(1);
+    assert.equal((await read).code, 'TIMEOUT');
+    assert.equal(client.getQueueStatus().active, 2, 'Neither caller timeout releases unresolved remote capacity');
+    const shutdown = client.shutdown();
+    t.mock.timers.tick(5);
+    await shutdown;
+  });
+
+  it('isolates tool and JSON-RPC errors, preserving the healthy shared connection', async () => {
+    let count = 0;
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call') return;
+      count += 1;
+      queueMicrotask(() => {
+        if (count === 1) child.stdout.emit('data', Buffer.from(`${JSON.stringify({
+          jsonrpc: '2.0', id: message.id, error: { code: -32603, message: 'private remote detail' },
+        })}\n`));
+        else child.respond(message.id, count === 2
+          ? { isError: true, content: [{ type: 'text', text: 'private tool detail' }] }
+          : { content: [{ type: 'text', text: 'healthy' }] });
+      });
+    });
+    const rpc = await client.ask('rpc');
+    const tool = await client.ask('tool');
+    assert.equal(rpc.code, 'RPC_ERROR');
+    assert.equal(tool.code, 'TOOL_ERROR');
+    assert.equal(JSON.stringify([rpc, tool]).includes('private'), false);
+    assert.equal((await client.ask('healthy')).success, true);
+    assert.equal(children.length, 1);
+    assert.equal(children[0].killCalls, 0);
+    await client.shutdown();
+  });
+
+  it('rejects empty/wrong-shaped and structured error results without repairing terminal output', async () => {
+    const fixtures = [
+      {}, { content: [] }, { content: [{ type: 'text', text: ' ' }] },
+      { content: [{ type: 'text', text: '{"response":null}' }] },
+      { structuredContent: { unrelated: 'entity' } },
+      { structuredContent: { response: 'not success', error: { message: 'private' } } },
+      { structuredContent: { response: 'not success', isError: true } },
+    ];
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') queueMicrotask(() => child.respond(message.id, fixtures.shift()));
+    });
+    for (let i = 0; i < 7; i += 1) {
+      const result = await client.ask(`question ${i}`);
+      assert.equal(result.success, false);
+      assert.equal(result.attempts, 1);
+    }
+    await client.shutdown();
+  });
+
+  it('uses the installed ask_work_iq name and a bounded two-attempt safe-read retry budget', async () => {
+    let calls = 0;
+    const { client, children } = createHarness((message, child) => {
+      if (message.method === 'initialize') {
+        queueMicrotask(() => child.respond(message.id, { protocolVersion: '2025-03-26' }));
+      } else if (message.method === 'tools/list') {
+        queueMicrotask(() => child.respond(message.id, { tools: [{ name: 'ask_work_iq' }] }));
+      } else if (message.method === 'tools/call') {
+        calls += 1;
+        assert.equal(message.params.name, 'ask_work_iq');
+        queueMicrotask(() => child.respond(message.id, calls === 1
+          ? { isError: true, content: [{ type: 'text', text: 'Too many requests: private detail' }] }
+          : { content: [{ type: 'text', text: 'recovered' }] }));
+      }
+    }, { queueOptions: { pacingMs: 0, random: () => 0 } });
+    assert.deepEqual(await client.ask('question'), { success: true, answer: 'recovered', attempts: 2 });
+    assert.equal(calls, 2);
+    assert.equal(children.length, 1);
+    await client.shutdown();
+  });
+
+  it('preserves actual HTTP Retry-After as shared cooldown and honors maxAttempts one', async () => {
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') queueMicrotask(() =>
+        child.stdout.emit('data', Buffer.from(`${JSON.stringify({
+          jsonrpc: '2.0', id: message.id,
+          error: { code: -32000, message: 'private', data: { status: 429, headers: { 'Retry-After': '2' } } },
+        })}\n`)));
+    });
+    const before = Date.now();
+    const result = await client.ask('question', { maxAttempts: 1 });
+    assert.equal(result.code, 'THROTTLED');
+    assert.equal(result.attempts, 1);
+    assert.ok(client.getQueueStatus().cooldownUntil >= before + 2000);
+    assert.equal(JSON.stringify(result).includes('private'), false);
+    await client.shutdown();
+  });
+
+  it('applies observed mutation Retry-After to shared capacity without replaying the write', async () => {
+    let calls = 0;
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') {
+        calls += 1;
+        queueMicrotask(() => child.stdout.emit('data', Buffer.from(`${JSON.stringify({
+          jsonrpc: '2.0', id: message.id,
+          error: { code: -32000, message: 'private', data: { status: 429, headers: { 'Retry-After': '2' } } },
+        })}\n`)));
+      }
+    });
+    const before = Date.now();
+    const result = await client.createOutlookDraft({ subject: 'Subject', body: 'Body', to: ['person@example.com'] });
+    assert.equal(result.code, 'THROTTLED');
+    assert.equal(result.dispatched, true);
+    assert.equal(calls, 1);
+    assert.ok(client.getQueueStatus().cooldownUntil >= before + 2000);
+    await client.shutdown();
+  });
+
+  it('ignores stale process output/exit callbacks after generation restart', async () => {
+    let call;
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') call = message;
+    });
+    const first = client.ask('first', { maxAttempts: 1 });
+    while (!call) await new Promise((resolve) => setImmediate(resolve));
+    children[0].emit('exit', 1);
+    assert.equal((await first).code, 'PROCESS_EXITED');
+    call = null;
+    const next = client.ask('next', { maxAttempts: 1 });
+    while (!call) await new Promise((resolve) => setImmediate(resolve));
+    children[0].stdout.emit('data', Buffer.from('old malformed private output\n'));
+    children[0].emit('exit', 1);
+    children[0].stdin.emit('error', new Error('old private error'));
+    children[1].respond(call.id, { content: [{ type: 'text', text: 'new generation' }] });
+    assert.equal((await next).answer, 'new generation');
+    assert.equal(children[1].killCalls, 0);
+    await client.shutdown();
+  });
+
+  it('fails all generation calls on malformed protocol and validates negotiation/tool cache before publishing', async () => {
+    const calls = [];
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') {
+        calls.push(message);
+        if (calls.length === 2) queueMicrotask(() => child.stdout.emit('data', Buffer.from('not json\n')));
+      }
+    });
+    const results = await Promise.all([
+      client.ask('first', { maxAttempts: 1 }), client.ask('second', { maxAttempts: 1 }),
+    ]);
+    assert.deepEqual(results.map((result) => result.code), ['PROTOCOL_ERROR', 'PROTOCOL_ERROR']);
+    assert.equal(children[0].killCalls, 1);
+    for (const malformed of ['version', 'tools']) {
+      const h = createHarness((message, child) => {
+        if (message.method === 'initialize') queueMicrotask(() => child.respond(message.id, {
+          protocolVersion: malformed === 'version' ? 'unknown' : '2025-03-26',
+        }));
+        if (message.method === 'tools/list') queueMicrotask(() => child.respond(message.id, {
+          tools: [{ name: 'ask' }, { name: null }],
+        }));
+      });
+      assert.equal((await h.client.ask('question', { maxAttempts: 1 })).code, 'PROTOCOL_ERROR');
+      assert.equal(h.children[0].killCalls, 1);
+      await h.client.shutdown();
+    }
+    await client.shutdown();
+  });
+
+  it('rejects queued and inflight reads on shutdown without replay', async () => {
+    const { client, children } = createHarness(successfulServer, { queueOptions: { limit: 1, pacingMs: 0 } });
+    const results = [client.ask('active'), client.ask('queued')];
+    while (!children[0]?.messages.some((message) => message.method === 'tools/call')) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await client.shutdown();
+    assert.deepEqual((await Promise.all(results)).map((result) => result.code), ['SHUTTING_DOWN', 'SHUTTING_DOWN']);
+    assert.equal(children[0].messages.filter((message) => message.method === 'tools/call').length, 1);
+    assert.equal((await client.ask('after')).attempts, 0);
+  });
+
   it('starts lazily and exposes only a sanitized read-only probe result', async () => {
     const { client, children, spawnCalls } = createHarness(successfulServer);
 
@@ -107,7 +455,7 @@ describe('createWorkiqMcpClient()', () => {
       'notifications/initialized',
       'tools/list',
     ]);
-    assert.deepEqual(Object.keys(client).sort(), ['createOutlookDraft', 'probe', 'proposeThreadActions', 'sendTeamsMessage', 'shutdown']);
+    assert.deepEqual(Object.keys(client).sort(), ['ask', 'createOutlookDraft', 'getQueueStatus', 'onQueueStatus', 'probe', 'proposeThreadActions', 'sendTeamsMessage', 'shutdown']);
   });
 
   it('coalesces concurrent probes onto one process and one tools request', async () => {
@@ -545,6 +893,7 @@ describe('createWorkiqMcpClient()', () => {
       ['stdin stream error', (message, child) => queueMicrotask(() => child.stdin.emit('error', new Error('private stream output')))],
       ['stdout stream error', (message, child) => queueMicrotask(() => child.stdout.emit('error', new Error('private stream output')))],
       ['stderr stream error', (message, child) => queueMicrotask(() => child.stderr.emit('error', new Error('private stream output')))],
+      ['stdout EOF', (message, child) => queueMicrotask(() => child.stdout.emit('end'))],
     ];
 
     for (const [name, failAfterDispatch] of uncertaintyFixtures) {
@@ -725,7 +1074,7 @@ describe('createWorkiqMcpClient()', () => {
 
     assert.deepEqual(result, { ok: false, readOnly: true, code: 'TIMEOUT' });
     assert.equal(children[0].messages.filter((message) => message.method === 'tools/call').length, 1);
-    assert.equal(children[0].killCalls, 1);
+    assert.equal(children[0].killCalls, 0);
   });
 
   it('rejects invalid draft fields before starting WorkIQ', async () => {
@@ -868,7 +1217,10 @@ describe('createWorkiqMcpClient()', () => {
     assert.equal(result.dispatched, true);
     assert.equal(children.length, 1);
     assert.equal(children[0].messages.filter((message) => message.method === 'tools/call').length, 1);
-    assert.equal(children[0].killCalls, 1);
+    assert.equal(children[0].killCalls, 0);
+    assert.equal(client.getQueueStatus().active, 1, 'An ambiguous timed-out write still consumes transport capacity');
+    await client.shutdown();
+    assert.equal(client.getQueueStatus().active, 0);
   });
 
   it('does not retry a mutation when the process exits after one tools call', async () => {

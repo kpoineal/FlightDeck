@@ -31,9 +31,9 @@ const persistenceStub = `data:text/javascript,${encodeURIComponent(`
   }
 `)}`;
 const jsonParserStub = `data:text/javascript,${encodeURIComponent(`
-  export async function runWorkiqJson() {
+  export async function runWorkiqJson(...args) {
     if (typeof globalThis.__mailboxTestRunWorkiqJson === 'function') {
-      return globalThis.__mailboxTestRunWorkiqJson();
+      return globalThis.__mailboxTestRunWorkiqJson(...args);
     }
     return globalThis.__mailboxTestMonitorPayload;
   }
@@ -498,9 +498,9 @@ describe('monitor mailbox behavior', () => {
           resolve();
         }
       }
-      if (startedCount === 3) resolveInitialStarted();
+      if (startedCount === 5) resolveInitialStarted();
 
-      if (attempt < 3) {
+      if (attempt < 5) {
         let settled = false;
         const settle = (finish) => {
           if (settled) return;
@@ -524,22 +524,106 @@ describe('monitor mailbox behavior', () => {
     try {
       startMonitoringLoop();
       await initialStarted;
-      assert.equal(startedCount, 3);
-      assert.equal(maxActiveCount, 3);
+      assert.equal(startedCount, 5);
+      assert.equal(maxActiveCount, 5);
 
       initialChecks[0].reject();
-      await waitForStartedCount(4);
-      initialChecks[1].resolve();
-      initialChecks[2].resolve();
+      await waitForStartedCount(6);
+      initialChecks.slice(1).forEach((check) => check.resolve());
       await cycleDone;
 
       assert.equal(startedCount, dueItems.length);
-      assert.equal(maxActiveCount, 3);
+      assert.equal(maxActiveCount, 5);
       assert.ok(get(items).every((item) => item.lastRunAt));
       assert.equal(globalThis.__mailboxTestSaveCalls, 1);
     } finally {
       for (const check of initialChecks) check?.resolve();
       stopMonitoringLoop();
     }
+  });
+
+  it('manual item checks default to interactive metadata', async () => {
+    const item = monitoredItem();
+    items.set([item]);
+    let options;
+    globalThis.__mailboxTestRunWorkiqJson = (_prompt, _validator, _label, metadata) => {
+      options = metadata;
+      return matchingPayload();
+    };
+    await runItemCheck(item);
+    assert.deepEqual(options, { priority: 'interactive', key: `item:${item.id}` });
+  });
+
+  it('same-item lease prevents duplicate manual checks while a request is pending', async () => {
+    const item = monitoredItem();
+    items.set([item]);
+    let release;
+    let calls = 0;
+    globalThis.__mailboxTestRunWorkiqJson = () => {
+      calls++;
+      return new Promise((resolve) => { release = resolve; });
+    };
+    const first = runItemCheck(item);
+    assert.deepEqual(await runItemCheck(item), { ok: false, code: 'BUSY' });
+    assert.equal(calls, 1);
+    release(matchingPayload());
+    await first;
+    assert.equal(get(activeOperations).size, 0);
+  });
+
+  it('deferred monitor workers revalidate deletion, enabled state, snooze, lifecycle and due time', { timeout: 5000 }, async () => {
+    const due = Array.from({ length: 12 }, (_, index) => monitoredItem({
+      id: `deferred-${index}`, nextRunAt: '2000-01-01T00:00:00.000Z',
+    }));
+    items.set(due);
+    connected.set(true);
+    const calls = [];
+    const releases = [];
+    let resolveStarted;
+    const started = new Promise((resolve) => { resolveStarted = resolve; });
+    const cycleDone = new Promise((resolve) => { globalThis.__mailboxTestOnMonitorCycleSaved = resolve; });
+    globalThis.__mailboxTestRunWorkiqJson = (prompt, _validator, _label, options) => {
+      calls.push({ prompt, options });
+      if (calls.length === 5) resolveStarted();
+      return new Promise((resolve) => releases.push(() => resolve(matchingPayload())));
+    };
+    try {
+      startMonitoringLoop();
+      await started;
+      items.update((current) => current.filter((i) => i.id !== 'deferred-5').map((i) =>
+        i.id === 'deferred-6' ? { ...i, monitorEnabled: false } :
+        i.id === 'deferred-7' ? { ...i, snoozeUntil: '2099-01-01T00:00:00.000Z' } :
+        i.id === 'deferred-8' ? { ...i, lifecycleStatus: 'complete' } :
+        i.id === 'deferred-9' ? { ...i, lifecycleStatus: 'archived' } :
+        i.id === 'deferred-10' ? { ...i, nextRunAt: '2099-01-01T00:00:00.000Z' } :
+        i.id === 'deferred-11' ? { ...i, title: 'Latest deferred title' } : i));
+      releases[0]();
+      for (let attempt = 0; calls.length < 6 && attempt < 20; attempt++) await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(calls.length, 6);
+      assert.match(calls[5].prompt, /Latest deferred title/);
+      assert.deepEqual(calls[5].options, { priority: 'background', key: 'item:deferred-11' });
+      releases.slice(1).forEach((release) => release());
+      await cycleDone;
+      assert.equal(get(activeOperations).size, 0);
+    } finally {
+      releases.forEach((release) => release());
+      stopMonitoringLoop();
+    }
+  });
+
+  it('QUEUE_FULL leaves automatic monitor due without lastRunAt or failure history', { timeout: 5000 }, async () => {
+    const item = monitoredItem({ nextRunAt: '2000-01-01T00:00:00.000Z', lastRunAt: '2000-01-01T00:00:00.000Z' });
+    items.set([item]);
+    connected.set(true);
+    const cycleDone = new Promise((resolve) => { globalThis.__mailboxTestOnMonitorCycleSaved = resolve; });
+    globalThis.__mailboxTestRunWorkiqJson = () => { throw Object.assign(new Error('Full'), { code: 'QUEUE_FULL' }); };
+    try {
+      startMonitoringLoop();
+      await cycleDone;
+      assert.equal(get(items)[0].lastRunAt, item.lastRunAt);
+      assert.equal(get(items)[0].nextRunAt, item.nextRunAt);
+      assert.equal(get(history).length, 0);
+      assert.equal(get(activeOperations).size, 0);
+    } finally { stopMonitoringLoop(); }
   });
 });

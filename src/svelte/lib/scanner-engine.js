@@ -25,6 +25,7 @@ import { runWorkiqJson } from './json-parser.js';
 import { hydrateRadarColdItems } from './radar-navigation.js';
 
 const TICK_MS = 60_000; // 60s
+const MAX_CONCURRENT_SCANS = 5;
 let intervalHandle = null;
 let cycleInProgress = false;
 
@@ -86,34 +87,41 @@ async function checkDue() {
 
   cycleInProgress = true;
   try {
-    for (const scanner of due) {
-      try {
-        logInfo('scanner', `Running "${scanner.name}"...`, { scannerId: scanner.id });
-        await runScanner(scanner);
-      } catch (err) {
-        logError('scanner', `Scanner "${scanner.name}" failed: ${err.message}`, { scannerId: scanner.id });
+    let nextDueIndex = 0;
+    await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_SCANS, due.length) }, async () => {
+      while (nextDueIndex < due.length && get(connected)) {
+        const candidate = due[nextDueIndex++];
+        const scanner = get(scanners).find((s) => s.id === candidate.id);
+        if (!scanner?.enabled || !scanner.nextRunAt || !(new Date(scanner.nextRunAt).getTime() <= Date.now())) continue;
+        try {
+          logInfo('scanner', `Running "${scanner.name}"...`, { scannerId: scanner.id });
+          await runScanner(scanner, { priority: 'background' });
+        } catch (err) {
+          if (err.code === 'QUEUE_FULL') continue;
+          logError('scanner', `Scanner "${scanner.name}" failed: ${err.message}`, { scannerId: scanner.id });
 
-        // If EULA is not accepted or launcher missing, disconnect so the banner reappears
-        const msg = err.message || '';
-        if (msg.includes('EULA not accepted') || msg.includes('launcher not found')) {
-          connected.set(false);
-          stopScannerEngine();
-          addHistory('failure', `Scanner ${scanner.name}: ${msg}`, { scannerId: scanner.id });
-          savePersistentState();
-          return;
+          // If EULA is not accepted or launcher missing, disconnect so the banner reappears
+          const msg = err.message || '';
+          if (msg.includes('EULA not accepted') || msg.includes('launcher not found')) {
+            connected.set(false);
+            stopScannerEngine();
+            addHistory('failure', `Scanner ${scanner.name}: ${msg}`, { scannerId: scanner.id });
+            savePersistentState();
+            return;
+          }
+
+          // Update scanner timestamps on failure and log
+          scanners.update(($s) =>
+            $s.map((s) =>
+              s.id === scanner.id
+                ? { ...s, lastRunAt: nowIso(), lastRunStatus: 'failed', nextRunAt: computeScannerNextRunAt(s) }
+                : s
+            )
+          );
+          addHistory('failure', `Scanner failed: ${scanner.name}: ${err.message}`, { scannerId: scanner.id });
         }
-
-        // Update scanner timestamps on failure and log
-        scanners.update(($s) =>
-          $s.map((s) =>
-            s.id === scanner.id
-              ? { ...s, lastRunAt: nowIso(), lastRunStatus: 'failed', nextRunAt: computeScannerNextRunAt(s) }
-              : s
-          )
-        );
-        addHistory('failure', `Scanner failed: ${scanner.name}: ${err.message}`, { scannerId: scanner.id });
       }
-    }
+    }));
   } finally {
     cycleInProgress = false;
     savePersistentState();
@@ -122,7 +130,7 @@ async function checkDue() {
 
 
 
-export async function runScanner(scanner) {
+export async function runScanner(scanner, { priority = 'interactive' } = {}) {
   const lease = tryAcquireOperationGuards(scannerOperationKey(scanner?.id), {
     type: 'scan',
     id: scanner?.id,
@@ -135,7 +143,8 @@ export async function runScanner(scanner) {
   const payload = await runWorkiqJson(
     prompt,
     (p) => p && Array.isArray(p.radarItems),
-    'scanner'
+    'scanner',
+    { priority, key: `scanner:${scanner.id}` }
   );
 
   if (!payload || !Array.isArray(payload.radarItems)) return;

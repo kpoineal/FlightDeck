@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 const IPC_CHANNELS = {
   GET_APP_VERSION: 'get-app-version',
   ASK_WORKIQ: 'ask-workiq',
+  GET_WORKIQ_QUEUE_STATUS: 'get-workiq-queue-status',
+  WORKIQ_QUEUE_STATUS_CHANGED: 'workiq-queue-status-changed',
   ACCEPT_WORKIQ_EULA: 'accept-workiq-eula',
   PROBE_WORKIQ_MCP: 'probe-workiq-mcp',
   PROPOSE_THREAD_ACTIONS: 'propose-thread-actions',
@@ -31,7 +33,16 @@ const IPC_CHANNELS = {
 contextBridge.exposeInMainWorld('workiq', {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
   checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES),
-  ask: (question) => ipcRenderer.invoke(IPC_CHANNELS.ASK_WORKIQ, question),
+  ask: (question, options) => options === undefined
+    ? ipcRenderer.invoke(IPC_CHANNELS.ASK_WORKIQ, question)
+    : ipcRenderer.invoke(IPC_CHANNELS.ASK_WORKIQ, question, options),
+  getWorkiqQueueStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GET_WORKIQ_QUEUE_STATUS),
+  onWorkiqQueueStatus: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on(IPC_CHANNELS.WORKIQ_QUEUE_STATUS_CHANGED, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.WORKIQ_QUEUE_STATUS_CHANGED, listener);
+  },
   acceptEula: () => ipcRenderer.invoke(IPC_CHANNELS.ACCEPT_WORKIQ_EULA),
   probeMcp: () => ipcRenderer.invoke(IPC_CHANNELS.PROBE_WORKIQ_MCP),
   proposeThreadActions: (context) => ipcRenderer.invoke(IPC_CHANNELS.PROPOSE_THREAD_ACTIONS, context),

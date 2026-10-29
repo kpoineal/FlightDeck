@@ -68,6 +68,18 @@ The dashboard is organized into three horizontal zones:
 2. **KPI summary** — At-a-glance severity counts, severity distribution bar, and item totals
 3. **Main content** — The active view's cards and details
 
+### WorkIQ activity and waiting
+
+The top-bar status shows actual shared WorkIQ activity, for example **4 running / 12 queued**, rather than counting resource spinners as active requests. During a throttling cooldown it also shows **retry in Ns**. When idle, it retains **Connected** or **Ready**. Queue status contains counts and timing only, not prompt or response text.
+
+Scheduled scanners and monitors can each dispatch up to five jobs, but all windows and features share application limits: **5 active requests total**, **at most 4 background requests**, with starts paced **250 ms** apart. Manual **Run Now / Check Now** uses interactive priority; background work leaves a slot available for clicks. Pending work is bounded to 50 requests (40 background). If that queue is full, automatic work stays due for a later tick rather than being marked failed or skipped.
+
+Safe reads have at most **two total attempts**, including network retries and JSON-response recovery. Throttling may delay work; these limits are not a guarantee of remote quotas or a proven sustained safe rate. Authentication and EULA problems require reconnecting. Writes still require their existing confirmations, and ambiguous write results are not automatically replayed.
+
+Scanner/monitor reads keep a **five-minute** caller timeout; proposal synthesis uses a separate **one-minute** timeout. A caller timeout does **not** release the remote slot or automatically retry an unresolved request. It stays counted as running until a terminal response or confirmed WorkIQ process exit; unrelated requests are not killed to free capacity. If every slot hangs and no responses arrive, **choose Quit in the FlightDeck tray menu, then relaunch FlightDeck**. Automatic recovery is not guaranteed. Closing to the tray and reopening preserves status updates but does not clear stuck slots.
+
+Reads reuse one persistent **local** WorkIQ MCP process instead of launching a new terminal per query; there is no read fallback to PTY. EULA acceptance may still use a terminal internally. Reusing the local process does not guarantee anything about backend conversation/thread creation. The bundled WorkIQ version remains 0.4.1; broader version compatibility testing is separate.
+
 ---
 
 ## Navigation

@@ -1,6 +1,8 @@
 const IPC_CHANNELS = {
   GET_APP_VERSION: 'get-app-version',
   ASK_WORKIQ: 'ask-workiq',
+  GET_WORKIQ_QUEUE_STATUS: 'get-workiq-queue-status',
+  WORKIQ_QUEUE_STATUS_CHANGED: 'workiq-queue-status-changed',
   ACCEPT_WORKIQ_EULA: 'accept-workiq-eula',
   PROBE_WORKIQ_MCP: 'probe-workiq-mcp',
   PROPOSE_THREAD_ACTIONS: 'propose-thread-actions',

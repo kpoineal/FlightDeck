@@ -6,7 +6,7 @@ This document describes the internal architecture of FlightDeck for developers w
 
 ## System Overview
 
-FlightDeck is an Electron desktop application with a strict two-process architecture. The **main process** manages the OS window, tray, persistence, and WorkIQ CLI communication. The **renderer process** runs a Svelte 5 SPA with reactive stores, background engines, and IPC-bridged persistence.
+FlightDeck is an Electron desktop application with a strict two-process architecture. The **main process** manages the OS window, tray, persistence, and a shared queue feeding a persistent local WorkIQ MCP process. The **renderer process** runs a Svelte 5 SPA with reactive stores, background engines, and IPC-bridged persistence.
 
 ```mermaid
 graph TB
@@ -14,6 +14,7 @@ graph TB
     IDX["index.js — App lifecycle, window, tray"]
     IPC["ipc-handlers.js — Route IPC messages"]
     PTY["pty-bridge.js — node-pty → WorkIQ CLI"]
+    MCP["workiq-request-queue.js → workiq-mcp-client.js"]
     STORE["store.js — electron-store (data + cold)"]
     WS["window-state.js — Persist bounds"]
     UTILS_M["utils.js — Logging, URL safety, HTML"]
@@ -36,6 +37,7 @@ graph TB
   end
 
   IPC --> PTY
+  IPC --> MCP
   IPC --> STORE
   CONTRACT -.-> IPC
   CONTRACT -.-> PRELOAD
@@ -70,7 +72,7 @@ All renderer↔main communication flows through named IPC channels defined in `s
 |---|---|---|
 | `get-app-version` | Renderer → Main | Return the app version string |
 | `check-for-updates` | Renderer → Main | Check GitHub Releases for a newer version |
-| `ask-workiq` | Renderer → Main | Execute a WorkIQ CLI query via PTY bridge |
+| `ask-workiq` | Renderer → Main | Queue a read through the shared persistent WorkIQ MCP transport |
 | `accept-workiq-eula` | Renderer → Main | Run WorkIQ EULA acceptance via PTY |
 | `read-prompt-file` | Renderer → Main | Load a markdown prompt template from `src/prompts/` |
 | `open-markdown-window` | Renderer → Main | Open rendered markdown in a new window |
@@ -89,13 +91,22 @@ All renderer↔main communication flows through named IPC channels defined in `s
 | `tracker-state-sync` | Main → Renderer | Tell a window to reload state |
 | `notification-clicked` | Main → Renderer | Forward notification click for navigation |
 
+### WorkIQ MCP Queue (`src/main/workiq-request-queue.js`)
+
+- All WorkIQ requests share one main-process limiter across windows, including scanner/monitor reads and proposal/action calls.
+- Defaults: **5 active total**, **4 background active**, **50 pending total**, **40 background pending**, with **250 ms start pacing**. The background cap leaves an interactive slot; these are application limits, not known remote service quotas.
+- A persistent local MCP process avoids spawning a fresh PTY per read. This does **not** establish whether WorkIQ creates backend sessions/conversation threads or suppresses those artifacts.
+- Scheduled work uses background priority and per-resource keys (`scanner:<id>`, `item:<id>`); manual work defaults to interactive. Keys coalesce outstanding duplicate work; renderer operation leases additionally protect the same resource.
+- Throttling signals trigger cooldown. Safe reads allow at most two total attempts, shared with renderer parse recovery. Ambiguous writes are not automatically replayed; existing confirmation and audit behavior remains.
+- Generic scanner/monitor reads retain the prior **300-second** caller timeout (`readTimeout`); proposal synthesis separately defaults to **60 seconds** (`semanticTimeout`). Both remain injectable for deterministic testing.
+- Caller timeouts do not prove remote completion: transport leases remain counted as active until a terminal reply or confirmed child-process exit. An unresolved timed-out read is not retried, and its coalescing key remains reserved. Five unanswered calls can safely saturate all slots; there is no promised automatic recovery. If no terminal replies or process exit occur, **quit FlightDeck from the tray and relaunch** to recover. Hiding/reopening the window does not recover stuck slots. Healthy unrelated calls/writes are not killed to reclaim capacity.
+- `window.workiq.getWorkiqQueueStatus()` and `onWorkiqQueueStatus(callback)` expose `{ active, pending, limit, backgroundLimit, cooldownUntil }`. Topbar subscribes on mount, reads an initial snapshot, and unsubscribes on destroy; only an active cooldown creates a countdown timer. Counts describe queue execution, not resource operation leases.
+- Runtime WorkIQ remains pinned to **0.4.1**. Supported-version compatibility testing is separate; a short overlap probe does not establish a sustained throttle-safe rate.
+- Queue-status broadcasting is appwide: close-to-tray and reopening retain the subscription; it is disposed only when application teardown begins.
+
 ### PTY Bridge (`src/main/pty-bridge.js`)
 
-- Locates the WorkIQ launcher at `%APPDATA%/npm/node_modules/@microsoft/workiq/bin/workiq.js`.
-- Spawns a `node-pty` pseudo-terminal: `node workiq.js ask -q "<prompt>"`.
-- Collects output, strips ANSI escape sequences, and filters prompt lines.
-- Enforces a **5-minute hard timeout** — kills the PTY process if it hangs.
-- Returns cleaned text to the IPC handler.
+The PTY bridge remains available for explicit EULA acceptance/recovery. Ordinary reads use MCP with **no PTY fallback**. Authentication/EULA failures require explicit recovery rather than background replay.
 
 ### Window State (`src/main/window-state.js`)
 
@@ -252,6 +263,7 @@ Background scheduling loop for user-defined AI scanners.
 | Property | Value |
 |---|---|
 | Tick interval | 60 seconds |
+| Renderer dispatch workers | 5 (global main-process limits still apply) |
 | Schedule types | interval, weekly, one-time |
 | Missed-run policies | `skip`, `run-once`, `catch-up` (max 3) |
 | Dedup | By item ID + title per scanner |
@@ -260,10 +272,12 @@ Background scheduling loop for user-defined AI scanners.
 **Flow per tick:**
 1. Check `connected` store — skip if WorkIQ unreachable.
 2. Filter scanners where `enabled && nextRunAt <= now`.
-3. For each due scanner: build prompt → `runWorkiqJson()` → normalize items → dedup → merge into `items` store.
+3. Use up to five workers for due scanners, rechecking latest existence, enabled state, connection and due time before dispatch. Build prompt → `runWorkiqJson()` (background priority) → normalize items → dedup → merge into `items` store. Dedup and store mutation remain synchronous after awaited cold-store hydration.
 4. Update scanner metadata (`lastRunAt`, `nextRunAt`, `itemCount`).
 5. Fire desktop notifications and in-app toasts based on `notificationMode` (`all` | `critical-only` | `silent`).
 6. Persist state.
+
+Cycles cannot overlap. EULA/launcher errors disconnect and stop further deferred dispatch. `QUEUE_FULL` leaves a scanner due without advancing `lastRunAt` or recording an ordinary scan failure; a later tick can try again.
 
 ### Monitor Engine (`src/svelte/lib/monitor-engine.js`)
 
@@ -272,6 +286,7 @@ Background loop that checks individual tracked items for updates.
 | Property | Value |
 |---|---|
 | Tick interval | 30 seconds |
+| Renderer dispatch workers | 5 (global main-process limits still apply) |
 | Schedule types | interval (15 min – 4 hr), weekly, one-time |
 | Change detection | Field-level comparison (status, severity, summary) |
 | History cap | 20 entries per item |
@@ -279,29 +294,31 @@ Background loop that checks individual tracked items for updates.
 **Flow per tick:**
 1. Check `connected` store — skip if WorkIQ unreachable.
 2. Filter items where `monitorEnabled && nextRunAt <= now && not complete/archived`.
-3. For each due item: build prompt (includes last 2 summaries for dedup) → `runWorkiqJson()`.
+3. Use up to five workers, rechecking latest existence, monitoring enabled state, snooze, lifecycle, connection and due time before dispatch. Build prompt (includes last 2 summaries for dedup) → `runWorkiqJson()` (background priority). Overlapping cycles and same-resource operations are guarded.
 4. Compare response fields against current values.
 5. On substantive change: update item, push to `updateHistory`, set `hasNewUpdate`, fire toast + desktop notification, log to history.
 6. Auto-update `lifecycleStatus` based on status keywords (resolved → complete, blocked → blocked).
 7. Handle one-time schedules (disable after single run).
 8. Recompute `nextRunAt` and persist state.
 
+`QUEUE_FULL` defers scheduled monitoring without advancing timestamps or logging an ordinary failure. Manual **Run Now / Check Now** calls use interactive priority.
+
 ### WorkIQ Communication (`src/svelte/lib/json-parser.js`)
 
-All AI calls flow through `runWorkiqJson()`:
+Scanner and monitor JSON reads flow through `runWorkiqJson()`:
 
 ```mermaid
 sequenceDiagram
   participant Engine as Scanner / Monitor
   participant JP as json-parser.js
   participant WIQ as window.workiq.ask()
-  participant IPC as IPC → PTY Bridge
-  participant CLI as WorkIQ CLI
+  participant IPC as IPC → Shared MCP Queue
+  participant CLI as Persistent local WorkIQ MCP
 
   Engine->>JP: runWorkiqJson(prompt, validator, label)
-  JP->>WIQ: window.workiq.ask(prompt)
+  JP->>WIQ: window.workiq.ask(prompt, {priority, key, maxAttempts})
   WIQ->>IPC: ipcRenderer.invoke("ask-workiq")
-  IPC->>CLI: node-pty spawn
+  IPC->>CLI: queued tools/call
   CLI-->>IPC: raw text + JSON
   IPC-->>WIQ: cleaned text
   WIQ-->>JP: raw response
@@ -311,7 +328,7 @@ sequenceDiagram
   JP-->>Engine: validated payload
 ```
 
-The parser uses multiple extraction strategies (fenced code blocks, brace-delimited slicing, raw JSON start) and a multi-stage repair pipeline (ANSI stripping, Unicode quote normalization, trailing comma removal, interior quote repair).
+The parser uses multiple extraction strategies (fenced code blocks, brace-delimited slicing, raw JSON start) and a multi-stage repair pipeline (ANSI stripping, Unicode quote normalization, trailing comma removal, interior quote repair), preserving citation injection and validators. It passes the remaining total-attempt budget to the backend and subtracts returned `attempts` (legacy mocks without `attempts` count as one). The default is two total attempts across network and parse retries; `maxRetries: 0` reduces this to one. Explicit backend error codes, including `QUEUE_FULL`, propagate to callers without renderer replay.
 
 ### Models (`src/svelte/lib/models/`)
 
@@ -340,19 +357,19 @@ sequenceDiagram
   participant PR as prompts.js
   participant JP as json-parser.js
   participant WIQ as window.workiq.ask()
-  participant PTY as pty-bridge.js
-  participant CLI as WorkIQ CLI
+  participant MCP as Shared MCP queue/client
+  participant CLI as Persistent local WorkIQ MCP
   participant ST as Svelte stores
   participant PS as persistence.js
 
   SE->>SE: tick (60s) — filter due scanners
   SE->>PR: buildScannerPrompt(scanner, items, scanners)
   SE->>JP: runWorkiqJson(prompt, validator)
-  JP->>WIQ: window.workiq.ask(prompt)
-  WIQ->>PTY: IPC invoke "ask-workiq"
-  PTY->>CLI: node-pty spawn
-  CLI-->>PTY: raw output
-  PTY-->>WIQ: cleaned text
+  JP->>WIQ: window.workiq.ask(prompt, background metadata)
+  WIQ->>MCP: IPC invoke "ask-workiq"
+  MCP->>CLI: paced tools/call
+  CLI-->>MCP: MCP response
+  MCP-->>WIQ: normalized answer + attempts
   WIQ-->>JP: response
   JP-->>SE: payload.radarItems[]
   SE->>SE: normalizeItem() + dedup + auto-monitor
@@ -376,7 +393,7 @@ sequenceDiagram
   ME->>PR: buildMonitorPrompt(item)
   ME->>JP: runWorkiqJson(prompt, validator)
   JP->>WIQ: window.workiq.ask(prompt)
-  Note over WIQ: IPC → PTY → WorkIQ CLI → response
+  Note over WIQ: IPC → shared queue → persistent local MCP → response
   JP-->>ME: payload {summary, status, severity, ...}
   ME->>ME: compare fields (status, severity, summary)
   alt Substantive change
@@ -439,12 +456,12 @@ graph LR
 | **CSP** | `default-src 'self'; style-src 'self'; script-src 'self'` |
 | **Context isolation** | Enabled — renderer cannot access Node.js APIs |
 | **Node integration** | Disabled |
-| **IPC surface** | 20 named channels exposed through `preload.js`, defined in `shared/ipc-contract.js` |
+| **IPC surface** | Named channels exposed through `preload.js`, defined in `shared/ipc-contract.js` |
 | **Context bridge** | `preload.js` exposes a minimal `window.workiq` API; no raw `ipcRenderer` access |
 | **External navigation** | Intercepted and opened in system browser |
 | **URL validation** | Rejects non-HTTP(S) schemes; generic M365 root URLs filtered out |
 | **LLM output** | HTML-escaped before rendering; JSON parsed through sanitization pipeline |
-| **PTY timeout** | 5-minute hard timeout kills hung WorkIQ processes |
+| **WorkIQ bounds** | Shared active/pending limits, paced starts, read-attempt budget and throttling cooldown |
 
 ---
 

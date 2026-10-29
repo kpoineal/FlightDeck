@@ -41,6 +41,10 @@
   font-weight: 500;
 }
 
+@media (max-width: 960px) {
+  .topbar-controls .status-pill { max-width: 240px; font-size: 0.7rem; overflow-wrap: anywhere; }
+}
+
 /* ── Primary button ── */
 .btn {
   background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 80%, #6366f1) 100%);
