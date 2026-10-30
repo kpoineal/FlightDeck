@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before, beforeEach } = require('node:test');
+const { describe, it, before, beforeEach, after, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -73,6 +73,8 @@ function persistedFixture(overrides = {}) {
 }
 
 before(async () => {
+  // Keep the fixed history fixtures inside the retention window on every run.
+  mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-01T12:00:00Z') });
   ({ get } = await import('svelte/store'));
   ({
     actionProposals,
@@ -119,6 +121,8 @@ before(async () => {
     schedulePersistentStateSave,
   } = await import('../src/svelte/lib/persistence.js'));
 });
+
+after(() => mock.timers.reset());
 
 beforeEach(() => {
   storedState = persistedFixture();

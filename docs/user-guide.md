@@ -163,6 +163,8 @@ The card shows up to **3 recent entries** by default. Click the expand control t
 
 The Overview tab collects all metadata, context, and actionable information about the item:
 
+In Radar, these details live in the **Work plan** side pane instead of a separate control strip. Edit **Owner**, **Due date**, and **Scanner assignment** directly in the metadata section; **Done when** has a single multiline editor above it. Changes save automatically. The item header contains left-aligned editable **criticality** and **work state** pills beneath the title, styled like the Inbox pills: click or Tab to a pill to choose a value. For unread items, **Read** remains available alongside the pills. Radar uses the inline item details rather than an **Open** popout button.
+
 - **Suggested next steps** — 0–2 concrete "WHO + WHAT" actions (e.g., "Reply to Sarah with the revised Q3 timeline"). Each step includes a **Draft ↗** button — click it to generate an AI-drafted message you can review, edit, and send.
 - **Source** — Where the signal originated: Email, Chat, Meeting, or Doc.
 - **Due date** — Editable inline. Click to open a date picker and set when action is needed. The AI automatically extracts due dates from temporal language in signals ("by Friday", "due March 1", "end of Q2"), but you can always override or clear the date manually.

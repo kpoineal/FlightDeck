@@ -271,7 +271,7 @@ test('Radar Inbox composes independent sort, quick filter, Refine, search, smart
 test('Radar Inbox restores frequent item and scanner controls with state cues', () => {
   const radar = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
 
-  for (const label of ['Scanner assignment', 'Due date', 'Owner', 'Done criteria']) {
+  for (const label of ['Scanner assignment', 'Due date', 'Owner', 'Done when']) {
     assert.match(radar, new RegExp(label, 'i'), `${label} is not editable in the mounted Inbox`);
   }
   assert.match(radar, /\bNEW\b/);
@@ -283,6 +283,28 @@ test('Radar Inbox restores frequent item and scanner controls with state cues', 
   assert.match(radar, /runScanner/);
   assert.match(radar, /Run (?:scanner|now)/i);
   assert.match(radar, /viewCount\(view\)|scanner.*count/i);
+});
+
+test('Radar gives each editable field one location and puts Inbox-style pills in the header', () => {
+  const radar = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+  const header = radar.match(/<article class="radar-thread-detail".*?<header>(.*?)<\/header>/s)?.[1] || '';
+  const details = radar.match(/<section class="radar-detail-section radar-work-details">.*?<dl class="radar-context-meta">(.*?)<\/dl>/s)?.[1] || '';
+
+  assert.doesNotMatch(radar, /radar-control-strip|radar-status|aria-label="Done criteria"/);
+  for (const label of ['Criticality', 'Work state']) {
+    assert.match(header, new RegExp(`aria-label="${label}"`));
+    assert.equal(radar.split(`aria-label="${label}"`).length - 1, 1);
+  }
+  assert.match(header, /mailbox-severity mailbox-severity-/);
+  assert.match(header, /mailbox-status mailbox-status-/);
+  assert.doesNotMatch(radar, /openSelectedPopout|openTrackerPopout/);
+  assert.doesNotMatch(header, />Open<\/button>/);
+  assert.match(header, /markItemRead/);
+  for (const id of ['radar-owner', 'radar-due', 'radar-item-scanner']) {
+    assert.match(details, new RegExp(`id="${id}"`));
+    assert.equal(radar.split(`id="${id}"`).length - 1, 1);
+  }
+  assert.equal(radar.split('id="radar-done-when"').length - 1, 1);
 });
 
 test('Radar Inbox supports roving keyboard selection without coupling it to read state', () => {
