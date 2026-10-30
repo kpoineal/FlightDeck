@@ -1850,8 +1850,8 @@ async function inboxReadActivationScenario(session) {
 async function blockedPriorityScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
-  await session.page.locator('.radar-thread-detail label').filter({ hasText: 'Criticality' }).locator('select').selectOption('Elevated');
-  await session.page.locator('.radar-thread-detail label').filter({ hasText: 'Work state' }).locator('select').selectOption('blocked');
+  await session.page.getByLabel('Criticality', { exact: true }).selectOption('Elevated');
+  await session.page.getByLabel('Work state', { exact: true }).selectOption('blocked');
   await session.page.getByTestId('radar-view-priority').click();
   await session.page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`).waitFor({ state: 'visible' });
   await assertHealthy(session);
@@ -1907,8 +1907,8 @@ async function recentFilterEditScenario(session) {
   await session.page.getByLabel('Owner').press('Tab');
   await session.page.getByLabel('Due date').fill('2099-09-15T14:30');
   await session.page.getByLabel('Due date').press('Tab');
-  await session.page.getByLabel('Done criteria').fill('Browser workflow is persisted.');
-  await session.page.getByLabel('Done criteria').press('Tab');
+  await session.page.getByLabel('Done when', { exact: true }).fill('Browser workflow is persisted.');
+  await session.page.getByLabel('Done when', { exact: true }).press('Tab');
   await session.page.getByTestId('inbox-active-filter').filter({ hasText: /UPDATED/i }).click();
   await session.page.locator(`[data-thread-id="${fixture.olderId}"]`).waitFor({ state: 'visible' });
   await session.page.waitForFunction(({ newerId, targetScannerId, monitorPrompt }) => {
@@ -2391,6 +2391,116 @@ async function radarRichContextScenario(session) {
   await assertHealthy(session, 'desktop');
 }
 
+async function consolidatedDetailsScenario(session, width) {
+  const { page } = session;
+  await openApp(session);
+  await selectFixtureThread(page);
+  const header = page.locator('.radar-thread-detail > header');
+  const metadata = page.locator('.radar-context-meta');
+  assert.equal(await page.locator('.radar-control-strip').count(), 0, 'Duplicate control strip remains');
+  assert.equal(await page.getByLabel('Done when', { exact: true }).count(), 1);
+  assert.equal(await page.getByLabel('Done criteria', { exact: true }).count(), 0);
+  assert.equal(await header.getByRole('button', { name: 'Open', exact: true }).count(), 0);
+  const layout = await header.evaluate((element) => {
+    const heading = element.querySelector('h2').getBoundingClientRect();
+    const actions = element.querySelector('.radar-header-actions').getBoundingClientRect();
+    return { titleLeft: heading.left, titleBottom: heading.bottom, pillsLeft: actions.left, pillsTop: actions.top };
+  });
+  assert.ok(Math.abs(layout.pillsLeft - layout.titleLeft) <= 1, 'Header pills are not aligned to the left of the title');
+  assert.ok(layout.pillsTop >= layout.titleBottom, 'Header pills are not below the title');
+
+  await header.getByLabel('Criticality', { exact: true }).selectOption('Elevated');
+  await header.getByLabel('Work state', { exact: true }).selectOption('blocked');
+  await header.getByLabel('Criticality', { exact: true }).focus();
+  assert.equal(await header.locator('.radar-header-pill').first().evaluate((element) =>
+    getComputedStyle(element).outlineStyle), 'solid', 'Keyboard focus is not visible on the pill');
+  await header.getByLabel('Criticality', { exact: true }).press('ArrowUp');
+  assert.equal(await header.getByLabel('Criticality', { exact: true }).inputValue(), 'Critical');
+  await header.getByLabel('Criticality', { exact: true }).press('ArrowDown');
+  assert.equal(await header.getByLabel('Criticality', { exact: true }).inputValue(), 'Elevated');
+
+  const assertPillStyles = async () => {
+    const styles = await page.evaluate((id) => {
+      const readStyle = (selector) => {
+        const element = document.querySelector(selector);
+        const style = getComputedStyle(element);
+        return {
+          text: element.querySelector('span')?.textContent || element.textContent,
+          color: style.color,
+          borderColor: style.borderColor,
+          borderRadius: style.borderRadius,
+          padding: style.padding,
+        };
+      };
+      return {
+        headerSeverity: readStyle('.radar-header-actions .mailbox-severity'),
+        rowSeverity: readStyle(`[data-thread-id="${id}"] .mailbox-severity`),
+        headerStatus: readStyle('.radar-header-actions .mailbox-status'),
+        rowStatus: readStyle(`[data-thread-id="${id}"] .mailbox-status`),
+      };
+    }, FIXTURE_ITEM_ID);
+    assert.deepEqual(styles.headerSeverity, styles.rowSeverity, 'Header criticality differs from Inbox pill');
+    assert.deepEqual(styles.headerStatus, styles.rowStatus, 'Header work state differs from Inbox pill');
+  };
+  await assertPillStyles();
+  await page.getByRole('button', { name: 'Toggle theme' }).click();
+  await assertPillStyles();
+
+  const owner = metadata.getByLabel('Owner', { exact: true });
+  await owner.fill('');
+  await owner.pressSequentially('Browser owner');
+  assert.equal(await owner.inputValue(), 'Browser owner', 'Typing lost spaces in the owner');
+  const due = metadata.getByLabel('Due date', { exact: true });
+  const dueValue = '2099-09-15T14:30';
+  const expectedDue = await page.evaluate((value) => new Date(value).toISOString(), dueValue);
+  await due.fill(dueValue);
+  const scanner = metadata.getByLabel('Scanner assignment', { exact: true });
+  await scanner.selectOption('');
+  await page.getByLabel('Done when', { exact: true }).fill('Owner confirms.\nWork is delivered.');
+  await page.getByLabel('Done when', { exact: true }).press('Tab');
+  await page.waitForFunction(async ({ id, expectedDue }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const item = state?.items.find((entry) => entry.id === id);
+    return item?.severity === 'Elevated' && item?.lifecycleStatus === 'blocked'
+      && item?.owner === 'Browser owner' && item?.dueAt === expectedDue
+      && item?.scannerId == null && item?.doneCriteria === 'Owner confirms.\nWork is delivered.';
+  }, { id: FIXTURE_ITEM_ID, expectedDue });
+
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  assert.equal(await header.getByLabel('Criticality', { exact: true }).inputValue(), 'Elevated');
+  assert.equal(await header.getByLabel('Work state', { exact: true }).inputValue(), 'blocked');
+  assert.equal(await owner.inputValue(), 'Browser owner');
+  assert.equal(await due.inputValue(), dueValue);
+  assert.equal(await scanner.inputValue(), '');
+  assert.equal(await page.getByLabel('Done when', { exact: true }).inputValue(), 'Owner confirms.\nWork is delivered.');
+  await header.scrollIntoViewIfNeeded();
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  const screenshotPath = path.join(SCREENSHOT_DIR, `radar-consolidated-details-${width}.png`);
+  await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled' });
+  screenshotPaths.push(screenshotPath);
+  process.stdout.write(`SCREENSHOT view=radar-consolidated-details viewport=${width} path=${screenshotPath}\n`);
+  for (const control of [header, owner, due, scanner]) {
+    await control.scrollIntoViewIfNeeded();
+    const bounds = await control.boundingBox();
+    assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width,
+      'A consolidated detail control overflows the viewport');
+  }
+  await owner.fill('');
+  await due.fill('');
+  await due.press('Tab');
+  await page.waitForFunction(async (id) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const item = state?.items.find((entry) => entry.id === id);
+    return item?.owner === '' && item?.dueAt == null;
+  }, FIXTURE_ITEM_ID);
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  assert.equal(await owner.inputValue(), 'You', 'Cleared owner did not retain the default responsibility');
+  assert.equal(await due.inputValue(), '', 'Cleared due date returned after reload');
+  await assertHealthy(session, width <= 960 ? 'mobile' : 'desktop');
+}
+
 async function doneWhenEditingScenario(session, width) {
   const { page } = session;
   await openApp(session);
@@ -2500,6 +2610,11 @@ async function doneWhenEditingScenario(session, width) {
     await runScenario('inbox-explicit-activation-marks-read', browser, rendererServer.baseUrl, inboxReadActivationScenario);
     await runScenario('blocked-elevated-item-remains-priority', browser, rendererServer.baseUrl, blockedPriorityScenario);
     await runScenario('inbox-recent-filter-edit-workflow', browser, rendererServer.baseUrl, recentFilterEditScenario);
+    for (const width of [1440, 360]) {
+      await runScenario(`radar-consolidated-details-${width}`, browser, rendererServer.baseUrl,
+        (session) => consolidatedDetailsScenario(session, width),
+        { viewport: { width, height: width === 1440 ? 1000 : 900 } });
+    }
     await runScenario('mobile-list-detail-back-focus', browser, rendererServer.baseUrl, mobileScenario, { viewport: { width: 760, height: 900 } });
     await runScenario('action-queue-and-timeline-desktop-capture', browser, rendererServer.baseUrl,
       (session) => actionQueueScreenshotScenario(session, 'desktop'),

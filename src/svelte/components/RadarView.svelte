@@ -944,11 +944,6 @@
     savePersistentState();
   }
 
-  function openSelectedPopout() {
-    if (selected && window.workiq && typeof window.workiq.openTrackerPopout === 'function') {
-      window.workiq.openTrackerPopout(selected.id);
-    }
-  }
 </script>
 
 <section class="command-view radar-workspace" aria-label="Radar workspace" bind:this={viewRoot}>
@@ -1155,64 +1150,34 @@
           <div>
             <span class="eyebrow">{selected.sourceType || 'Signal'}</span>
             <h2 tabindex="-1">{selected.title || 'Untitled item'}</h2>
-            <p>{selected.owner || 'You'} · {safeDate(mailboxActivityAt(selected), 'No activity')}</p>
+            <p>{safeDate(mailboxActivityAt(selected), 'No activity')}</p>
           </div>
-          <span class="radar-status mailbox-status mailbox-status-{mailboxWorkStatusClass(selected)}">{mailboxWorkStatus(selected)}</span>
-        </header>
-
-        <section class="radar-control-strip" aria-label="Work item controls">
-          <label class="radar-control-field">
-            <span>Criticality</span>
-            <span class="mailbox-severity mailbox-severity-{(selected.severity || 'Observe').toLowerCase()} radar-control-pill">
+          <div class="radar-header-actions">
+            <label class="mailbox-severity mailbox-severity-{(selected.severity || 'Observe').toLowerCase()} radar-header-pill"
+              title={`Criticality: ${selected.severity || 'Observe'} — click to edit`}>
+              <span aria-hidden="true">{selected.severity || 'Observe'}</span>
               <select aria-label="Criticality" value={selected.severity}
                 on:change={(event) => setItemSeverity(selected.id, event.target.value)}>
                 <option value="Critical">Critical</option>
                 <option value="Elevated">Elevated</option>
                 <option value="Observe">Observe</option>
               </select>
-            </span>
-          </label>
-          <label class="radar-control-field">
-            <span>Work state</span>
-            <span class="mailbox-status mailbox-status-{mailboxWorkStatusClass(selected)} radar-control-pill">
+            </label>
+            <label class="mailbox-status mailbox-status-{mailboxWorkStatusClass(selected)} radar-header-pill"
+              title={`Work status: ${mailboxWorkStatus(selected)} — click to edit`}>
+              <span aria-hidden="true">{mailboxWorkStatus(selected)}</span>
               <select aria-label="Work state" value={selected.lifecycleStatus}
                 on:change={(event) => setItemLifecycle(selected.id, event.target.value)}>
                 {#each LIFECYCLE_STATUSES as status}
                   <option value={status}>{LIFECYCLE_LABELS[status]}</option>
                 {/each}
               </select>
-            </span>
-          </label>
-          <label class="radar-control-field">
-            <span>Scanner assignment</span>
-            <select aria-label="Scanner assignment"
-              bind:value={() => selected.scannerId || '', (value) => setItemField(selected.id, 'scannerId', value || null)}>
-              <option value="">Unassigned</option>
-              {#each $scanners as scanner (scanner.id)}
-                <option value={scanner.id}>{scanner.name}</option>
-              {/each}
-            </select>
-          </label>
-          <label class="radar-control-field">
-            <span>Due date</span>
-            <input aria-label="Due date" type="datetime-local"
-              bind:value={() => dueInputValue(selected.dueAt), (value) => updateDueDate(selected.id, value)} />
-          </label>
-          <label class="radar-control-field radar-control-field--grow">
-            <span>Owner</span>
-            <input aria-label="Owner" type="text" maxlength="160"
-              bind:value={() => selected.owner || '', (value) => setItemField(selected.id, 'owner', value.trim())} />
-          </label>
-          <label class="radar-control-field radar-control-field--wide">
-            <span>Done criteria</span>
-            <input aria-label="Done criteria" type="text" maxlength="500"
-              bind:value={() => selected.doneCriteria || '', (value) => setItemField(selected.id, 'doneCriteria', value)} />
-          </label>
-          {#if isMailboxUnread(selected)}
-            <button type="button" class="small-btn radar-utility-button" title="Mark this item as read" on:click={() => markItemRead(selected.id)}>Read</button>
-          {/if}
-          <button type="button" class="small-btn radar-utility-button" title="Open this item in a separate window" on:click={openSelectedPopout}>Open</button>
-        </section>
+            </label>
+            {#if isMailboxUnread(selected)}
+              <button type="button" class="small-btn radar-utility-button" title="Mark this item as read" on:click={() => markItemRead(selected.id)}>Read</button>
+            {/if}
+          </div>
+        </header>
 
         <div class="radar-detail-columns">
         <section class="radar-detail-section radar-command-bar radar-work-panel">
@@ -1355,8 +1320,26 @@
             </div>
             <dl class="radar-context-meta">
               <div><dt>Source</dt><dd>{selected.sourceType || 'Signal'}</dd></div>
-              <div><dt>Owner</dt><dd>{selected.owner || 'You'}</dd></div>
-              <div><dt>Due</dt><dd>{safeDate(selected.dueAt, 'No due date')}</dd></div>
+              <div>
+                <dt><label for="radar-owner">Owner</label></dt>
+                <dd><input id="radar-owner" type="text" maxlength="160" placeholder="Set owner"
+                  bind:value={() => selected.owner || '', (value) => setItemField(selected.id, 'owner', value)} /></dd>
+              </div>
+              <div class="radar-context-meta__wide">
+                <dt><label for="radar-due">Due date</label></dt>
+                <dd><input id="radar-due" type="datetime-local"
+                  bind:value={() => dueInputValue(selected.dueAt), (value) => updateDueDate(selected.id, value)} /></dd>
+              </div>
+              <div class="radar-context-meta__wide">
+                <dt><label for="radar-item-scanner">Scanner assignment</label></dt>
+                <dd><select id="radar-item-scanner"
+                  bind:value={() => selected.scannerId || '', (value) => setItemField(selected.id, 'scannerId', value || null)}>
+                  <option value="">Unassigned</option>
+                  {#each $scanners as scanner (scanner.id)}
+                    <option value={scanner.id}>{scanner.name}</option>
+                  {/each}
+                </select></dd>
+              </div>
               <div><dt>Last checked</dt><dd>{safeDate(selected.lastRunAt, 'Never')}</dd></div>
               {#if selected.completionConfidence}
                 <div><dt>Completion confidence</dt><dd>{selected.completionConfidence}</dd></div>

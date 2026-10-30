@@ -217,6 +217,22 @@ describe('shared item actions', () => {
     assert.equal(globalThis.__mailboxTestSaveCalls, 1);
   });
 
+  it('keeps manually edited work states consistent through reload normalization', async () => {
+    const { normalizeItem } = await import('../src/svelte/lib/models/item.js');
+    for (const [lifecycleStatus, status] of [
+      ['blocked', 'Blocked'],
+      ['waiting', 'Waiting'],
+      ['in-progress', 'In Progress'],
+    ]) {
+      items.set([monitoredItem({ status: 'Complete', lifecycleStatus: 'complete' })]);
+      setItemLifecycle('thread-1', lifecycleStatus);
+      const updated = get(items)[0];
+      assert.equal(updated.status, status);
+      assert.equal(normalizeItem(JSON.parse(JSON.stringify(updated))).lifecycleStatus, lifecycleStatus);
+      assert.equal(updated.updateHistory[0].status, 'Complete', 'History lost the previous observed status');
+    }
+  });
+
   it('records one sanitized action event in both ledgers with one persistence call', async () => {
     const source = monitoredItem();
     items.set([source]);

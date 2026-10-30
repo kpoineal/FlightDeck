@@ -6,6 +6,7 @@ import {
   savePersistentState,
 } from './persistence.js';
 import { markMailboxThreadRead } from './mailbox.js';
+import { LIFECYCLE_LABELS } from './constants.js';
 import { normalizeItemId, prependItemUpdateHistory } from './models/item.js';
 import {
   actionProposalDuplicateKey,
@@ -78,7 +79,13 @@ export function setItemLifecycle(itemId, lifecycleStatus) {
       seen: true,
     });
 
-    const updated = { ...item, lifecycleStatus, lastChangedAt: changedAt, updateHistory };
+    const updated = {
+      ...item,
+      lifecycleStatus,
+      status: LIFECYCLE_LABELS[lifecycleStatus] || item.status,
+      lastChangedAt: changedAt,
+      updateHistory,
+    };
     if (lifecycleStatus === 'complete' && !updated.completedAt) updated.completedAt = changedAt;
     if (lifecycleStatus === 'complete' || lifecycleStatus === 'archived') {
       updated.monitorEnabled = false;
