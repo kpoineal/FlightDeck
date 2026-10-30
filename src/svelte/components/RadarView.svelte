@@ -1206,7 +1206,7 @@
           <label class="radar-control-field radar-control-field--wide">
             <span>Done criteria</span>
             <input aria-label="Done criteria" type="text" maxlength="500"
-              bind:value={() => selected.doneCriteria || '', (value) => setItemField(selected.id, 'doneCriteria', value.trim())} />
+              bind:value={() => selected.doneCriteria || '', (value) => setItemField(selected.id, 'doneCriteria', value)} />
           </label>
           {#if isMailboxUnread(selected)}
             <button type="button" class="small-btn radar-utility-button" title="Mark this item as read" on:click={() => markItemRead(selected.id)}>Read</button>
@@ -1348,8 +1348,10 @@
               </div>
             {/if}
             <div class="radar-context-block radar-context-done" data-testid="radar-context-done">
-              <h4>Done when</h4>
-              <p>{selected.doneCriteria || 'Completion criteria have not been defined yet.'}</p>
+              <h4><label for="radar-done-when">Done when</label></h4>
+              <textarea id="radar-done-when" class="radar-done-when" rows="3" maxlength="500"
+                placeholder="Define what done looks like..."
+                bind:value={() => selected.doneCriteria || '', (value) => setItemField(selected.id, 'doneCriteria', value)}></textarea>
             </div>
             <dl class="radar-context-meta">
               <div><dt>Source</dt><dd>{selected.sourceType || 'Signal'}</dd></div>

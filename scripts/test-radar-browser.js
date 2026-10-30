@@ -2251,6 +2251,77 @@ async function radarIndependentScrollScenario(session, mobile = false) {
   await assertHealthy(session, 'desktop');
 }
 
+async function radarActivityResponsiveHeightScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  const history = Array.from({ length: 12 }, (_, index) => ({
+    kind: 'reply',
+    timestamp: new Date(Date.now() - index * 3_600_000).toISOString(),
+    changes: ['Updated'],
+    summary: `Update ${index + 1}. ${'Customer approval is pending while the delivery team confirms the rollout plan and remaining dependencies. '.repeat(8)}`,
+    severity: 'Elevated',
+    seen: true,
+  }));
+  await page.evaluate(async ({ id, history }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    await window.workiq.storeSet('flightdeck.demo.v2', {
+      ...state,
+      items: state.items.map((item) => item.id === id ? { ...item, updateHistory: history } : item),
+    });
+  }, { id: FIXTURE_ITEM_ID, history });
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+
+  const timeline = page.locator('.radar-activity-panel .activity-timeline');
+  const measure = () => timeline.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const detailBounds = element.closest('.radar-thread-detail').getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      height: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      maxHeight: style.maxHeight,
+      overflowY: style.overflowY,
+      animation: style.animationName,
+      visibleHeight: Math.max(0,
+        Math.min(bounds.bottom, detailBounds.bottom, innerHeight) - Math.max(bounds.top, detailBounds.top, 0)),
+    };
+  });
+  const measurements = [];
+  for (const height of [700, 1100]) {
+    await page.setViewportSize({ width: 1440, height });
+    await page.locator('.radar-thread-detail').evaluate((element) => { element.scrollTop = 0; });
+    const measurement = await measure();
+    assert.equal(measurement.maxHeight, 'none', 'Radar timeline retained the fixed height cap');
+    assert.equal(measurement.animation, 'none', 'Timeline reveal animation reinstated the height cap');
+    assert.equal(measurement.overflowY, 'visible', 'Radar timeline retained a nested scrollbar');
+    assert.ok(measurement.height > 420, `Timeline is still constrained: ${JSON.stringify(measurement)}`);
+    assert.ok(measurement.scrollHeight <= measurement.height + 1, 'Timeline content is clipped');
+    measurements.push(measurement);
+    await assertHealthy(session, 'desktop');
+  }
+  assert.ok(measurements[1].visibleHeight > measurements[0].visibleHeight + 300,
+    `Activity did not gain space in a taller window: ${JSON.stringify(measurements)}`);
+  assert.ok(measurements[1].visibleHeight > 420, 'Tall windows still show only a 420px activity viewport');
+  assert.equal(await timeline.locator('.at-event').count(), 5);
+  await timeline.getByRole('button', { name: 'Show 7 older', exact: true }).click();
+  assert.equal(await timeline.locator('.at-event').count(), 12, 'Expanding history lost activity entries');
+
+  await page.setViewportSize({ width: 360, height: 900 });
+  await timeline.waitFor({ state: 'visible' });
+  const mobile = await measure();
+  assert.equal(mobile.overflowY, 'visible', 'Mobile timeline has a nested scroll trap');
+  assert.ok(mobile.scrollHeight <= mobile.height + 1, 'Mobile timeline clips activity');
+  const mobileFlow = await page.evaluate(() => ({
+    overflow: getComputedStyle(document.body).overflow,
+    scrollHeight: document.documentElement.scrollHeight,
+    clientHeight: document.documentElement.clientHeight,
+  }));
+  assert.notEqual(mobileFlow.overflow, 'hidden', 'Mobile activity cannot scroll with the page');
+  assert.ok(mobileFlow.scrollHeight > mobileFlow.clientHeight, 'Mobile activity did not extend the document');
+  await assertHealthy(session, 'mobile');
+}
+
 async function radarRichContextScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
@@ -2261,7 +2332,7 @@ async function radarRichContextScenario(session) {
   const sources = session.page.getByTestId('radar-context-sources');
   assert.equal(await session.page.getByTestId('radar-context-summary').count(), 0, 'Context repeated the Activity summary');
   await reason.getByText('Contract deadline in 8 days', { exact: false }).waitFor({ state: 'visible' });
-  await done.getByText('Completion criteria have not been defined yet.', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await done.getByRole('textbox', { name: 'Done when', exact: true }).inputValue(), '');
 
   const doneCriteria = 'Legal approves the indemnity language and both parties sign the renewal agreement.';
   const recommendedMoves = [
@@ -2279,7 +2350,7 @@ async function radarRichContextScenario(session) {
   }, { itemId: FIXTURE_ITEM_ID, criteria: doneCriteria, moves: recommendedMoves });
   await openApp(session, { reseed: false });
   await selectFixtureThread(session.page);
-  await session.page.getByTestId('radar-context-done').getByText(doneCriteria, { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await session.page.getByRole('textbox', { name: 'Done when', exact: true }).inputValue(), doneCriteria);
 
   const recommendations = session.page.getByTestId('scanner-recommendations');
   await session.page.getByRole('heading', { name: 'Work plan', exact: true }).waitFor({ state: 'visible' });
@@ -2318,6 +2389,55 @@ async function radarRichContextScenario(session) {
   await meeting.click();
   assert.deepEqual(await session.page.evaluate(() => window.__openExternalCalls), [expectedUrl], 'Radar source link bypassed the external-open bridge');
   await assertHealthy(session, 'desktop');
+}
+
+async function doneWhenEditingScenario(session, width) {
+  const { page } = session;
+  await openApp(session);
+  await selectFixtureThread(page);
+  const textbox = page.getByRole('textbox', { name: 'Done when', exact: true });
+  await textbox.scrollIntoViewIfNeeded();
+  assert.equal(await textbox.inputValue(), '');
+  assert.equal(await textbox.getAttribute('maxlength'), '500');
+  await textbox.click();
+  assert.equal(await textbox.evaluate((element) => element === document.activeElement), true);
+  await textbox.pressSequentially('Legal approves the renewal.');
+  await textbox.press('Enter');
+  await textbox.pressSequentially('Both parties sign. ');
+  const criteria = 'Legal approves the renewal.\nBoth parties sign. ';
+  assert.equal(await textbox.inputValue(), criteria, 'Typing lost spaces or line breaks');
+  await textbox.press('Tab');
+  await page.waitForFunction(async ({ id, expected }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return state?.items.find((item) => item.id === id)?.doneCriteria === expected;
+  }, { id: FIXTURE_ITEM_ID, expected: criteria });
+
+  const back = page.getByTestId('radar-detail-back');
+  if (await back.isVisible()) await back.click();
+  await page.locator(`.radar-thread:not([data-thread-id="${FIXTURE_ITEM_ID}"])`).first().click();
+  assert.notEqual(await textbox.inputValue(), criteria, 'Criteria leaked to another thread');
+  if (await back.isVisible()) await back.click();
+  await page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`).click();
+  await textbox.waitFor({ state: 'visible' });
+  assert.equal(await textbox.inputValue(), criteria, 'Criteria were lost after switching threads');
+
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  assert.equal(await textbox.inputValue(), criteria, 'Multiline criteria did not survive reload');
+  await textbox.fill('');
+  await textbox.press('Tab');
+  await page.waitForFunction(async (id) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return !state?.items.find((item) => item.id === id)?.doneCriteria;
+  }, FIXTURE_ITEM_ID);
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  assert.equal(await textbox.inputValue(), '', 'Cleared criteria returned after reload');
+  await textbox.scrollIntoViewIfNeeded();
+  const rectangle = await textbox.boundingBox();
+  assert.ok(rectangle && rectangle.x >= 0 && rectangle.x + rectangle.width <= width,
+    'Done when textbox overflows the viewport');
+  await assertHealthy(session, width <= 760 ? 'mobile' : 'desktop');
 }
 
 (async () => {
@@ -2408,9 +2528,17 @@ async function radarRichContextScenario(session) {
     await runScenario('radar-document-flow-mobile', browser, rendererServer.baseUrl,
       (session) => radarIndependentScrollScenario(session, true),
       { viewport: { width: 360, height: 700 } });
+    await runScenario('radar-activity-responsive-height', browser, rendererServer.baseUrl,
+      radarActivityResponsiveHeightScenario,
+      { viewport: { width: 1440, height: 700 } });
     await runScenario('radar-rich-context-and-source-links', browser, rendererServer.baseUrl,
       radarRichContextScenario,
       { viewport: { width: 1440, height: 1000 } });
+    for (const width of [1440, 360]) {
+      await runScenario(`done-when-editing-${width}`, browser, rendererServer.baseUrl,
+        (session) => doneWhenEditingScenario(session, width),
+        { viewport: { width, height: width === 1440 ? 1000 : 900 } });
+    }
     process.stdout.write(`SCENARIO_TOTAL=${results.length} PASS=${results.filter((result) => result.passed).length} FAIL=${results.filter((result) => !result.passed).length}\n`);
     process.stdout.write(`METRICS unexpectedExternalRequests=${totals.unexpectedExternalRequests} pageErrors=${totals.pageErrors} consoleErrors=${totals.consoleErrors} desktopOverflowFailures=${totals.desktopOverflowFailures} mobileOverflowFailures=${totals.mobileOverflowFailures} desktopOverlapFailures=${totals.desktopOverlapFailures} mobileOverlapFailures=${totals.mobileOverlapFailures}\n`);
     process.stdout.write(`SCREENSHOT_TOTAL=${screenshotPaths.length}\n`);

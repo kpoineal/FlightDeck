@@ -69,7 +69,7 @@
 
   $effect(() => {
     const visibleSelectionId = selected?.id || null;
-    if (visibleSelectionId !== $selectedProposalId) selectedProposalId.set(visibleSelectionId);
+    if ($actionsQueueOpen && visibleSelectionId !== $selectedProposalId) selectedProposalId.set(visibleSelectionId);
   });
 
   function close() {

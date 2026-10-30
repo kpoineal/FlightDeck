@@ -55,7 +55,7 @@ function updateItem(itemId, updater) {
     changed = updated !== item;
     return updated;
   }));
-  if (changed) savePersistentState();
+  if (changed) savePersistentState(get(isDemo));
   return changed;
 }
 
@@ -579,4 +579,3 @@ function compactObject(value) {
 function normalizeTimestamp(value) {
   return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null;
 }
-

@@ -356,6 +356,14 @@ describe('mailbox timeline behavior', () => {
 });
 
 describe('normalizeItem mailbox history', () => {
+  it('preserves editable completion criteria, including line breaks and spaces', () => {
+    const doneCriteria = 'Legal approves the renewal.\nBoth parties sign. ';
+    assert.equal(normalizeItem({ id: 'criteria', doneCriteria }).doneCriteria, doneCriteria);
+    assert.equal(normalizeItem({ id: 'empty-criteria', doneCriteria: '' }).doneCriteria, null);
+    assert.equal(normalizeItem({ id: 'missing-criteria' }).doneCriteria, null);
+    assert.equal(normalizeItem({ id: 'invalid-criteria', doneCriteria: {} }).doneCriteria, null);
+  });
+
   it('collects validated structured and ledger evidence without duplicates', () => {
     const links = collectItemEvidenceLinks({
       sourceType: 'Email',

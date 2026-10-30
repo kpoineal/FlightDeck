@@ -6,8 +6,9 @@ const { registerHooks } = require('node:module');
 
 const persistenceStub = `data:text/javascript,${encodeURIComponent(`
   export function pruneHistory() {}
-  export function savePersistentState() {
+  export function savePersistentState(isDemo = false) {
     globalThis.__mailboxTestSaveCalls = (globalThis.__mailboxTestSaveCalls || 0) + 1;
+    globalThis.__mailboxTestSaveModes.push(isDemo);
     globalThis.__mailboxTestOnMonitorCycleSaved?.();
   }
   export function isAcceptedPersistenceReceipt(receipt) {
@@ -71,6 +72,8 @@ let runItemCheck;
 let startMonitoringLoop;
 let stopMonitoringLoop;
 let connected;
+let isDemo;
+let setItemField;
 
 function monitoredItem(overrides = {}) {
   return {
@@ -126,8 +129,8 @@ function matchingPayload(overrides = {}) {
 
 before(async () => {
   ({ get } = await import('svelte/store'));
-  ({ items, history, activeOperations, connected } = await import('../src/svelte/lib/stores.js'));
-  ({ createActionEventId, markItemRead, recordActionEvent, setItemLifecycle } = await import('../src/svelte/lib/item-actions.js'));
+  ({ items, history, activeOperations, connected, isDemo } = await import('../src/svelte/lib/stores.js'));
+  ({ createActionEventId, markItemRead, recordActionEvent, setItemLifecycle, setItemField } = await import('../src/svelte/lib/item-actions.js'));
   ({ runItemCheck, startMonitoringLoop, stopMonitoringLoop } = await import('../src/svelte/lib/monitor-engine.js'));
 });
 
@@ -136,7 +139,9 @@ beforeEach(() => {
   history.set([]);
   activeOperations.set(new Map());
   connected.set(false);
+  isDemo.set(false);
   globalThis.__mailboxTestSaveCalls = 0;
+  globalThis.__mailboxTestSaveModes = [];
   globalThis.__mailboxTestMonitorPayload = null;
   globalThis.__mailboxTestRunWorkiqJson = null;
   globalThis.__mailboxTestOnMonitorCycleSaved = null;
@@ -153,6 +158,17 @@ beforeEach(() => {
 });
 
 describe('shared item actions', () => {
+  it('saves edited completion criteria to the current storage mode without trimming typed text', () => {
+    const doneCriteria = 'Legal approves the renewal.\nBoth parties sign. ';
+    for (const demoMode of [false, true]) {
+      isDemo.set(demoMode);
+      items.set([monitoredItem()]);
+      setItemField('thread-1', 'doneCriteria', doneCriteria);
+      assert.equal(get(items)[0].doneCriteria, doneCriteria);
+      assert.equal(globalThis.__mailboxTestSaveModes.at(-1), demoMode);
+    }
+  });
+
   it('creates stable event ids that vary by canonical event and attempt', () => {
     const input = {
       proposalId: 'proposal-1',
