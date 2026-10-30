@@ -146,7 +146,7 @@ The header strip across the top of every card contains:
 
 ![Activity tab showing update timeline](screenshots/03a-tracker-card-activity-dark.png)
 
-The Activity tab shows a chronological timeline of every change FlightDeck has detected for this item. Each entry in the timeline includes:
+The Activity tab shows a chronological timeline of every change FlightDeck has detected for this item. In Radar, the timeline grows with its content rather than stopping at a fixed height; the detail pane scrolls on desktop, while mobile uses the page scroll. Each entry in the timeline includes:
 
 - **Timestamp** — When the change was detected
 - **Severity badge** — The severity level at the time of that update
@@ -167,7 +167,7 @@ The Overview tab collects all metadata, context, and actionable information abou
 - **Source** — Where the signal originated: Email, Chat, Meeting, or Doc.
 - **Due date** — Editable inline. Click to open a date picker and set when action is needed. The AI automatically extracts due dates from temporal language in signals ("by Friday", "due March 1", "end of Q2"), but you can always override or clear the date manually.
 - **Owner** — Editable inline. Who is responsible for this item.
-- **Done when** — Editable inline. A free-text field where you define what "done" looks like for this specific item. For example: "Jordan confirms receipt of the budget spreadsheet" or "Contract signed by both parties." This criteria is automatically included in the monitoring prompt, so FlightDeck's AI knows exactly what resolution looks like and can detect when the item is complete. If you leave this blank, the AI uses its own judgment to assess completion.
+- **Done when** — Editable inline. In Radar, click or Tab into the **Done when** textbox to edit it directly; changes save automatically. It supports multiple lines and up to 500 characters. Define what "done" looks like for this specific item, for example: "Jordan confirms receipt of the budget spreadsheet" or "Contract signed by both parties." This criteria is automatically included in the monitoring prompt, so FlightDeck's AI knows exactly what resolution looks like and can detect when the item is complete. If you leave this blank, the AI uses its own judgment to assess completion.
 - **People** — Collapsible list of counterparties and key contacts involved in this item.
 - **Evidence links** — Clickable deep links back to source materials in M365, with recency labels showing when each signal was last updated (e.g., "3h ago", "yesterday").
 - **Tracked / Last checked** — Timestamps showing when the item entered tracking and when the monitoring engine last ran a check.

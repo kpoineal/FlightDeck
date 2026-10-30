@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { get } from 'svelte/store';
 
 import { createThreadComposerRequestTracker } from '../src/svelte/lib/thread-composer.js';
@@ -43,4 +44,9 @@ test('Action Queue selection invalidates proposal synthesis for the previous thr
   assert.equal(tracker.isCurrent(request), false);
   assert.equal(get(selectedProposalId), 'proposal-b');
   assert.equal(get(actionsQueueOpen), true);
+});
+
+test('hidden Action Queue cannot invalidate proposal synthesis during persistence', () => {
+  const source = fs.readFileSync(new URL('../src/svelte/components/ActionQueue.svelte', import.meta.url), 'utf8');
+  assert.match(source, /if \(\$actionsQueueOpen && visibleSelectionId !== \$selectedProposalId\) selectedProposalId\.set\(visibleSelectionId\)/);
 });

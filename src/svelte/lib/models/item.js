@@ -470,7 +470,7 @@ export function normalizeItem(item) {
     summary: cleanDisplayText(item?.summary || ''),
     reason: cleanDisplayText(item?.reason || ''),
     status: cleanDisplayText(item?.status || 'Inbound'),
-    doneCriteria: cleanDisplayText(item?.doneCriteria || '') || null,
+    doneCriteria: typeof item?.doneCriteria === 'string' ? item.doneCriteria || null : null,
     completionConfidence: ['high', 'medium', 'low'].includes(String(item?.completionConfidence || '').toLowerCase())
       ? String(item.completionConfidence).toLowerCase()
       : null,
