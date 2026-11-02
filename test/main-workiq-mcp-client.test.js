@@ -668,31 +668,32 @@ describe('createWorkiqMcpClient()', () => {
         })));
       });
 
-      it('classifies actual status-bearing fetch authentication and throttling failures before any write', async () => {
-        for (const [statusCode, expectedCode] of [[401, 'AUTH_REQUIRED'], [403, 'AUTH_REQUIRED'], [429, 'THROTTLED']]) {
-          const { client, children } = createHarness((message, child) => {
-            successfulServer(message, child);
-            if (message.method === 'tools/call') {
-              queueMicrotask(() => child.respond(message.id, {
-                content: [], structuredContent: { results: [{
-                  data: null, statusCode, error: { error: { code: 'RemoteFailure', message: 'private server detail' } },
-                }] }, isError: true,
-              }));
-            }
-          });
-          try {
-            assert.deepEqual(await client.sendTeamsMessage({ targetDisplayName: 'Test Person', message: 'Please confirm.' }), {
-              ok: false, action: 'teams-message-send', code: expectedCode,
-            });
-            assert.deepEqual(children[0].messages.filter((message) => message.method === 'tools/call')
-              .map((message) => message.params.name), ['fetch']);
-          } finally { await client.shutdown(); }
-        }
-      });
       try {
         const result = await client.sendTeamsMessage({ targetDisplayName: 'Test Person', message: 'Please confirm.' });
         assert.equal(result.code, 'RESOLUTION_FAILED');
         if (!repeated) assert.equal(page, 10);
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('classifies actual status-bearing fetch authentication and throttling failures before any write', async () => {
+    for (const [statusCode, expectedCode] of [[401, 'AUTH_REQUIRED'], [403, 'AUTH_REQUIRED'], [429, 'THROTTLED']]) {
+      const { client, children } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method === 'tools/call') {
+          queueMicrotask(() => child.respond(message.id, {
+            content: [], structuredContent: { results: [{
+              data: null, statusCode, error: { error: { code: 'RemoteFailure', message: 'private server detail' } },
+            }] }, isError: true,
+          }));
+        }
+      });
+      try {
+        assert.deepEqual(await client.sendTeamsMessage({ targetDisplayName: 'Test Person', message: 'Please confirm.' }), {
+          ok: false, action: 'teams-message-send', code: expectedCode,
+        });
+        assert.deepEqual(children[0].messages.filter((message) => message.method === 'tools/call')
+          .map((message) => message.params.name), ['fetch']);
       } finally { await client.shutdown(); }
     }
   });
