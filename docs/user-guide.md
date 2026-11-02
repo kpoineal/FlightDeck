@@ -78,7 +78,41 @@ Safe reads have at most **two total attempts**, including network retries and JS
 
 Scanner/monitor reads keep a **five-minute** caller timeout; proposal synthesis uses a separate **one-minute** timeout. A caller timeout does **not** release the remote slot or automatically retry an unresolved request. It stays counted as running until a terminal response or confirmed WorkIQ process exit; unrelated requests are not killed to free capacity. If every slot hangs and no responses arrive, **choose Quit in the FlightDeck tray menu, then relaunch FlightDeck**. Automatic recovery is not guaranteed. Closing to the tray and reopening preserves status updates but does not clear stuck slots.
 
-Reads reuse one persistent **local** WorkIQ MCP process instead of launching a new terminal per query; there is no read fallback to PTY. EULA acceptance may still use a terminal internally. Reusing the local process does not guarantee anything about backend conversation/thread creation. The bundled WorkIQ version remains 0.4.1; broader version compatibility testing is separate.
+Reads reuse one persistent **local** WorkIQ MCP process instead of launching a new terminal per query; there is no read fallback to PTY. EULA acceptance may still use a terminal internally. Reusing the local process does not guarantee anything about backend conversation/thread creation. Windows bundles WorkIQ **1.0.1**; macOS/Linux should install that version globally. Updating a global Windows installation does not replace FlightDeck's bundled CLI. Fully quit and relaunch FlightDeck after a dependency upgrade.
+
+### Email and Teams drafts
+
+In the Inbox thread's **Work plan**, select a **Recommended next move**, then choose **Email** or **Teams** to draft a message focused on that step. The first move is selected initially; your selection stays with the thread while navigating. If no moves are recommended, either channel can still draft a follow-up from the thread's context. Generation uses a read-only WorkIQ request and does not create or send a Microsoft 365 message until you review and explicitly approve the separate action.
+
+**Complete**, **Snooze**, and **More** live in the thread's top toolbar alongside criticality and work state, rather than beneath the draft editor. **More** contains Archive and Delete from FlightDeck. Completed actions continue to appear in the thread's activity history.
+
+You can start a draft on thread A, move to thread B, and start another. Each thread retains its own **Drafting…** state, result, or retryable error. Returning to a thread restores its state; switching to Today or another tab does not discard pending work. Background completion does not open a review pane over a different thread or tab.
+
+Busy threads also show a small spinner and **Drafting email...**, **Drafting Teams message...**, **Creating Outlook draft...**, or **Sending Teams message...** label in the Inbox list, even when another thread is selected. The indicator clears when the action finishes or fails. With reduced motion enabled, the circle stays still.
+
+Draft generation can take up to five minutes while WorkIQ retrieves context. Failures show a prominent error panel with a channel-specific **Retry draft** button and a failed-draft label on the Inbox row. A timeout does not cancel the remote request: wait for WorkIQ activity to finish before retrying rather than repeatedly starting more requests.
+
+The **Email** and **Teams** buttons explicitly request an editable draft, not a recommendation about whether to communicate. Missing recipient details do not prevent composing grounded text: review the draft and enter the verified recipient before creating an Outlook draft or sending a Teams message. If there is not enough observed context to compose without inventing facts, FlightDeck explains what is missing.
+
+Both buttons open an **inline editor on the source thread**, not a separate review pane. Review the recipient and message in place; Email also has a subject. **Create Outlook draft** asks for native confirmation, then saves to Outlook Drafts without sending. **Send message** asks for native confirmation, then sends to Teams. Generation and editing alone never dispatch either action.
+
+On desktop, the Work plan and thread context stay grouped beside Activity; on narrow screens they stack below it. Expanding activity history does not spread these sections apart.
+
+After a confirmed Teams send or confirmed Outlook draft creation, the inline editor closes. The associated recommended next move is marked **Completed** and becomes unavailable in both channels; other next moves remain available. This completion survives restarts and does not mark the entire thread complete. An Outlook draft counts as completion of that work-plan action, but is always described as **created**, never **sent**. Cancelled, failed, and unconfirmed operations leave the editor open and do not complete the move.
+
+Click **Action · View message** on a confirmed communication in the thread's Activity timeline to open a read-only message-history panel showing the recipient, confirmation time, message text, and email subject where applicable. Viewing history never sends or recreates anything. Confirmed Teams messages are saved locally as resolved actions, like successful Outlook draft proposals. Older Teams actions may not have retained message text; deleted proposals also leave metadata-only history. In either case, FlightDeck explains that the text is unavailable instead of inventing or silently regenerating it.
+
+Unfinished email edits remain saved across restarts. **Close** hides the inline email editor without discarding it; **Review email draft** reopens it without regenerating. **Open in Actions** provides the existing queue, lifecycle, and management controls for the same saved proposal. Inline creation and Actions share execution state, so one cannot duplicate the other's pending operation. Once a next move is completed, Actions also prevents dispatching another proposal for that same move. Cancelling native confirmation preserves the draft and allows edits; editing invalidates the previous review before another confirmation. An uncertain Outlook result stays blocked: check Outlook Drafts rather than blindly creating another copy.
+
+Teams drafts show both **Recipient name** and **Recipient email**. FlightDeck requests verified addresses rather than guessing them from names. Review or enter the correct address before sending; when supplied, the email identifies the recipient, not the display name. Changing the name clears the previous email so it cannot silently target the old person. A name-only draft can still be resolved against an exact, unique existing one-on-one chat. If the lookup is ambiguous, incomplete, rate limited, or requires sign-in, FlightDeck reports the failure rather than guessing a destination or claiming the message was sent.
+
+For missing addresses, directory resolution checks an exact name first, then a unique name with a parenthesized directory qualifier such as "(International Supplier)." Verified SMTP aliases are supported; guest `#EXT#` sign-in names are not substituted for external email addresses. Ambiguous or incomplete results remain unresolved.
+
+After you confirm **Send message** with a verified address, FlightDeck opens or reuses the one-to-one chat for your verified user IDs, creating it if needed. It independently reads back the chat and checks both members before posting. This avoids scanning hundreds of chat pages to find an older conversation. Draft generation and cancellation never open or create chats. Errors and unconfirmed delivery notices appear in red; cancellation remains a neutral status.
+
+If delivery cannot be confirmed, the draft is preserved and **Send message** is disabled. Check the actual Teams conversation first. Only if the message is absent, use **I checked Teams; allow retry**, then explicitly send and confirm again. Enabling retry does not send anything, and an unconfirmed outcome is never automatically replayed.
+
+Teams drafts and generation/error state are retained for the current renderer session (including tab changes), not across a full quit or reload. Saved email proposals remain in Actions across restarts. Deleting a thread discards its in-memory composer state and prevents late generation results from recreating it.
 
 ---
 

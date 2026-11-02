@@ -14,6 +14,7 @@ const {
 const { runWorkiqAcceptEula } = require('./pty-bridge');
 const { registerTrackerPopoutIpc } = require('./ipc/tracker-popout');
 const { IPC_CHANNELS } = require('../shared/ipc-contract');
+const { normalizeTeamsMessage } = require('../shared/recipient-validation.mjs');
 const { storeGet, storeSet, storeDelete, storeGetAll, storeGetSize, coldStoreGet, coldStoreSet } = require('./store');
 
 const APP_ROOT = path.join(__dirname, '..');
@@ -197,30 +198,15 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
       return { ok: false, action: 'teams-message-send', code: 'START_FAILED' };
     }
 
-    const payloadKeys = payload && typeof payload === 'object' && !Array.isArray(payload)
-      ? Object.keys(payload).sort()
-      : [];
-    const hasValidShape = payloadKeys.length === 2
-      && payloadKeys[0] === 'message'
-      && payloadKeys[1] === 'targetDisplayName';
-    const targetDisplayName = hasValidShape && typeof payload.targetDisplayName === 'string'
-      ? payload.targetDisplayName.trim()
-      : '';
-    const message = hasValidShape && typeof payload.message === 'string'
-      ? payload.message.trim()
-      : '';
-    if (
-      !targetDisplayName
-      || targetDisplayName.length > 160
-      || /[\x00-\x1f\x7f]/.test(targetDisplayName)
-      || !message
-      || message.length > 4000
-      || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)
-    ) {
+    let normalizedPayload;
+    try {
+      normalizedPayload = normalizeTeamsMessage(payload);
+    } catch (_) {
       return { ok: false, action: 'teams-message-send', code: 'INVALID_MESSAGE' };
     }
-
-    const normalizedPayload = { targetDisplayName, message };
+    const recipient = normalizedPayload.targetEmail
+      ? `${normalizedPayload.targetDisplayName ? `${normalizedPayload.targetDisplayName} <` : ''}${normalizedPayload.targetEmail}${normalizedPayload.targetDisplayName ? '>' : ''}`
+      : normalizedPayload.targetDisplayName;
 
     const confirmationOptions = {
       type: 'question',
@@ -229,8 +215,10 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
       cancelId: 0,
       noLink: true,
       title: 'Send Teams message',
-      message: `Send this Teams message to ${targetDisplayName}?`,
-      detail: 'FlightDeck will resolve an existing one-to-one chat. The message will be posted immediately.',
+      message: `Send this Teams message to ${recipient}?`,
+      detail: normalizedPayload.targetEmail
+        ? 'FlightDeck will verify the recipient and open or reuse a one-to-one chat, creating it if needed. The message will be posted immediately.'
+        : 'FlightDeck will resolve an existing one-to-one chat. The message will be posted immediately.',
     };
 
     let confirmation;

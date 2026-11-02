@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 let adaptEmailProposalsToActionQueue;
 let buildProposalSynthesisContext;
+let normalizeProposalSynthesisContext;
 let normalizeProposalSynthesisResult;
 let parseProposalSynthesisResponse;
 let proposalDedupeKey;
@@ -13,6 +14,7 @@ before(async () => {
   ({
     adaptEmailProposalsToActionQueue,
     buildProposalSynthesisContext,
+    normalizeProposalSynthesisContext,
     normalizeProposalSynthesisResult,
     parseProposalSynthesisResponse,
     proposalDedupeKey,
@@ -59,6 +61,25 @@ describe('proposal synthesis context', () => {
     assert.equal(buildProposalSynthesisContext(item, { requestedChannel: 'email' }).requestedChannel, 'email');
     assert.equal(buildProposalSynthesisContext(item, { requestedChannel: 'teams' }).requestedChannel, 'teams');
     assert.equal(Object.hasOwn(buildProposalSynthesisContext(item, { requestedChannel: 'planner' }), 'requestedChannel'), false);
+  });
+
+  it('preserves the selected work-plan step through main-process normalization without losing other context', () => {
+    const steps = ['Confirm the deployment window.', 'Ask Alex to verify the owner.'];
+    const context = buildProposalSynthesisContext({
+      id: 'thread-1', title: 'Deployment follow-up', suggestedNextSteps: steps,
+    }, { requestedChannel: 'teams', requestedNextStep: steps[1] });
+
+    assert.equal(context.requestedNextStep, steps[1]);
+    assert.deepEqual(context.thread.suggestedNextSteps, steps);
+    assert.deepEqual(normalizeProposalSynthesisContext(context), context);
+    assert.equal(buildProposalSynthesisContext(
+      { id: 'thread-1', title: 'Deployment follow-up' }, { requestedNextStep: 'x'.repeat(700) }
+    ).requestedNextStep.length, 500);
+    for (const invalid of ['', null, {}, ['Confirm the window']]) {
+      assert.equal(Object.hasOwn(buildProposalSynthesisContext(
+        { id: 'thread-1', title: 'Deployment follow-up' }, { requestedNextStep: invalid }
+      ), 'requestedNextStep'), false);
+    }
   });
 
   it('uses canonical lastChangedAt with existing fallbacks and keeps the newest six history entries', () => {
@@ -126,6 +147,26 @@ describe('proposal synthesis normalization', () => {
     assert.equal(normalized.schemaVersion, 1);
     assert.equal(normalized.proposals[0].payload.subject, 'Deployment window');
     assert.equal(JSON.stringify(normalized).includes('opaque-conversation-id'), false);
+  });
+
+  it('accepts strict synthesis JSON surrounded by WorkIQ citation text without repairing draft content', () => {
+    const result = resultFixture({
+      proposals: [{
+        channel: 'teams', target: { displayName: 'Alex' },
+        payload: { message: 'Please confirm the {deployment} window and "owner".' },
+      }],
+    });
+    const json = JSON.stringify(result);
+    for (const response of [
+      `${json}\n\n[1](https://example.com/evidence)`,
+      `\`\`\`json\n${json}\n\`\`\`\n[1](https://example.com/evidence)`,
+      JSON.stringify({ response: `${json}\n\n[1](https://example.com/evidence)` }),
+    ]) {
+      const parsed = parseProposalSynthesisResponse(response);
+      assert.equal(parsed.proposals[0].payload.message, result.proposals[0].payload.message);
+      assert.equal(JSON.stringify(parsed).includes('https://example.com'), false);
+    }
+    assert.equal(parseProposalSynthesisResponse('{"schemaVersion":1,"recommendation":"broken "quotes""}'), null);
   });
 
   it('normalizes a useful email and strips unsafe execution fields', () => {
@@ -294,5 +335,25 @@ describe('proposal synthesis adapter and dedupe', () => {
       payload: { subject: 'Window', body: 'Can you confirm?' },
     };
     assert.equal(proposalDedupeKey('THREAD-1', proposal), proposalDedupeKey('thread-1', proposal));
+  });
+
+  it('keeps grounded email text for review without inventing an unknown recipient', async () => {
+    const { normalizeActionProposal, isReviewableActionProposal, updateActionProposal } = await import('../src/svelte/lib/action-proposals.js');
+    const result = normalizeProposalSynthesisResult(resultFixture({
+      proposals: [{
+        channel: 'email', target: {},
+        payload: { subject: 'Deployment status', body: 'Could you confirm the current deployment status?' },
+        needsTargetResolution: true, missingContext: ['Recipient'],
+      }],
+    }));
+    const [draft] = adaptEmailProposalsToActionQueue({
+      id: 'unresolved-recipient', title: 'Deployment', owner: 'Signed-in user',
+    }, result);
+    assert.ok(draft, 'Missing delivery details must not discard grounded draft text.');
+    assert.equal(draft.target, '');
+    assert.equal(draft.content, 'Could you confirm the current deployment status?');
+    assert.equal(normalizeActionProposal(draft).target, '', 'An unfinished recipient must survive saving and reopening.');
+    assert.equal(isReviewableActionProposal(draft), false);
+    assert.equal(isReviewableActionProposal(updateActionProposal(draft, { target: 'alex@example.com' })), true);
   });
 });

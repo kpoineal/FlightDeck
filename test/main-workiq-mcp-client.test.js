@@ -6,6 +6,7 @@ const { EventEmitter } = require('events');
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { createWorkiqMcpClient } = require('../src/main/workiq-mcp-client');
+const workiq101 = require('./helpers/workiq-1.0.1-contract');
 
 class FakeChild extends EventEmitter {
   constructor(onMessage) {
@@ -63,8 +64,48 @@ function successfulServer(message, child) {
   if (message.method === 'initialize') {
     queueMicrotask(() => child.respond(message.id, { protocolVersion: '2025-03-26' }));
   } else if (message.method === 'tools/list') {
-    queueMicrotask(() => child.respond(message.id, { tools: [{ name: 'ask' }, { name: 'fetch' }, { name: 'create_entity' }] }));
+    queueMicrotask(() => child.respond(message.id, { tools: workiq101.tools }));
   }
+}
+
+const TARGET_USER_ID = '00000000-0000-0000-0000-000000000001';
+const SELF_USER_ID = '00000000-0000-0000-0000-000000000002';
+const OTHER_USER_ID = '00000000-0000-0000-0000-000000000003';
+function canonicalMembers(email = 'alex@example.com', targetId = TARGET_USER_ID) {
+  return [
+    { displayName: 'Alex', email, userId: targetId },
+    { displayName: 'Self', email: 'self@example.com', userId: SELF_USER_ID },
+  ];
+}
+
+function respondIdentityRead(message, child) {
+  if (message.params?.name !== 'fetch') return false;
+  const [url] = message.params.arguments.entityUrls;
+  let data;
+  if (url.startsWith('/users?')) {
+    const filter = new URL(url, 'https://graph.microsoft.com').searchParams.get('$filter');
+    const email = /mail eq '([^']+)'/.exec(filter)[1];
+    data = { value: [{
+      id: email === 'missing@example.com' ? OTHER_USER_ID : TARGET_USER_ID, mail: email, userPrincipalName: email,
+    }] };
+  } else if (url === '/me?$select=id,userType') data = { id: SELF_USER_ID };
+  else return false;
+  queueMicrotask(() => child.respond(message.id, workiq101.fetchResult(data)));
+  return true;
+}
+
+function respondCanonicalChat(message, child, chat = { id: 'target', chatType: 'oneOnOne', members: canonicalMembers() }) {
+  const { name, arguments: args } = message.params || {};
+  if (name === 'create_entity' && args.parentUrl === '/chats') {
+    queueMicrotask(() => child.respond(message.id, workiq101.createResult({ id: chat.id, chatType: 'oneOnOne' })));
+    return true;
+  }
+  if (name === 'fetch' && args.entityUrls?.[0]?.startsWith('/chats/')) {
+    assert.equal(args.entityUrls[0], `/chats/${encodeURIComponent(chat.id)}?$select=id,chatType&$expand=members`);
+    queueMicrotask(() => child.respond(message.id, workiq101.fetchResult(chat)));
+    return true;
+  }
+  return false;
 }
 
 function createTeamsHarness(onCreate, options = {}) {
@@ -72,6 +113,7 @@ function createTeamsHarness(onCreate, options = {}) {
   const harness = createHarness((message, child) => {
     successfulServer(message, child);
     if (message.method !== 'tools/call') return;
+    if (respondIdentityRead(message, child)) return;
     if (message.params.name === 'fetch') {
       queueMicrotask(() => child.respond(message.id, {
         content: [{ type: 'text', text: JSON.stringify({ value: [
@@ -89,6 +131,573 @@ function createTeamsHarness(onCreate, options = {}) {
 }
 
 describe('createWorkiqMcpClient()', () => {
+  it('verifies the observed status/data create envelope without accepting conflicts or failed statuses', async () => {
+    const entity = {
+      id: 'message-id', chatId: 'chat-james', createdDateTime: '2026-10-30T12:00:00Z',
+      body: { contentType: 'text', content: 'Hello' },
+    };
+    const valid = workiq101.createResult(entity);
+    for (const [response, expected] of [
+      [valid, true],
+      [workiq101.createResult(entity, 200), true],
+      [workiq101.createResult(entity, 403), false],
+      [workiq101.createResult(entity, '201'), false],
+      [workiq101.createResult({ ...entity, chatId: 'wrong-chat' }), false],
+      [workiq101.createResult({ ...entity, body: { contentType: 'text', content: 'Wrong body' } }), false],
+      [workiq101.createResult([entity]), false],
+      [{ ...valid, structuredContent: { ...valid.structuredContent, id: 'conflicting-id' } }, false],
+      [{ ...valid, content: [{ type: 'text', text: JSON.stringify(entity) }] }, false],
+    ]) {
+      const { client, getCreateAttempts } = createTeamsHarness((message, child) =>
+        queueMicrotask(() => child.respond(message.id, response)));
+      try {
+        const result = await client.sendTeamsMessage({ targetDisplayName: 'James Farquharson', message: 'Hello' });
+        assert.equal(result.ok, expected);
+        assert.equal(getCreateAttempts(), 1);
+        if (!expected) assert.equal(result.code, 'SEND_UNCONFIRMED');
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('requires authoritative draft evidence inside successful status/data create responses', async () => {
+    for (const [response, expected] of [
+      [workiq101.createResult({ id: 'draft', isDraft: true }), true],
+      [workiq101.createResult({ id: 'draft', isDraft: false }), false],
+      [workiq101.createResult({ id: 'draft', isDraft: true }, 500), false],
+      [workiq101.createResult({ id: 'draft' }), false],
+    ]) {
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method === 'tools/call') queueMicrotask(() => child.respond(message.id, response));
+      });
+      try {
+        const result = await client.createOutlookDraft({ to: ['alex@example.com'], subject: 'Subject', body: 'Body' });
+        assert.equal(result.ok, expected);
+        if (!expected) assert.equal(result.code, 'CREATE_UNCONFIRMED');
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('never sends when authoritative directory identity is ambiguous, partial, invalid or unavailable', async () => {
+    const user = { id: TARGET_USER_ID, mail: 'alex@example.com', userPrincipalName: 'alex@example.com' };
+    for (const response of [
+      workiq101.fetchResult({ value: [user, { ...user, id: OTHER_USER_ID }] }),
+      workiq101.fetchResult({ value: [user], '@odata.nextLink': '/users?$skiptoken=next' }),
+      workiq101.fetchResult({ value: [] }),
+      workiq101.fetchResult({ value: [{ ...user, id: 'not-a-directory-id' }] }),
+      workiq101.fetchResult({ value: [{ ...user, mail: 'wrong@example.com', userPrincipalName: 'wrong@example.com' }] }),
+      workiq101.fetchResult(null, 401),
+      workiq101.fetchResult(null, 429),
+    ]) {
+      let writes = 0, chatReads = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call') return;
+        if (message.params.name !== 'fetch') writes++;
+        if (message.params.arguments.entityUrls?.[0]?.startsWith('/me/chats')) chatReads++;
+        queueMicrotask(() => child.respond(message.id, response));
+      });
+      try {
+        assert.equal((await client.sendTeamsMessage({
+          targetDisplayName: 'Alex', targetEmail: 'alex@example.com', message: 'Hello',
+        })).ok, false);
+        assert.equal(writes, 0);
+        assert.equal(chatReads, 0);
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('opens the verified pair without scanning chat pages or transporting group memberships', async () => {
+    let writes = 0;
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call') return;
+      if (respondIdentityRead(message, child)) return;
+      if (message.params.arguments.parentUrl === '/chats') {
+        assert.deepEqual(message.params.arguments.jsonBody, {
+          chatType: 'oneOnOne',
+          members: [SELF_USER_ID, TARGET_USER_ID].map(id => ({
+            '@odata.type': '#microsoft.graph.aadUserConversationMember', roles: ['owner'],
+            'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${id}')`,
+          })),
+        });
+      }
+      if (respondCanonicalChat(message, child)) return;
+      assert.equal(message.params.name, 'create_entity', 'A verified recipient triggered a chat collection scan');
+      writes++;
+      queueMicrotask(() => child.respond(message.id, { structuredContent: {
+        id: 'message', chatId: 'target', createdDateTime: '2026-10-30T12:00:00Z',
+        body: { contentType: 'text', content: 'Hello' },
+      }, isError: false }));
+    }, { maxMessageBytes: 4096 });
+    try {
+      assert.equal((await client.sendTeamsMessage({
+        targetDisplayName: 'Alex', targetEmail: 'alex@example.com', message: 'Hello',
+      })).ok, true);
+      assert.equal(writes, 1);
+    } finally { await client.shutdown(); }
+  });
+
+  it('bypasses chat pagination only for a verified email, preserving name-only pagination safety', async () => {
+    for (const useEmail of [true, false]) {
+      let pages = 0, writes = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call') return;
+        if (respondIdentityRead(message, child)) return;
+        if (useEmail && respondCanonicalChat(message, child)) return;
+        if (message.params.name === 'fetch') {
+          pages++;
+          queueMicrotask(() => child.respond(message.id, workiq101.fetchResult({
+            value: [
+              { id: 'target', chatType: 'oneOnOne', members: canonicalMembers() },
+              { id: 'other', chatType: 'oneOnOne', members: canonicalMembers('other@example.com', OTHER_USER_ID) },
+            ],
+            '@odata.nextLink': `/me/chats?$skiptoken=${pages}`,
+          })));
+        } else {
+          writes++;
+          queueMicrotask(() => child.respond(message.id, { structuredContent: {
+            id: 'message', chatId: 'target', createdDateTime: '2026-10-30T12:00:00Z',
+            body: { contentType: 'text', content: 'Hello' },
+          }, isError: false }));
+        }
+      });
+      try {
+        const result = await client.sendTeamsMessage({
+          targetDisplayName: 'Alex', ...(useEmail ? { targetEmail: 'alex@example.com' } : {}), message: 'Hello',
+        });
+        assert.equal(result.ok, useEmail);
+        assert.equal(pages, useEmail ? 0 : 10);
+        assert.equal(writes, useEmail ? 1 : 0);
+        if (!useEmail) assert.equal(result.code, 'RESOLUTION_FAILED');
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('refuses email/userID conflicts and incomplete or non-canonical membership without posting', async () => {
+    for (const members of [
+      canonicalMembers('alex@example.com', OTHER_USER_ID),
+      canonicalMembers('wrong@example.com'),
+      [canonicalMembers()[0], { email: 'self@example.com', userId: OTHER_USER_ID }],
+      [canonicalMembers()[0]],
+      [canonicalMembers()[0], canonicalMembers()[0]],
+      [...canonicalMembers(), { userId: OTHER_USER_ID, email: 'third@example.com' }],
+    ]) {
+      let writes = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call') return;
+        if (respondIdentityRead(message, child)) return;
+        if (respondCanonicalChat(message, child, { id: 'target', chatType: 'oneOnOne', members })) return;
+        if (message.params.name !== 'fetch') writes++;
+        queueMicrotask(() => child.respond(message.id, workiq101.fetchResult({
+          value: [{ id: 'target', chatType: 'oneOnOne', members }],
+        })));
+      });
+      try {
+        assert.equal((await client.sendTeamsMessage({
+          targetDisplayName: 'Alex', targetEmail: 'alex@example.com', message: 'Hello',
+        })).ok, false);
+        assert.equal(writes, 0);
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('rejects malformed optional Teams identities before starting or posting', async () => {
+    const { client, spawnCalls } = createHarness(successfulServer);
+    for (const payload of [
+      { targetDisplayName: 'Alex', targetEmail: 'not-an-email', message: 'Hello' },
+      { targetDisplayName: 'Alex', targetEmail: 'alex@example.com\n', message: 'Hello' },
+      { targetDisplayName: 'Alex', targetEmail: null, message: 'Hello' },
+      { targetDisplayName: '', targetEmail: '', message: 'Hello' },
+      { targetDisplayName: 'x'.repeat(161), targetEmail: 'alex@example.com', message: 'Hello' },
+      { targetDisplayName: 'Alex', targetEmail: 'x'.repeat(243) + '@example.com', message: 'Hello' },
+      { targetDisplayName: 'Alex', targetEmail: 'alex@example.com', targetUserId: 'invented', message: 'Hello' },
+    ]) {
+      assert.equal((await client.sendTeamsMessage(payload)).code, 'INVALID_MESSAGE');
+    }
+    assert.equal(spawnCalls.length, 0);
+    await client.shutdown();
+  });
+
+  it('diagnoses distinct protocol failures without raw lines, identities or body content', async t => {
+    const logs = [];
+    t.mock.method(console, 'log', value => logs.push(value));
+    t.mock.method(console, 'error', value => logs.push(value));
+    const cases = [
+      ['NON_JSON', 'secret-body private@example.com\n'],
+      ['INVALID_ENVELOPE', '{"jsonrpc":"1.0","private":"secret-body"}\n'],
+      ['UNKNOWN_RESPONSE_ID', '{"jsonrpc":"2.0","id":999999,"result":"secret-body"}\n'],
+      ['INVALID_NOTIFICATION', '{"jsonrpc":"2.0","method":"notice","result":"secret-body"}\n'],
+      ['MISSING_RESULT', '{"jsonrpc":"2.0","id":1,"private":"secret-body"}\n'],
+    ];
+    for (const [reason, line] of cases) {
+      const { client } = createHarness((_message, child) => queueMicrotask(() => child.stdout.emit('data', Buffer.from(line))));
+      assert.equal((await client.probe()).code, 'PROTOCOL_ERROR');
+      assert.ok(logs.some(value => value.includes(`protocol error: ${reason}`)), reason);
+      await client.shutdown();
+    }
+    assert.equal(logs.join('\n').includes('secret-body'), false);
+    assert.equal(logs.join('\n').includes('private@example.com'), false);
+  });
+
+  it('never sends when the reopened chat is a group or has incomplete membership', async () => {
+    const matching = { id: 'one', chatType: 'oneOnOne', members: canonicalMembers() };
+    for (const chat of [
+      { ...matching, chatType: 'group' },
+      { ...matching, 'members@odata.nextLink': '/chats/one/members?$skiptoken=next' },
+      { ...matching, members: undefined },
+    ]) {
+      let writes = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call') return;
+        if (respondIdentityRead(message, child)) return;
+        if (respondCanonicalChat(message, child, chat)) return;
+        if (message.params.name !== 'fetch') writes++;
+        assert.fail('Message dispatch was attempted before complete canonical membership verification');
+      });
+      try {
+        const result = await client.sendTeamsMessage({ targetDisplayName: '', targetEmail: 'alex@example.com', message: 'Hello' });
+        assert.equal(result.ok, false);
+        assert.equal(result.code, 'CHAT_OPEN_FAILED');
+        assert.equal(writes, 0);
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('verifies the opened chat against the authoritative email identity, never a conflicting name', async () => {
+    for (const [email, expected] of [['right@example.com', true], ['missing@example.com', false]]) {
+      const writes = [];
+      let verified = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call') return;
+        if (respondIdentityRead(message, child)) return;
+        const chat = { id: 'right', chatType: 'oneOnOne', members: canonicalMembers('right@example.com') };
+        if (respondCanonicalChat(message, child, chat)) {
+          if (message.params.name === 'fetch') verified++;
+          return;
+        }
+        writes.push(message.params.arguments.parentUrl);
+        queueMicrotask(() => child.respond(message.id, { structuredContent: {
+          id: 'posted', chatId: 'right', createdDateTime: '2026-10-30T12:00:00Z',
+          body: { contentType: 'text', content: 'Hello' },
+        }, isError: false }));
+      });
+      try {
+        const result = await client.sendTeamsMessage({ targetDisplayName: 'Alex', targetEmail: email, message: 'Hello' });
+        assert.equal(result.ok, expected);
+        assert.equal(verified, 1);
+        assert.deepEqual(writes, expected ? ['/chats/right/messages'] : []);
+        if (!expected) assert.equal(result.code, 'CHAT_OPEN_FAILED');
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('enriches names-only drafts only from a complete exact unique structured directory identity', async () => {
+    const cases = [
+      ['unique', [{ id: TARGET_USER_ID, displayName: 'Alex', mail: 'alex@example.com', userPrincipalName: 'alex@example.com' }], 'alex@example.com'],
+      ['UPN', [{ id: TARGET_USER_ID, displayName: 'Alex', mail: null, userPrincipalName: 'alex@example.com' }], 'alex@example.com'],
+      ['qualified', [{ id: TARGET_USER_ID, displayName: 'Alex (International Supplier)', mail: 'alex@example.com' }], 'alex@example.com'],
+      ['qualified-ambiguous', [{ id: TARGET_USER_ID, displayName: 'Alex (Supplier A)', mail: 'a@example.com' }, { id: OTHER_USER_ID, displayName: 'Alex (Supplier B)', mail: 'b@example.com' }], ''],
+      ['guest-upn', [{ id: TARGET_USER_ID, displayName: 'Alex', mail: null, userPrincipalName: 'alex_example.com#EXT#@tenant.example' }], ''],
+      ['guest-mail', [{ id: TARGET_USER_ID, displayName: 'Alex', mail: 'alex@external.example', userPrincipalName: 'alex_external.example#EXT#@tenant.example' }], 'alex@external.example'],
+      ['proxy', [{ id: TARGET_USER_ID, displayName: 'Alex', mail: null, proxyAddresses: ['x500:not-an-email', 'SMTP:alex@example.com'] }], 'alex@example.com'],
+      ['ambiguous', [{ id: 'one', displayName: 'Alex', mail: 'a@example.com' }, { id: 'two', displayName: 'Alex', mail: 'b@example.com' }], ''],
+      ['missing', [], ''],
+      ['inexact', [{ id: 'one', displayName: 'Alex Other', mail: 'alex@example.com' }], ''],
+      ['invalid', [{ id: 'one', displayName: 'Alex', mail: 'not-an-email', userPrincipalName: 'also-invalid' }], ''],
+      ['paged', [{ id: 'one', displayName: 'Alex', mail: 'alex@example.com' }], ''],
+      ['auth', [], ''],
+      ['throttle', [], ''],
+    ];
+    for (const [scenario, rows, expected] of cases) {
+      for (const channel of ['email', 'teams']) {
+        let reads = 0;
+        const { client } = createHarness((message, child) => {
+          successfulServer(message, child);
+          if (message.method !== 'tools/call') return;
+          let response;
+          if (message.params.name === 'ask') {
+            response = { structuredContent: { response: JSON.stringify({
+              schemaVersion: 1, recommendation: 'Reply', confidence: 'high',
+              evidence: [{ kind: 'observed', text: 'A reply was requested' }],
+              proposals: [{ channel, target: { displayName: 'Alex' },
+                payload: channel === 'email' ? { subject: 'Reply', body: 'Grounded draft' } : { message: 'Grounded draft' } }],
+            }) }, isError: false };
+          } else {
+            assert.equal(message.params.name, 'fetch');
+            reads++;
+            assert.equal(message.params.arguments.entityUrls.length, 1);
+            assert.match(decodeURIComponent(message.params.arguments.entityUrls[0]),
+              reads === 1 ? /displayName eq 'Alex'/ : /startswith\(displayName,'Alex \('\)/);
+            response = ['auth', 'throttle'].includes(scenario)
+              ? workiq101.fetchResult(null, scenario === 'auth' ? 401 : 429)
+              : workiq101.fetchResult({ value: scenario.startsWith('qualified') && reads === 1 ? [] : rows,
+                  ...(scenario === 'paged' ? { '@odata.nextLink': '/users?$skiptoken=next' } : {}) });
+          }
+          queueMicrotask(() => child.respond(message.id, response));
+        });
+        try {
+          const result = await client.proposeThreadActions({ schemaVersion: 1, requestedChannel: channel, thread: { id: 'one', title: 'Reply' } });
+          assert.equal(result.ok, true, scenario);
+          assert.equal(reads, scenario === 'missing' || scenario.startsWith('qualified') ? 2 : 1, scenario);
+          const proposal = result.result.proposals[0];
+          assert.equal(proposal.target.address, expected, scenario);
+          assert.equal(proposal.needsTargetResolution, !expected, scenario);
+          assert.equal(proposal.payload.body || proposal.payload.message, 'Grounded draft');
+          if (!expected) {
+            assert.match(proposal.reviewNote, /recipient/i);
+            assert.ok(proposal.missingContext.some(value => /recipient/i.test(value)));
+          }
+        } finally { await client.shutdown(); }
+      }
+    }
+  });
+
+  it('rejects unsuccessful or conflicting chat-open receipts before posting any message', async () => {
+    const chat = { id: 'target', chatType: 'oneOnOne' };
+    for (const response of [
+      workiq101.createResult(chat, 403),
+      workiq101.createResult(chat, '201'),
+      workiq101.createResult({ id: 'target' }),
+      workiq101.createResult({ ...chat, chatType: 'group' }),
+      workiq101.createResult({ ...chat, id: 'invalid\nid' }),
+      workiq101.createResult([chat]),
+      { ...workiq101.createResult(chat), isError: true },
+      { ...workiq101.createResult(chat), content: [{ type: 'text', text: '{"id":"other"}' }] },
+      { structuredContent: { statusCode: 201, data: chat, id: 'conflicting' }, isError: false },
+    ]) {
+      let opens = 0, posts = 0, chatReads = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call' || respondIdentityRead(message, child)) return;
+        if (message.params.arguments.parentUrl === '/chats') opens++;
+        else if (message.params.name === 'fetch') chatReads++;
+        else posts++;
+        queueMicrotask(() => child.respond(message.id, response));
+      });
+      try {
+        const result = await client.sendTeamsMessage({ targetDisplayName: 'Alex', targetEmail: 'alex@example.com', message: 'Hello' });
+        assert.equal(result.code, 'CHAT_OPEN_FAILED');
+        assert.equal(opens, 1);
+        assert.equal(posts, 0);
+        assert.equal(chatReads, 0);
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('does not retry or report message delivery as uncertain when opening the chat times out', async () => {
+    let opens = 0, posts = 0;
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call' || respondIdentityRead(message, child)) return;
+      if (message.params.arguments.parentUrl === '/chats') opens++;
+      else posts++;
+    }, { probeTimeout: 10 });
+    try {
+      const result = await client.sendTeamsMessage({ targetDisplayName: 'Alex', targetEmail: 'alex@example.com', message: 'Hello' });
+      assert.equal(result.code, 'CHAT_OPEN_FAILED');
+      assert.equal(opens, 1);
+      assert.equal(posts, 0);
+    } finally { await client.shutdown(); }
+  });
+
+  it('resolves a supplied SMTP alias only through a unique directory identity and re-verifies canonical membership', async () => {
+    for (const status of [200, 201]) {
+      let directoryReads = 0, posts = 0, opens = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call') return;
+        const args = message.params.arguments;
+        if (args.entityUrls?.[0]?.startsWith('/users?')) {
+          directoryReads++;
+          const filter = new URL(args.entityUrls[0], 'https://graph.microsoft.com').searchParams.get('$filter');
+          assert.match(filter, directoryReads === 1 ? /mail eq 'alias@external.example'/ : /proxyAddresses\/any/);
+          const user = {
+            id: TARGET_USER_ID, mail: 'alex@external.example',
+            userPrincipalName: 'alex_external.example#EXT#@tenant.example',
+            proxyAddresses: ['smtp:alias@external.example'], userType: 'Guest',
+          };
+          queueMicrotask(() => child.respond(message.id, workiq101.fetchResult({ value: directoryReads === 1 ? [] : [user] })));
+        } else if (respondIdentityRead(message, child)) return;
+        else if (args.parentUrl === '/chats') {
+          opens++;
+          assert.deepEqual(args.jsonBody.members.map(member => member.roles), [['owner'], ['guest']]);
+          queueMicrotask(() => child.respond(message.id, workiq101.createResult({ id: 'target', chatType: 'oneOnOne' }, status)));
+        } else if (respondCanonicalChat(message, child, {
+          id: 'target', chatType: 'oneOnOne', members: canonicalMembers('alias@external.example'),
+        })) return;
+        else {
+          posts++;
+          queueMicrotask(() => child.respond(message.id, workiq101.createResult({
+            id: 'message', chatId: 'target', createdDateTime: '2026-10-30T12:00:00Z',
+            body: { contentType: 'text', content: 'Hello' },
+          })));
+        }
+      });
+      try {
+        assert.equal((await client.sendTeamsMessage({
+          targetDisplayName: 'A different display name', targetEmail: 'alias@external.example', message: 'Hello',
+        })).ok, true);
+        assert.equal(directoryReads, 2);
+        assert.equal(opens, 1);
+        assert.equal(posts, 1);
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('uses the advertised 1.0.1 argument schemas and structured fetch envelope without ask-based writes', async () => {
+    const calls = [];
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call') return;
+      calls.push(message.params);
+      let response;
+      if (message.params.name === 'ask') {
+        response = { content: [{ type: 'object', text: '{"response":"Read-only answer"}' }], isError: false };
+      } else if (message.params.name === 'fetch') {
+        response = workiq101.fetchResult({ value: [
+          { id: 'chat-person', chatType: 'oneOnOne', members: [{ displayName: 'Test Person' }] },
+        ] });
+      } else if (message.params.arguments.parentUrl === '/me/messages') {
+        response = workiq101.createResult({ id: 'draft-id', isDraft: true });
+      } else {
+        response = workiq101.createResult({
+          id: 'message-id', chatId: 'chat-person', createdDateTime: '2026-10-30T12:00:00Z',
+          body: { contentType: 'text', content: 'Please confirm.' },
+        });
+      }
+      queueMicrotask(() => child.respond(message.id, response));
+    });
+    try {
+      assert.equal((await client.ask('Read only')).success, true);
+      assert.equal((await client.createOutlookDraft({
+        to: ['person@example.com'], subject: 'Confirm', body: 'Please confirm.',
+      })).ok, true);
+      assert.equal((await client.sendTeamsMessage({ targetDisplayName: 'Test Person', message: 'Please confirm.' })).ok, true);
+      assert.deepEqual(calls.map((call) => call.name), ['ask', 'create_entity', 'fetch', 'create_entity']);
+      for (const call of calls) {
+        const schema = workiq101.tools.find((tool) => tool.name === call.name).inputSchema;
+        for (const required of schema.required) assert.ok(Object.hasOwn(call.arguments, required));
+        for (const [key, value] of Object.entries(call.arguments)) {
+          assert.ok(Object.hasOwn(schema.properties, key), `Unadvertised argument: ${key}`);
+          const field = schema.properties[key];
+          if (field.type === 'string') assert.equal(typeof value, 'string');
+          if (field.type === 'array') {
+            assert.ok(Array.isArray(value));
+            assert.ok(value.every((entry) => typeof entry === field.items.type));
+          }
+        }
+      }
+    } finally { await client.shutdown(); }
+  });
+
+  it('resolves all structured fetch pages before sending and rejects ambiguous later matches', async () => {
+    for (const ambiguous of [false, true]) {
+      const calls = [];
+      let page = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call') return;
+        calls.push(message.params);
+        const response = message.params.name === 'fetch'
+          ? workiq101.fetchResult(++page === 1 ? {
+            value: [{ id: 'chat-person', chatType: 'oneOnOne', members: [{ displayName: 'Test Person' }] }],
+            '@odata.nextLink': 'https://graph.microsoft.com/me/chats?$skiptoken=next',
+          } : { value: ambiguous
+            ? [{ id: 'other-chat', chatType: 'oneOnOne', members: [{ displayName: 'Test Person' }] }]
+            : [] })
+          : { content: [{ type: 'text', text: JSON.stringify({
+            id: 'message-id', chatId: 'chat-person', createdDateTime: '2026-10-30T12:00:00Z',
+            body: { contentType: 'text', content: 'Please confirm.' },
+          }) }], isError: false };
+        queueMicrotask(() => child.respond(message.id, response));
+      });
+      try {
+        const result = await client.sendTeamsMessage({ targetDisplayName: 'Test Person', message: 'Please confirm.' });
+        assert.equal(result.ok, !ambiguous);
+        if (ambiguous) assert.equal(result.code, 'TARGET_AMBIGUOUS');
+        assert.deepEqual(calls[1].arguments, { entityUrls: ['/me/chats?$skiptoken=next'] });
+        assert.equal(calls.filter((call) => call.name === 'create_entity').length, ambiguous ? 0 : 1);
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('fails closed on malformed, failed, conflicting or untrusted structured chat lookup results', async () => {
+    const chat = { id: 'chat-person', chatType: 'oneOnOne', members: [{ displayName: 'Test Person' }] };
+    const fixtures = [
+      workiq101.fetchResult({ value: [chat] }, 400),
+      workiq101.fetchResult({ error: { message: 'private' }, value: [chat] }),
+      workiq101.fetchResult({ unrelated: [chat] }),
+      workiq101.fetchResult({ value: [chat], '@odata.nextLink': 'https://example.com/me/chats' }),
+      workiq101.fetchResult({ value: [chat], '@odata.nextLink': '/me/messages' }),
+      workiq101.fetchResult({ value: [chat], '@odata.nextLink': '' }),
+      { content: [], structuredContent: { results: [] }, isError: false },
+      { content: [], structuredContent: { results: [{ data: { value: [chat] }, statusCode: 200 }, { data: { value: [] }, statusCode: 200 }] }, isError: false },
+      { ...workiq101.fetchResult({ value: [chat] }), content: [{ type: 'text', text: JSON.stringify({ value: [chat] }) }] },
+    ];
+    for (const fixture of fixtures) {
+      const calls = [];
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method === 'tools/call') {
+          calls.push(message.params);
+          queueMicrotask(() => child.respond(message.id, fixture));
+        }
+      });
+      try {
+        const result = await client.sendTeamsMessage({ targetDisplayName: 'Test Person', message: 'Please confirm.' });
+        assert.equal(result.code, 'RESOLUTION_FAILED');
+        assert.ok(calls.every((call) => call.name === 'fetch'));
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('bounds pagination and rejects repeated chat pages without posting', async () => {
+    for (const repeated of [false, true]) {
+      let page = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call') return;
+        assert.equal(message.params.name, 'fetch');
+        queueMicrotask(() => child.respond(message.id, workiq101.fetchResult({
+          value: [], '@odata.nextLink': `/me/chats?$skiptoken=${repeated ? 'same' : ++page}`,
+        })));
+      });
+
+      try {
+        const result = await client.sendTeamsMessage({ targetDisplayName: 'Test Person', message: 'Please confirm.' });
+        assert.equal(result.code, 'RESOLUTION_FAILED');
+        if (!repeated) assert.equal(page, 10);
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('classifies actual status-bearing fetch authentication and throttling failures before any write', async () => {
+    for (const [statusCode, expectedCode] of [[401, 'AUTH_REQUIRED'], [403, 'AUTH_REQUIRED'], [429, 'THROTTLED']]) {
+      const { client, children } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method === 'tools/call') {
+          queueMicrotask(() => child.respond(message.id, {
+            content: [], structuredContent: { results: [{
+              data: null, statusCode, error: { error: { code: 'RemoteFailure', message: 'private server detail' } },
+            }] }, isError: true,
+          }));
+        }
+      });
+      try {
+        assert.deepEqual(await client.sendTeamsMessage({ targetDisplayName: 'Test Person', message: 'Please confirm.' }), {
+          ok: false, action: 'teams-message-send', code: expectedCode,
+        });
+        assert.deepEqual(children[0].messages.filter((message) => message.method === 'tools/call')
+          .map((message) => message.params.name), ['fetch']);
+      } finally { await client.shutdown(); }
+    }
+  });
+
   it('normalizes natural-language, JSON and verified response envelopes on one persistent connection', async () => {
     const fixtures = [
       { content: [{ type: 'text', text: 'Natural answer' }] },
@@ -235,7 +844,7 @@ describe('createWorkiqMcpClient()', () => {
     await shutdown;
   });
 
-  it('defaults generic reads to 300 seconds independently of the 60-second proposal timeout', { timeout: 5000 }, async (t) => {
+  it('allows both proposal synthesis and generic reads 300 seconds to retrieve Microsoft 365 context', { timeout: 5000 }, async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const calls = [];
     const { client } = createHarness((message, child) => {
@@ -247,20 +856,68 @@ describe('createWorkiqMcpClient()', () => {
       readSettled = true;
       return result;
     });
+    let proposalSettled = false;
     const proposal = client.proposeThreadActions({
       schemaVersion: 1,
       thread: { id: 'timeout-defaults', title: 'Synthetic timeout policy test' },
+    }).then((result) => {
+      proposalSettled = true;
+      return result;
     });
     while (calls.length < 2) await new Promise((resolve) => setImmediate(resolve));
     t.mock.timers.tick(60000);
-    assert.equal((await proposal).code, 'TIMEOUT');
-    assert.equal(readSettled, false, 'Proposal timeout must not shorten generic reads');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(proposalSettled, false, 'Draft generation must not time out after just one minute');
+    assert.equal(readSettled, false);
     t.mock.timers.tick(239999);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(readSettled, false);
+    assert.equal(proposalSettled, false);
     t.mock.timers.tick(1);
     assert.equal((await read).code, 'TIMEOUT');
+    assert.equal((await proposal).code, 'TIMEOUT');
     assert.equal(client.getQueueStatus().active, 2, 'Neither caller timeout releases unresolved remote capacity');
+    const shutdown = client.shutdown();
+    t.mock.timers.tick(5);
+    await shutdown;
+  });
+
+  it('delivers a grounded draft returned after the former 60-second deadline', { timeout: 5000 }, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    let call;
+    let transport;
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') {
+        if (message.params.name === 'fetch') {
+          queueMicrotask(() => child.respond(message.id, workiq101.fetchResult({ value: [
+            { id: TARGET_USER_ID, displayName: 'Alex', mail: 'alex@example.com' },
+          ] })));
+        } else {
+          call = message;
+          transport = child;
+        }
+      }
+    });
+    const pending = client.proposeThreadActions({
+      schemaVersion: 1, requestedChannel: 'teams',
+      thread: { id: 'slow-draft', title: 'Confirm deployment window' },
+    });
+    while (!call) await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(60001);
+    transport.respond(call.id, { content: [{ type: 'text', text: JSON.stringify({
+      schemaVersion: 1, recommendation: 'Confirm the window', confidence: 'high',
+      evidence: [{ kind: 'observed', text: 'Owner requested confirmation' }],
+      proposals: [{
+        channel: 'teams', target: { displayName: 'Alex' },
+        payload: { message: 'Please confirm the deployment window.' },
+      }],
+    }) }] });
+    const result = await pending;
+    assert.equal(result.ok, true);
+    assert.equal(result.result.proposals[0].payload.message, 'Please confirm the deployment window.');
+    assert.equal(result.result.proposals[0].target.address, 'alex@example.com');
+    assert.equal(client.getQueueStatus().active, 0);
     const shutdown = client.shutdown();
     t.mock.timers.tick(5);
     await shutdown;
@@ -698,12 +1355,37 @@ describe('createWorkiqMcpClient()', () => {
       message: 'Can you confirm the CAF assessment scope?',
     }), { ok: true, action: 'teams-message-sent' });
     assert.equal(calls.length, 2);
-    assert.deepEqual(calls[0].params.arguments, { entityUrls: ['/me/chats?$expand=members'] });
+    assert.deepEqual(calls[0].params.arguments, {
+      entityUrls: ['/me/chats?$filter=chatType%20eq%20%27oneOnOne%27&$select=id,chatType&$expand=members&$top=50'],
+    });
     assert.equal(calls[1].params.name, 'create_entity');
     assert.equal(calls[1].params.arguments.parentUrl, '/chats/chat-james/messages');
     assert.deepEqual(calls[1].params.arguments.jsonBody, {
       body: { contentType: 'text', content: 'Can you confirm the CAF assessment scope?' },
     });
+  });
+
+  it('creates Outlook drafts with the exact discovered namespaced entity tool', async () => {
+    let createCall;
+    const { client } = createHarness((message, child) => {
+      if (message.method === 'initialize') {
+        queueMicrotask(() => child.respond(message.id, { protocolVersion: '2025-03-26' }));
+      } else if (message.method === 'tools/list') {
+        queueMicrotask(() => child.respond(message.id, { tools: [{ name: 'workiq-create_entity' }] }));
+      } else if (message.method === 'tools/call') {
+        createCall = message;
+        queueMicrotask(() => child.respond(message.id, {
+          content: [{ type: 'text', text: '{"id":"draft-id","isDraft":true}' }], isError: false,
+        }));
+      }
+    });
+    const result = await client.createOutlookDraft({
+      to: ['alex@example.com'], subject: 'Window', body: 'Please confirm',
+    });
+    assert.deepEqual(result, { ok: true, action: 'outlook-draft-created' });
+    assert.equal(createCall.params.name, 'workiq-create_entity');
+    assert.equal(createCall.params.arguments.parentUrl, '/me/messages');
+    await client.shutdown();
   });
 
   it('accepts only direct and allowlisted wrapper chatMessage response shapes', async (testContext) => {
@@ -1062,7 +1744,134 @@ describe('createWorkiqMcpClient()', () => {
       readOnly: true,
       code: 'INVALID_CONTEXT',
     });
+
     assert.equal(spawnCalls.length, 0);
+  });
+
+  it('uses the verified structured ask envelope for both draft channels without writing', async () => {
+    const calls = [];
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call') return;
+      calls.push(message);
+      const channel = message.params.arguments.question.includes('"requestedChannel":"teams"') ? 'teams' : 'email';
+      queueMicrotask(() => child.respond(message.id, {
+        content: [],
+        structuredContent: { response: JSON.stringify({
+          schemaVersion: 1, recommendation: 'Confirm the window', confidence: 'high',
+          evidence: [{ kind: 'observed', text: 'Owner requested confirmation' }],
+          proposals: [{
+            channel, target: { displayName: 'Alex', address: 'alex@example.com' },
+            payload: channel === 'email' ? { subject: 'Window', body: 'Please confirm' } : { message: 'Please confirm' },
+          }],
+        }) },
+      }));
+    });
+    for (const requestedChannel of ['email', 'teams']) {
+      const result = await client.proposeThreadActions({
+        schemaVersion: 1, requestedChannel, thread: { id: requestedChannel, title: 'Window' },
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.result.proposals[0].channel, requestedChannel);
+    }
+    assert.deepEqual(calls.map((call) => call.params.name), ['ask', 'ask']);
+    await client.shutdown();
+  });
+
+  it('preserves synthesis throttling codes rather than reporting an unrelated synthesis failure', async () => {
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') queueMicrotask(() => child.respond(message.id, {
+        isError: true, content: [{ type: 'text', text: 'Rate limited; private service detail' }],
+      }));
+    });
+    const result = await client.proposeThreadActions({
+      schemaVersion: 1, thread: { id: 'a', title: 'Window' },
+    });
+    assert.deepEqual(result, { ok: false, readOnly: true, code: 'THROTTLED' });
+    await client.shutdown();
+  });
+
+  it('accepts live WorkIQ object response envelopes with citations for both draft channels', async () => {
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call') return;
+      const channel = message.params.arguments.question.includes('"requestedChannel":"teams"') ? 'teams' : 'email';
+      const response = JSON.stringify({
+        schemaVersion: 1, recommendation: 'Confirm the window', confidence: 'high',
+        evidence: [{ kind: 'observed', text: 'Owner requested confirmation' }],
+        proposals: [{
+          channel, target: { displayName: 'Alex', address: 'alex@example.com' },
+          payload: channel === 'email' ? { subject: 'Window', body: 'Please confirm' } : { message: 'Please confirm' },
+        }],
+      }) + '\n\n[1](https://example.com/evidence)';
+      queueMicrotask(() => child.respond(message.id, {
+        content: [{ type: 'object', text: JSON.stringify({ response, conversationId: 'private-id' }) }],
+      }));
+    });
+    try {
+      for (const requestedChannel of ['email', 'teams']) {
+        const result = await client.proposeThreadActions({
+          schemaVersion: 1, requestedChannel, thread: { id: requestedChannel, title: 'Window' },
+        });
+        assert.equal(result.ok, true);
+        assert.equal(result.result.proposals[0].channel, requestedChannel);
+        assert.equal(JSON.stringify(result).includes('private-id'), false);
+      }
+    } finally { await client.shutdown(); }
+  });
+
+  it('keeps concurrent composer results and failures correlated through the shared MCP queue', async () => {
+    const { createThreadComposer } = await import('../src/svelte/lib/thread-composer.js');
+    const { adaptEmailProposalsToActionQueue } = await import('../src/svelte/lib/proposal-synthesis.js');
+    const calls = [];
+    const saved = [];
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') calls.push({ message, child });
+    });
+    const composer = createThreadComposer();
+    const generate = (id, channel) => composer.generate({
+      item: { id, title: `Thread ${id}`, sourceType: 'Email' }, channel,
+      propose: (context) => client.proposeThreadActions(context),
+      saveEmail: async (item, result) => {
+        const proposals = adaptEmailProposalsToActionQueue(item, result, saved);
+        saved.push(...proposals);
+        return proposals[0].id;
+      },
+    });
+    const a = generate('a', 'email');
+    const b = generate('b', 'teams');
+    for (let tick = 0; tick < 50 && calls.length < 2; tick += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    assert.equal(calls.length, 2);
+    assert.equal(client.getQueueStatus().active, 2);
+    calls[1].child.respond(calls[1].message.id, {
+      isError: true, content: [{ type: 'text', text: 'Sign in required; private detail' }],
+    });
+    await b;
+    assert.equal(composer.read('b').status, 'error');
+    assert.match(composer.read('b').error, /sign-in/);
+    assert.equal(composer.read('a').status, 'generating');
+    calls[0].child.respond(calls[0].message.id, {
+      content: [], structuredContent: { response: JSON.stringify({
+        schemaVersion: 1, recommendation: 'Confirm the window', confidence: 'high',
+        evidence: [{ kind: 'observed', text: 'Owner requested confirmation' }],
+        proposals: [{
+          channel: 'email', target: { displayName: 'Alex', address: 'alex@example.com' },
+          payload: { subject: 'Window', body: 'Please confirm' },
+        }],
+      }) },
+    });
+    await a;
+    assert.equal(composer.read('a').status, 'ready');
+    assert.equal(composer.read('a').emailProposalId, saved[0].id);
+    assert.equal(saved[0].sourceItemId, 'a');
+    assert.equal(composer.read('b').teamsDraft, null);
+    assert.equal(client.getQueueStatus().active, 0);
+    assert.deepEqual(calls.map(({ message }) => message.params.name), ['ask', 'ask']);
+    await client.shutdown();
   });
 
   it('returns a sanitized synthesis timeout after one ask attempt', async () => {

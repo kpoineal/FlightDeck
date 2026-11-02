@@ -422,6 +422,11 @@ describe('registerIpcHandlers()', () => {
       { ...validPayload, targetDisplayName: 'x'.repeat(161) },
       { ...validPayload, targetDisplayName: 'James\x00Farquharson' },
       { ...validPayload, targetDisplayName: 'James\x7fFarquharson' },
+      { ...validPayload, targetEmail: '' },
+      { ...validPayload, targetEmail: null },
+      { ...validPayload, targetEmail: 'not-an-email' },
+      { ...validPayload, targetEmail: 'james@example.com\r\n' },
+      { ...validPayload, targetEmail: 'x'.repeat(243) + '@example.com' },
       { ...validPayload, message: ' \t\r\n ' },
       { ...validPayload, message: 'x'.repeat(4001) },
       { ...validPayload, message: 'Hello\x00world' },
@@ -443,6 +448,25 @@ describe('registerIpcHandlers()', () => {
 
     assert.deepEqual(dialogCalls, []);
     assert.deepEqual(workiqTeamsCalls, []);
+  });
+
+  it('confirms the exact email for named and email-only Teams recipients and preserves it', async () => {
+    const sendTeamsMessage = handlers.get(IPC_CHANNELS.SEND_TEAMS_MESSAGE);
+    for (const targetDisplayName of ['Surika Ravikumar', '']) {
+      const payload = {
+        targetDisplayName, targetEmail: '  Surika.Ravikumar@microsoft.com  ', message: 'Hello',
+      };
+      assert.equal((await sendTeamsMessage(null, payload)).code, 'CANCELLED');
+      assert.equal(workiqTeamsCalls.length, targetDisplayName ? 0 : 1);
+      assert.ok(dialogCalls.at(-1)[0].message.includes('Surika.Ravikumar@microsoft.com'));
+      assert.match(dialogCalls.at(-1)[0].detail, /open or reuse a one-to-one chat, creating it if needed/);
+      dialogResponse = 1;
+      assert.equal((await sendTeamsMessage(null, payload)).ok, true);
+      assert.deepEqual(workiqTeamsCalls.at(-1), {
+        targetDisplayName, targetEmail: 'Surika.Ravikumar@microsoft.com', message: 'Hello',
+      });
+      dialogResponse = 0;
+    }
   });
 
   it('ignores rawHtml and renders markdown preview from markdown fields', async () => {

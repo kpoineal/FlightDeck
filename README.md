@@ -84,7 +84,7 @@ Generate AI-powered briefings for your upcoming meetings. Each briefing surfaces
 | Requirement | Details |
 |---|---|
 | **Node.js** | v18 or later ([download](https://nodejs.org/)) |
-| **WorkIQ CLI** | `npm i -g @microsoft/workiq` — installed globally |
+| **WorkIQ CLI** | Windows bundles **1.0.1**; macOS/Linux require `npm i -g @microsoft/workiq@1.0.1` |
 | **Microsoft Copilot license** | Required by WorkIQ for M365 data access |
 | **Tenant admin consent** | Your organization must [grant WorkIQ access](https://github.com/microsoft/work-iq/blob/main/ADMIN-INSTRUCTIONS.md) to M365 signals |
 
@@ -115,6 +115,8 @@ On first launch, click **Enable WorkIQ** in the connect banner — FlightDeck au
 
 > [!NOTE]
 > On macOS, FlightDeck looks for `workiq` and `node` in `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin`. If you installed Node or WorkIQ to a non-standard location, ensure they are in your PATH.
+
+> On Windows, FlightDeck prefers its bundled WorkIQ executable over a global installation. After upgrading the dependency from source, fully quit FlightDeck from the tray and relaunch with `npm start` to load the new CLI and renderer.
 
 ### Build installers
 

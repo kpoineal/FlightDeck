@@ -292,6 +292,7 @@ test('proposal identity is thread-scoped even when draft content is identical', 
 
 test('Radar does not render an in-memory draft outside its owning selected thread', () => {
   const source = fs.readFileSync(path.resolve(__dirname, '../src/svelte/components/RadarView.svelte'), 'utf8');
-  assert.match(source, /\{#if teamsDraft(?:\s*&&\s*teamsDraft)?\.sourceItemId\s*===\s*selected\.id\}/);
-  assert.match(source, /sourceItemId:\s*sourceItem\.id/);
+  assert.match(source, /\{#if teamsDraft && teamsDraft\.sourceItemId === selected\.id && teamsSendState\.status !== 'sent' && !isWorkPlanStepCompleted\(selected, teamsDraft\.nextStep\)\}/);
+  assert.match(source, /synthesisState = \$derived\(\$threadComposer\.get\(selectedId\)/);
+  assert.match(source, /teamsDraft = \$derived\(synthesisState\.teamsDraft\)/);
 });
