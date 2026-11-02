@@ -102,6 +102,28 @@ Tests use the **Node.js built-in test runner** (`node:test`) — no external fra
 npm test
 ```
 
+For offline renderer/browser regression coverage, run `npm run test:radar:browser`.
+
+### Opt-in live draft validation
+
+`npm run test:drafts:live` launches the actual Electron app with an isolated temporary profile and uses the installed WorkIQ MCP client, cached sign-in, and real Microsoft 365 context. It requires actual editable Email and Teams drafts to appear inline on their source thread, without automatically opening Actions; a successful response with no proposals fails the check. Outlook creation and Teams sending are blocked at IPC, and your normal profile is never modified.
+
+Fully quit FlightDeck first. Select an existing thread ID from your local persisted state and run:
+
+```powershell
+$env:FLIGHTDECK_LIVE_STATE_PATH = "$env:APPDATA\flightdeck\flightdeck-data.json"
+$env:FLIGHTDECK_LIVE_THREAD_ID = '<existing thread ID>'
+# Optional: generate Teams on a different thread while Email runs on the first.
+$env:FLIGHTDECK_LIVE_SECOND_THREAD_ID = '<different existing thread ID>'
+# Optional: require resolved recipient emails in both actual draft editors.
+$env:FLIGHTDECK_LIVE_REQUIRE_RECIPIENT_EMAIL = '1'
+# Optional: assert both editors resolve this exact intended recipient.
+$env:FLIGHTDECK_LIVE_RECIPIENT_EMAIL = '<verified recipient email>'
+npm run test:drafts:live
+```
+
+Omit the second variable for sequential generation on one thread. The check verifies that both drafts and the Teams recipient address survive tab navigation, reports only status/lengths and address presence rather than message contents or addresses, closes its processes, and removes its temporary profile. Set `FLIGHTDECK_LIVE_REQUIRE_RECIPIENT_EMAIL=1` to fail when either editor has no valid recipient address instead of accepting an unresolved draft. It does not validate live delivery; external writes still require separate explicit approval.
+
 ### Current Test Files
 
 | Test File | Module Under Test |

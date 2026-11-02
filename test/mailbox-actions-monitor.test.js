@@ -74,6 +74,160 @@ let stopMonitoringLoop;
 let connected;
 let isDemo;
 let setItemField;
+let draftProposals;
+let createOutlookDraftProposal;
+let createDraftProposal;
+
+describe('shared Outlook draft execution', () => {
+  before(async () => {
+    ({ actionProposals: draftProposals } = await import('../src/svelte/lib/stores.js'));
+    ({ createOutlookDraftProposal } = await import('../src/svelte/lib/outlook-draft.js'));
+    ({ createActionProposal: createDraftProposal } = await import('../src/svelte/lib/action-proposals.js'));
+  });
+
+  function seed(overrides = {}) {
+    const item = monitoredItem();
+    items.set([item]);
+    history.set([]);
+    const proposal = { ...createDraftProposal(item, 'Confirm the window', {
+      channel: 'outlook-draft', target: 'alex@example.com',
+    }), ...overrides };
+    draftProposals.set([proposal]);
+    return proposal;
+  }
+
+  it('uses the same pending operation and audited review for inline and Actions creation', async () => {
+    const proposal = seed();
+    const calls = [];
+    let resolve;
+    const createDraft = (payload) => {
+      calls.push(payload);
+      return new Promise((done) => { resolve = done; });
+    };
+    const pending = createOutlookDraftProposal(proposal.id, { reviewed: true, createDraft });
+    await new Promise((done) => setImmediate(done));
+    assert.equal(get(draftProposals)[0].state, 'Executing');
+    assert.equal(await createOutlookDraftProposal(proposal.id, { createDraft }), null);
+    assert.equal(calls.length, 1);
+    resolve({ ok: true, action: 'outlook-draft-created' });
+    const completed = await pending;
+    assert.equal(completed.state, 'Succeeded');
+    assert.equal(get(draftProposals)[0].executionVerification, 'runtime-backend-confirmed');
+    assert.deepEqual(calls, [{ to: ['alex@example.com'], subject: proposal.sourceTitle, body: proposal.content }]);
+    const events = get(items)[0].updateHistory.filter((entry) => entry.proposalId === proposal.id).map((entry) => entry.event);
+    for (const event of ['review-submitted', 'approved', 'queued', 'execution-started', 'succeeded']) {
+      assert.equal(events.filter((value) => value === event).length, 1);
+    }
+  });
+
+  it('requires explicit inline review and refuses invalid, locked, archived, or uncertain proposals', async () => {
+    let calls = 0;
+    const createDraft = async () => { calls += 1; };
+    const drafted = seed();
+    assert.equal(await createOutlookDraftProposal(drafted.id, { createDraft }), null);
+    for (const overrides of [
+      { target: '' }, { sourceTitle: '' }, { content: '' }, { state: 'Rejected' },
+      { state: 'Cancelled' }, { state: 'Succeeded' }, { state: 'Executing' },
+      { archivedAt: '2026-10-30T12:00:00Z' }, { auditOnly: true },
+      { state: 'Failed', executionCode: 'ACTION_UNCONFIRMED' },
+    ]) {
+      const proposal = seed(overrides);
+      assert.equal(await createOutlookDraftProposal(proposal.id, { reviewed: true, createDraft }), null);
+    }
+    assert.equal(calls, 0);
+  });
+
+  it('closes the email editor and persistently completes its original step only after a confirmed draft receipt', async () => {
+    const { threadComposer } = await import('../src/svelte/lib/thread-composer.js');
+    const { normalizeItem } = await import('../src/svelte/lib/models/item.js');
+    const step = 'Confirm the deployment window.';
+    const proposal = seed({ sourceNextStep: step });
+    threadComposer.update(proposal.sourceItemId, { emailProposalId: proposal.id, emailOpen: true });
+    try {
+      await createOutlookDraftProposal(proposal.id, {
+        reviewed: true, createDraft: async () => ({ ok: true, action: 'outlook-draft-created' }),
+      });
+      assert.equal(threadComposer.read(proposal.sourceItemId).emailOpen, false);
+      assert.deepEqual(get(items)[0].completedNextSteps, [step]);
+      assert.equal(get(items)[0].updateHistory.find((entry) => entry.event === 'succeeded').nextStep, step);
+      const restored = normalizeItem(JSON.parse(JSON.stringify({ ...get(items)[0], updateHistory: [] })));
+      assert.deepEqual(restored.completedNextSteps, [step], 'Completion depended on bounded timeline retention');
+      draftProposals.set([{ ...proposal, id: 'another-email-for-the-same-step' }]);
+      let calls = 0;
+      assert.equal(await createOutlookDraftProposal('another-email-for-the-same-step', {
+        reviewed: true, createDraft: async () => { calls++; },
+      }), null);
+      assert.equal(calls, 0, 'Actions bypassed the completed-step guard');
+    } finally {
+      threadComposer.forget(proposal.sourceItemId);
+    }
+  });
+
+  it('keeps cancelled or uncertain email drafts open and leaves their next moves available', async () => {
+    const { threadComposer } = await import('../src/svelte/lib/thread-composer.js');
+    for (const result of [{ ok: false, code: 'CANCELLED', dispatched: false }, { ok: true, draftId: 'unverified' }]) {
+      const proposal = seed({ sourceNextStep: 'Confirm the deployment window.' });
+      threadComposer.update(proposal.sourceItemId, { emailProposalId: proposal.id, emailOpen: true });
+      try {
+        await createOutlookDraftProposal(proposal.id, { reviewed: true, createDraft: async () => result });
+        assert.equal(threadComposer.read(proposal.sourceItemId).emailOpen, true);
+        assert.deepEqual(get(items)[0].completedNextSteps || [], []);
+      } finally {
+        threadComposer.forget(proposal.sourceItemId);
+      }
+    }
+  });
+
+  it('retains incomplete edited email drafts across serialization without making them executable', async () => {
+    const { normalizeActionProposal, buildOutlookDraftPayload } = await import('../src/svelte/lib/action-proposals.js');
+    const proposal = seed({ sourceTitle: '', target: '', content: '' });
+    const restored = normalizeActionProposal(JSON.parse(JSON.stringify(proposal)));
+    assert.ok(restored);
+    assert.equal(restored.sourceTitle, '');
+    assert.equal(restored.target, '');
+    assert.equal(restored.content, '');
+    assert.equal(buildOutlookDraftPayload(restored).ok, false);
+    draftProposals.set([restored]);
+    let calls = 0;
+    assert.equal(await createOutlookDraftProposal(restored.id, {
+      reviewed: true, createDraft: () => { calls += 1; },
+    }), null);
+    assert.equal(calls, 0);
+    assert.equal(normalizeActionProposal({ ...proposal, channel: 'teams' }), null);
+  });
+
+  it('preserves cancellation and uncertainty without claiming success or replaying writes', async () => {
+    for (const result of [
+      { ok: false, code: 'CANCELLED', dispatched: false },
+      { ok: false, code: 'AUTH_REQUIRED', dispatched: false },
+      { ok: true, draftId: 'not-proof' },
+    ]) {
+      const proposal = seed();
+      let calls = 0;
+      const completed = await createOutlookDraftProposal(proposal.id, {
+        reviewed: true, createDraft: async () => { calls += 1; return result; },
+      });
+      assert.equal(calls, 1);
+      assert.equal(completed.state, result.code === 'CANCELLED' ? 'Queued' : 'Failed');
+      if (!result.code) {
+        assert.equal(completed.executionCode, 'ACTION_UNCONFIRMED');
+        assert.equal(await createOutlookDraftProposal(proposal.id, { reviewed: true, createDraft: () => { calls += 1; } }), null);
+        assert.equal(calls, 1);
+      }
+    }
+  });
+
+  it('does not dispatch a proposal removed while its review audit is being saved', async () => {
+    const proposal = seed();
+    let calls = 0;
+    globalThis.__mailboxTestOnMonitorCycleSaved = () => draftProposals.set([]);
+    assert.equal(await createOutlookDraftProposal(proposal.id, {
+      reviewed: true, createDraft: () => { calls += 1; },
+    }), null);
+    assert.equal(calls, 0);
+    assert.deepEqual(get(draftProposals), []);
+  });
+});
 
 function monitoredItem(overrides = {}) {
   return {
@@ -293,6 +447,28 @@ describe('shared item actions', () => {
     assert.equal(get(history).filter((entry) => entry.eventId === 'event-dedupe').length, 1);
     assert.equal(get(history).some((entry) => entry.eventId === 'event-missing'), false);
     assert.equal(globalThis.__mailboxTestSaveCalls, 1);
+  });
+
+  it('marks a next move complete only for a matching authoritative communication outcome', async () => {
+    const step = 'Confirm the deployment window.';
+    for (const [index, outcome] of [
+      { event: 'succeeded', outcome: 'succeeded', channel: 'teams', verification: 'runtime-backend-confirmed', code: 'SEND_CONFIRMED', completed: true },
+      { event: 'succeeded', outcome: 'succeeded', channel: 'outlook-draft', verification: 'runtime-backend-confirmed', code: 'DRAFT_SAVED', completed: true },
+      { event: 'failed', outcome: 'unverified', channel: 'teams', verification: 'unverified', code: 'SEND_UNCONFIRMED' },
+      { event: 'cancelled', outcome: 'cancelled', channel: 'teams', verification: 'not-applicable', code: 'CANCELLED' },
+      { event: 'succeeded', outcome: 'succeeded', channel: 'teams', verification: 'local-demo', code: 'SEND_CONFIRMED' },
+      { event: 'succeeded', outcome: 'succeeded', channel: 'outlook-draft', verification: 'runtime-backend-confirmed', code: 'UNKNOWN' },
+    ].entries()) {
+      items.set([monitoredItem()]);
+      history.set([]);
+      await recordActionEvent({
+        eventId: `completion-${index}`, itemId: 'thread-1', proposalId: `proposal-${index}`,
+        timestamp: '2026-11-02T18:00:00Z', nextStep: step, ...outcome,
+      });
+      assert.deepEqual(get(items)[0].completedNextSteps || [], outcome.completed ? [step] : []);
+      assert.equal(get(items)[0].updateHistory[0].nextStep, step);
+      assert.equal(get(history)[0].payload.nextStep, step);
+    }
   });
 
   it('preserves unrelated monitor history and untouched threads when adding action events', async () => {

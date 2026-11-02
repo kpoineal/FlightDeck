@@ -12,6 +12,7 @@ import {
   actionProposalDuplicateKey,
   canPermanentlyDeleteActionProposal,
   classifyActionProposalEffect,
+  normalizeWorkPlanStep,
 } from './action-proposals.js';
 
 const ACTION_EVENT_LABELS = Object.freeze({
@@ -252,12 +253,20 @@ export async function recordActionEvent(input) {
     if (item.id !== event.itemId) return item;
     sourceItemFound = true;
     const updateHistory = Array.isArray(item.updateHistory) ? item.updateHistory : [];
-    if (updateHistory.some((entry) => entry?.eventId === event.eventId)) return item;
+    const alreadyRecorded = updateHistory.some((entry) => entry?.eventId === event.eventId);
+    const completedNextSteps = Array.isArray(item.completedNextSteps) ? item.completedNextSteps : [];
+    const completedStep = event.nextStep && event.event === 'succeeded' && event.outcome === 'succeeded'
+      && event.verification === 'runtime-backend-confirmed'
+      && ((event.channel === 'teams' && event.code === 'SEND_CONFIRMED')
+        || (event.channel === 'outlook-draft' && event.code === 'DRAFT_SAVED'));
+    const markCompleted = completedStep && !completedNextSteps.includes(event.nextStep);
+    if (alreadyRecorded && !markCompleted) return item;
     threadChanged = true;
     return {
       ...item,
       lastChangedAt: event.timestamp,
-      updateHistory: prependItemUpdateHistory(updateHistory, toThreadActionEvent(event)),
+      ...(markCompleted ? { completedNextSteps: [...completedNextSteps, event.nextStep] } : {}),
+      updateHistory: alreadyRecorded ? updateHistory : prependItemUpdateHistory(updateHistory, toThreadActionEvent(event)),
     };
   }));
   if (!sourceItemFound) return false;
@@ -509,6 +518,7 @@ function normalizeActionEvent(input) {
     outcome,
     verification,
     code,
+    nextStep: normalizeWorkPlanStep(input.nextStep) || null,
   };
 }
 
@@ -526,6 +536,7 @@ function toThreadActionEvent(event) {
     outcome: event.outcome,
     verification: event.verification,
     code: event.code,
+    nextStep: event.nextStep,
     seen: true,
   });
 }
@@ -546,6 +557,7 @@ function toGlobalActionEvent(event) {
       outcome: event.outcome,
       verification: event.verification,
       code: event.code,
+      nextStep: event.nextStep,
     }),
   };
 }

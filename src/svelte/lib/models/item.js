@@ -29,6 +29,7 @@ import {
   adoptStructuredLabels,
   extractLabelEmbeddedUrl,
 } from '../utils.js';
+import { normalizeWorkPlanStep } from '../action-proposals.js';
 
 const MAX_ACTION_HISTORY_ENTRIES = 20;
 const MAX_OTHER_HISTORY_ENTRIES = 20;
@@ -519,6 +520,9 @@ export function normalizeItem(item) {
       return UNKNOWN_LIFECYCLE_STATUS;
     })(),
     scannerId: item?.scannerId || null,
+    completedNextSteps: Array.isArray(item?.completedNextSteps)
+      ? [...new Set(item.completedNextSteps.map(normalizeWorkPlanStep).filter(Boolean))]
+      : [],
     isNew: item?.isNew === true,
     updateHistory: Array.isArray(item?.updateHistory)
       ? capItemUpdateHistory(item.updateHistory.map((entry) => ({

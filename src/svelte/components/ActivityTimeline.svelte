@@ -1,7 +1,7 @@
 <script>
   import { normalizeSeverity } from '../lib/utils.js';
 
-  let { entries = [], item = null, maxVisible = 3 } = $props();
+  let { entries = [], item = null, maxVisible = 3, canViewAction = () => false, onviewAction = null } = $props();
 
   let showingAll = $state(false);
 
@@ -101,7 +101,13 @@
           <div class="at-card-head">
             <span class="at-time">{timeLabel}</span>
             {#if isAction}
-              <span class="at-action-kind">Action</span>
+              {#if onviewAction && canViewAction(e)}
+                <button type="button" class="at-action-kind at-action-open" data-testid="action-timeline-open"
+                  aria-label={e.channel === 'teams' ? 'View sent Teams message' : 'View created Outlook draft'}
+                  on:click={(event) => onviewAction(e, event.currentTarget)}>Action &middot; View message</button>
+              {:else}
+                <span class="at-action-kind">Action</span>
+              {/if}
             {:else if !isNewest}
               <span class="at-severity pill severity-{curSeverity}">{label}</span>
             {/if}

@@ -1,4 +1,6 @@
 import { canInsertActionProposal, createActionProposal } from './action-proposals.js';
+import { extractJsonFromText } from './json-parser.js';
+import { isValidEmail } from '../../shared/recipient-validation.mjs';
 
 export const PROPOSAL_SYNTHESIS_SCHEMA_VERSION = 1;
 
@@ -6,7 +8,6 @@ const CONFIDENCE = new Set(['high', 'medium', 'low']);
 const CHANNELS = new Set(['email', 'teams', 'planner', 'local']);
 const REQUESTED_CHANNELS = new Set(['email', 'teams']);
 const EVIDENCE_KINDS = new Set(['observed', 'inference']);
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function buildProposalSynthesisContext(item, options = {}) {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
@@ -18,6 +19,7 @@ export function buildProposalSynthesisContext(item, options = {}) {
   return normalizeProposalSynthesisContext({
     schemaVersion: PROPOSAL_SYNTHESIS_SCHEMA_VERSION,
     requestedChannel: options.requestedChannel,
+    requestedNextStep: options.requestedNextStep,
     thread: {
       id: threadId,
       title,
@@ -57,9 +59,11 @@ export function normalizeProposalSynthesisContext(value) {
   if (!id || !title) return null;
 
   const requestedChannel = boundedString(value.requestedChannel, 16).toLowerCase();
+  const requestedNextStep = boundedString(value.requestedNextStep, 500);
   return {
     schemaVersion: PROPOSAL_SYNTHESIS_SCHEMA_VERSION,
     ...(REQUESTED_CHANNELS.has(requestedChannel) ? { requestedChannel } : {}),
+    ...(requestedNextStep ? { requestedNextStep } : {}),
     thread: {
       id,
       title,
@@ -90,18 +94,19 @@ export function normalizeProposalSynthesisContext(value) {
 
 export function parseProposalSynthesisResponse(rawResponse) {
   if (typeof rawResponse !== 'string' || rawResponse.length > 100000) return null;
-  try {
-    const parsed = JSON.parse(rawResponse);
-    const candidate = parsed
-      && typeof parsed === 'object'
-      && !Array.isArray(parsed)
-      && typeof parsed.response === 'string'
-      ? JSON.parse(parsed.response)
-      : parsed;
-    return normalizeProposalSynthesisResult(candidate);
-  } catch {
-    return null;
+  for (const candidate of extractJsonFromText(rawResponse)) {
+    let parsed;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    const result = typeof parsed?.response === 'string'
+      ? parseProposalSynthesisResponse(parsed.response)
+      : normalizeProposalSynthesisResult(parsed);
+    if (result) return result;
   }
+  return null;
 }
 
 export function normalizeProposalSynthesisResult(value) {
@@ -160,7 +165,7 @@ export function adaptEmailProposalsToActionQueue(item, result, existing = [], op
     if (proposal.channel !== 'email') continue;
     const target = proposal.target.address || proposal.target.displayName;
     const content = proposal.payload.body;
-    if (!target || !content) continue;
+    if (!content) continue;
 
     const createdProposal = createActionProposal(item, content, {
       ...options,
@@ -175,6 +180,7 @@ export function adaptEmailProposalsToActionQueue(item, result, existing = [], op
     });
     const actionProposal = {
       ...createdProposal,
+      target,
       sourceTitle: proposal.payload.subject || createdProposal.sourceTitle,
     };
     if (!canInsertActionProposal([...(Array.isArray(existing) ? existing : []), ...created], actionProposal)) continue;
@@ -200,7 +206,7 @@ function normalizeProposal(value) {
 
   const missingContext = boundedStrings(value.missingContext, 8, 240);
   const needsTargetResolution = channel === 'teams'
-    ? !target.displayName
+    ? !target.displayName && !target.address
     : value.needsTargetResolution === true || (channel === 'email' && !target.address);
 
   return {
@@ -218,10 +224,10 @@ function normalizeProposal(value) {
 
 function normalizeTarget(value) {
   const target = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const address = boundedString(target.address, 254).toLowerCase();
+  const address = typeof target.address === 'string' ? target.address.trim().toLowerCase() : '';
   return {
     displayName: boundedString(target.displayName, 160),
-    address: EMAIL_PATTERN.test(address) ? address : '',
+    address: isValidEmail(address) ? address : '',
     channelId: boundedString(target.channelId, 240),
     threadId: boundedString(target.threadId, 240),
   };

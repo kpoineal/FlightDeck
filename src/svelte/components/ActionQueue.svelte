@@ -17,15 +17,16 @@
     classifyActionProposalEffect,
     classifyActionProposalView,
     countActionProposalViews,
-    executeOutlookDraftAction,
     findActionProposalDuplicateGroups,
     filterActionProposalsByView,
     isReviewableActionProposal,
+    isWorkPlanStepCompleted,
     restoreActionProposal,
     transitionActionProposal,
     updateActionProposal,
   } from '../lib/action-proposals.js';
-  import { createActionEventId, permanentlyDeleteActionProposal, recordActionEvent } from '../lib/item-actions.js';
+  import { permanentlyDeleteActionProposal } from '../lib/item-actions.js';
+  import { createOutlookDraftProposal, recordProposalEvent } from '../lib/outlook-draft.js';
   import { navigateToRadarItem } from '../lib/radar-navigation.js';
   import ConfirmModal from './ConfirmModal.svelte';
 
@@ -39,7 +40,10 @@
   let viewCounts = $derived(countActionProposalViews($actionProposals));
   let visibleProposals = $derived(filterActionProposalsByView($actionProposals, activeView));
   let selected = $derived(visibleProposals.find((proposal) => proposal.id === $selectedProposalId) || visibleProposals[0] || null);
-  let nextAction = $derived(actionForState(selected));
+  let selectedStepCompleted = $derived(isWorkPlanStepCompleted(
+    $items.find((item) => item.id === selected?.sourceItemId), selected?.sourceNextStep
+  ));
+  let nextAction = $derived(selectedStepCompleted ? null : actionForState(selected));
   let dialog = $state(null);
   let returnFocus = null;
   let wasOpen = false;
@@ -61,6 +65,9 @@
 
   $effect(() => {
     if ($actionsQueueOpen && !wasOpen) {
+      const requested = $actionProposals.find((proposal) => proposal.id === $selectedProposalId);
+      const requestedView = classifyActionProposalView(requested);
+      if (requestedView) activeView = requestedView;
       returnFocus = $actionsQueueFocusOrigin || document.activeElement;
       requestAnimationFrame(() => dialog?.focus());
     }
@@ -129,41 +136,6 @@
       Rejected: 'rejected',
       Cancelled: 'cancelled',
     })[state] || null;
-  }
-
-  async function recordProposalEvent(proposal, event, {
-    code = null,
-    attempt = 0,
-    outcome = null,
-    verification = null,
-  } = {}) {
-    if (!proposal?.sourceItemId || !event) return false;
-    const eventId = createActionEventId({
-      proposalId: proposal.id,
-      event,
-      timestamp: proposal.updatedAt,
-      attempt,
-    });
-    if (!eventId) return false;
-    return recordActionEvent({
-      eventId,
-      itemId: proposal.sourceItemId,
-      proposalId: proposal.id,
-      event,
-      channel: proposal.channel,
-      target: proposal.target,
-      outcome: outcome || (event === 'succeeded' ? 'succeeded'
-        : event === 'failed' ? 'failed'
-          : event === 'rejected' ? 'rejected'
-            : event === 'cancelled' ? 'cancelled'
-              : event === 'archived' ? 'archived'
-                : event === 'restored' ? 'restored'
-                  : 'pending'),
-      verification: verification || (event === 'succeeded' ? proposal.executionVerification || 'unverified'
-        : ['approved', 'rejected', 'cancelled', 'archived', 'restored'].includes(event) ? 'not-applicable' : 'unverified'),
-      code,
-      timestamp: proposal.updatedAt,
-    });
   }
 
   function managementForProposal(proposal) {
@@ -333,9 +305,7 @@
     if (!selected || selected.auditOnly === true) return;
     actionProposals.update((proposals) => proposals.map((proposal) =>
       proposal.id === selected.id
-        ? field === 'sourceTitle' && proposal.state === 'Drafted'
-          ? { ...proposal, sourceTitle: String(value || '').trim().slice(0, 500), updatedAt: new Date().toISOString() }
-          : updateActionProposal(proposal, { [field]: value })
+        ? updateActionProposal(proposal, { [field]: value })
         : proposal
     ));
   }
@@ -348,34 +318,12 @@
 
   async function createOutlookDraft() {
     if (!selected || selected.auditOnly === true || selected.channel !== 'outlook-draft' || draftPending) return;
-    const proposalId = selected.id;
-    const executing = {
-      ...selected,
-      state: 'Executing',
-      outcome: null,
-      executionVerification: null,
-      updatedAt: new Date().toISOString(),
-    };
     draftPending = true;
-    actionProposals.update((proposals) => proposals.map((proposal) => proposal.id === proposalId ? executing : proposal));
-    await recordProposalEvent(executing, 'execution-started');
-
-    const executionResult = await executeOutlookDraftAction(
-      executing,
-      window.workiq?.createOutlookDraft,
-    );
-    const { executionAudit = null, ...completed } = executionResult;
-    let proposalStillExists = false;
-    actionProposals.update((proposals) => proposals.map((proposal) => {
-      if (proposal.id !== proposalId) return proposal;
-      proposalStillExists = true;
-      return completed;
-    }));
-    if (proposalStillExists) {
+    const completed = await createOutlookDraftProposal(selected.id, { createDraft: window.workiq?.createOutlookDraft });
+    if (completed && $actionProposals.some((proposal) => proposal.id === completed.id)) {
       selectedProposalId.set(completed.id);
       activeView = classifyActionProposalView(completed) || activeView;
     }
-    if (executionAudit) await recordProposalEvent(completed, executionAudit.event, executionAudit);
     draftPending = false;
   }
 
@@ -516,7 +464,9 @@
                   </li>
                 {/each}
               </ol>
-              {#if missingEmailAddress(selected)}
+              {#if selectedStepCompleted}
+                <p class="action-target-warning" role="status">This work-plan step is already completed. Another action for the same step cannot be dispatched.</p>
+              {:else if missingEmailAddress(selected)}
                 <p class="action-target-warning" role="alert">Email address required for {selected.target || 'recipient'}. Enter an email address above.</p>
               {:else if selected.state === 'Drafted' && !isReviewableActionProposal(selected)}
                 <p class="action-target-warning" role="alert">Set a concrete target and content before submitting this proposal for review.</p>

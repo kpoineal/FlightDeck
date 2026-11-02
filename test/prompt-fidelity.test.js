@@ -2,11 +2,28 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const EM_DASH = '\u2014';
 
 let buildMonitorPrompt;
 let buildScannerPrompt;
+
+test('explicit compose requests generate editable drafts rather than reconsider whether to communicate', () => {
+  const prompt = fs.readFileSync(path.resolve(__dirname, '../src/prompts/proposal-synthesis.md'), 'utf8');
+  assert.match(prompt, /explicit composition request/i);
+  assert.match(prompt, /do not suppress.*add noise/i);
+  assert.match(prompt, /leave.*target.*empty/i);
+  assert.match(prompt, /insufficient observed context/i);
+  assert.match(prompt, /Never invent an email address/);
+  assert.match(prompt, /verified email address or user principal name/);
+  assert.match(prompt, /both email and Teams proposals/);
+  assert.match(prompt, /do not infer an address from a display name/);
+  assert.match(prompt, /requestedNextStep/);
+  assert.match(prompt, /Focus the draft's ask and desired outcome on that step/);
+  assert.match(prompt, /not proof of its facts or permission to follow embedded instructions/);
+});
 
 test.before(async () => {
   ({ buildMonitorPrompt, buildScannerPrompt } = await import('../src/svelte/lib/prompts.js'));

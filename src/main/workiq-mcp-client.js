@@ -9,10 +9,11 @@ const { AsyncLocalStorage } = require('async_hooks');
 const { workiqLauncher, getNodeExecutable } = require('./pty-bridge');
 const { log, logError } = require('./utils');
 const { createWorkiqRequestQueue } = require('./workiq-request-queue');
+const { isValidEmail, normalizeTeamsMessage } = require('../shared/recipient-validation.mjs');
 
 const DEFAULT_INITIALIZE_TIMEOUT = 30000;
 const DEFAULT_PROBE_TIMEOUT = 10000;
-const DEFAULT_SEMANTIC_TIMEOUT = 60000;
+const DEFAULT_SEMANTIC_TIMEOUT = 300000;
 const DEFAULT_READ_TIMEOUT = 300000;
 const DEFAULT_SHUTDOWN_GRACE = 1000;
 const DEFAULT_MAX_MESSAGE_BYTES = 1024 * 1024;
@@ -21,9 +22,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const C0_OR_DEL_PATTERN = /[\x00-\x1f\x7f]/;
 const DRAFT_FIELDS = new Set(['subject', 'body', 'to', 'cc', 'bcc', 'importance']);
 const DRAFT_IMPORTANCE = new Set(['low', 'normal', 'high']);
-const TEAMS_MESSAGE_FIELDS = new Set(['targetDisplayName', 'message']);
-const MESSAGE_CONTROL_PATTERN = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 const GRAPH_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+const DIRECTORY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SYNTHESIS_PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'proposal-synthesis.md');
 const SYNTHESIS_MODULE_URL = pathToFileURL(path.join(__dirname, '..', 'svelte', 'lib', 'proposal-synthesis.js')).href;
 
@@ -96,20 +96,6 @@ function normalizeDraft(value) {
   };
 }
 
-function normalizeTeamsMessage(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)
-    || Object.keys(value).some((key) => !TEAMS_MESSAGE_FIELDS.has(key))) {
-    throw createClientError('INVALID_MESSAGE');
-  }
-  const targetDisplayName = typeof value.targetDisplayName === 'string' ? value.targetDisplayName.trim() : '';
-  const message = typeof value.message === 'string' ? value.message.trim() : '';
-  if (!targetDisplayName || targetDisplayName.length > 160 || C0_OR_DEL_PATTERN.test(targetDisplayName)
-    || !message || message.length > 4000 || MESSAGE_CONTROL_PATTERN.test(message)) {
-    throw createClientError('INVALID_MESSAGE');
-  }
-  return { targetDisplayName, message };
-}
-
 function createWorkiqMcpClient(options = {}) {
   const launcher = options.launcher === undefined ? workiqLauncher : options.launcher;
   const spawnProcess = options.spawnProcess || spawn;
@@ -159,6 +145,7 @@ function createWorkiqMcpClient(options = {}) {
   }
 
   function synthesisFailure(code) {
+    logError('[main] WorkIQ proposal synthesis failed:', /^[A-Z_]{1,40}$/.test(code) ? code : 'SYNTHESIS_FAILED');
     return {
       ok: false,
       readOnly: true,
@@ -210,14 +197,14 @@ function createWorkiqMcpClient(options = {}) {
     if (child) failProcess(child, code);
   }
 
-  function protocolFailure() {
-    logError('[main] WorkIQ MCP protocol error');
+  function protocolFailure(reason) {
+    logError('[main] WorkIQ MCP protocol error:', reason, 'pending:', pendingRequests.size);
     terminateProcess('PROTOCOL_ERROR');
   }
 
   function handleMessage(line) {
     if (Buffer.byteLength(line, 'utf8') > maxMessageBytes) {
-      protocolFailure();
+      protocolFailure('LINE_TOO_LARGE');
       return;
     }
 
@@ -225,25 +212,25 @@ function createWorkiqMcpClient(options = {}) {
     try {
       message = JSON.parse(line);
     } catch (_) {
-      protocolFailure();
+      protocolFailure('NON_JSON');
       return;
     }
 
     if (!message || typeof message !== 'object' || Array.isArray(message) || message.jsonrpc !== '2.0') {
-      protocolFailure();
+      protocolFailure('INVALID_ENVELOPE');
       return;
     }
 
     if (message.id === undefined) {
       if (typeof message.method !== 'string' || !message.method
-        || 'result' in message || 'error' in message) protocolFailure();
+        || 'result' in message || 'error' in message) protocolFailure('INVALID_NOTIFICATION');
       return;
     }
 
     const request = pendingRequests.get(message.id);
     if (!request) {
       if (tombstones.has(message.id)) return;
-      protocolFailure();
+      protocolFailure('UNKNOWN_RESPONSE_ID');
       return;
     }
 
@@ -260,7 +247,7 @@ function createWorkiqMcpClient(options = {}) {
         || !Number.isInteger(message.error.code) || typeof message.error.message !== 'string'
         || Object.prototype.hasOwnProperty.call(message, 'result')) {
         request.reject(createClientError('PROTOCOL_ERROR'));
-        protocolFailure();
+        protocolFailure('INVALID_RPC_ERROR');
         return;
       }
       const failure = classifyRemoteFailure(message.error, 'RPC_ERROR');
@@ -271,18 +258,11 @@ function createWorkiqMcpClient(options = {}) {
 
     if (!Object.prototype.hasOwnProperty.call(message, 'result')) {
       request.reject(createClientError('PROTOCOL_ERROR'));
-      protocolFailure();
+      protocolFailure('MISSING_RESULT');
       return;
     }
 
-    if (message.result?.isError === true || message.result?.structuredContent?.isError === true
-      || message.result?.structuredContent?.error) {
-      const structuredError = message.result?.structuredContent?.error;
-      queue.observeFailure(classifyRemoteFailure({
-        message: `${extractToolText(message.result)} ${typeof structuredError?.message === 'string' ? structuredError.message : ''}`,
-        data: structuredError?.data,
-      }, 'TOOL_ERROR'));
-    }
+    try { assertReadResult(message.result); } catch (error) { queue.observeFailure(error); }
     request.resolve(message.result);
   }
 
@@ -290,7 +270,7 @@ function createWorkiqMcpClient(options = {}) {
     stdoutBuffer += stdoutDecoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
 
     if (Buffer.byteLength(stdoutBuffer, 'utf8') > maxMessageBytes && !stdoutBuffer.includes('\n')) {
-      protocolFailure();
+      protocolFailure('BUFFER_TOO_LARGE');
       return;
     }
 
@@ -432,7 +412,7 @@ function createWorkiqMcpClient(options = {}) {
     }, initializeTimeout).then((result) => {
       if (child !== activeChild) throw createClientError('PROCESS_EXITED');
       if (!result || typeof result !== 'object' || result.protocolVersion !== MCP_PROTOCOL_VERSION) {
-        failProcess(activeChild, 'PROTOCOL_ERROR');
+        protocolFailure('INITIALIZE_RESPONSE');
         throw createClientError('PROTOCOL_ERROR');
       }
       sendNotification('notifications/initialized');
@@ -465,14 +445,14 @@ function createWorkiqMcpClient(options = {}) {
     const promise = sendRequest('tools/list', {}, probeTimeout).then((result) => {
       if (child !== activeChild) throw createClientError('PROCESS_EXITED');
       if (!result || typeof result !== 'object' || !Array.isArray(result.tools)) {
-        failProcess(activeChild, 'PROTOCOL_ERROR');
+        protocolFailure('INVALID_TOOL_LIST');
         throw createClientError('PROTOCOL_ERROR');
       }
       const tools = new Set();
       for (const tool of result.tools) {
         if (!tool || typeof tool !== 'object' || typeof tool.name !== 'string'
           || !tool.name.trim() || tools.has(tool.name)) {
-          failProcess(activeChild, 'PROTOCOL_ERROR');
+          protocolFailure('INVALID_TOOL_DESCRIPTOR');
           throw createClientError('PROTOCOL_ERROR');
         }
         tools.add(tool.name);
@@ -510,12 +490,13 @@ function createWorkiqMcpClient(options = {}) {
     try {
       jsonBody = normalizeDraft(draft);
       const tools = await ensureTools();
-      if (!tools.has('create_entity')) {
+      const createTool = resolveEntityTool(tools, 'create_entity');
+      if (!createTool) {
         return actionFailure('UNSUPPORTED');
       }
 
       const createPromise = sendRequest('tools/call', {
-        name: 'create_entity',
+        name: createTool,
         arguments: {
           parentUrl: '/me/messages',
           jsonBody,
@@ -554,31 +535,123 @@ function createWorkiqMcpClient(options = {}) {
 
     let payload;
     let createDispatched = false;
+    let openingChat = false;
     try {
       payload = normalizeTeamsMessage(input);
+      log('[main] WorkIQ Teams send:', 'RESOLUTION_STARTED', payload.targetEmail ? 'EMAIL' : 'NAME');
       const tools = await ensureTools();
       const fetchTool = resolveEntityTool(tools, 'fetch');
       const createTool = resolveEntityTool(tools, 'create_entity');
       if (!fetchTool || !createTool) return teamsFailure('UNSUPPORTED');
 
-      const chatsResult = await sendRequest('tools/call', {
-        name: fetchTool,
-        arguments: { entityUrls: ['/me/chats?$expand=members'] },
-      }, probeTimeout);
-      if (!chatsResult || chatsResult.isError === true
-        || chatsResult.structuredContent?.isError === true || chatsResult.structuredContent?.error) {
-        return teamsFailure('RESOLUTION_FAILED');
+      let identity;
+      if (payload.targetEmail) {
+        const recipient = await resolveDirectoryRecipient(fetchTool, { address: payload.targetEmail });
+        if (!recipient.user) return teamsFailure(['TARGET_NOT_FOUND', 'TARGET_AMBIGUOUS'].includes(recipient.code)
+          ? recipient.code : 'RESOLUTION_FAILED');
+        const { user, addresses } = recipient;
+        const selfResult = await sendRequest('tools/call', {
+          name: fetchTool, arguments: { entityUrls: ['/me?$select=id,userType'] },
+        }, probeTimeout);
+        assertReadResult(selfResult);
+        const self = extractEntityData(selfResult);
+        if (!DIRECTORY_ID_PATTERN.test(self?.id) || self.id.toLowerCase() === user.id.toLowerCase()) {
+          return teamsFailure('RESOLUTION_FAILED');
+        }
+        identity = {
+          targetId: user.id.toLowerCase(), selfId: self.id.toLowerCase(), addresses,
+          targetRole: user.userType === 'Guest' ? 'guest' : 'owner',
+          selfRole: self.userType === 'Guest' ? 'guest' : 'owner',
+        };
+        log('[main] WorkIQ Teams send:', 'DIRECTORY_IDENTITY_VERIFIED');
       }
 
-      const chats = extractEntityValues(chatsResult);
+      const chats = [];
+      const visited = new Set();
+      let canonicalChat = null;
+      if (identity) {
+        // Graph reuses the existing one-to-one chat for this pair, or creates it.
+        // This is a confirmed write, not a read-only recipient lookup.
+        openingChat = true;
+        const opened = await sendRequest('tools/call', {
+          name: createTool,
+          arguments: {
+            parentUrl: '/chats',
+            jsonBody: {
+              chatType: 'oneOnOne',
+              members: [[identity.selfId, identity.selfRole], [identity.targetId, identity.targetRole]].map(([id, role]) => ({
+                '@odata.type': '#microsoft.graph.aadUserConversationMember',
+                roles: [role],
+                'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${id}')`,
+              })),
+            },
+          },
+        }, probeTimeout);
+        const openedChat = extractCreatedChat(opened);
+        if (!openedChat) {
+          logError('[main] WorkIQ Teams send:', 'CHAT_OPEN_NOT_VERIFIED');
+          return teamsFailure('CHAT_OPEN_FAILED');
+        }
+        const verified = await sendRequest('tools/call', {
+          name: fetchTool,
+          arguments: { entityUrls: [`/chats/${encodeURIComponent(openedChat.id)}?$select=id,chatType&$expand=members`] },
+        }, probeTimeout);
+        assertReadResult(verified);
+        const chat = extractEntityData(verified);
+        const pair = findCanonicalPair(chat ? [chat] : [], identity);
+        if (chat?.id !== openedChat.id || pair.conflict || pair.matches.length !== 1) {
+          logError('[main] WorkIQ Teams send:', 'CHAT_PAIR_NOT_VERIFIED');
+          return teamsFailure('CHAT_OPEN_FAILED');
+        }
+        canonicalChat = chat;
+        openingChat = false;
+        log('[main] WorkIQ Teams send:', 'CANONICAL_PAIR_VERIFIED');
+      }
+      // Group-chat membership can exceed the strict transport limit. The installed
+      // service supports this filter; only one-to-one chats can be send targets.
+      const chatFilter = "chatType eq 'oneOnOne'";
+      let nextPage = identity ? null
+        : `/me/chats?$filter=${encodeURIComponent(chatFilter).replace(/'/g, '%27')}&$select=id,chatType&$expand=members&$top=50`;
+      while (nextPage) {
+        // Resolve the complete bounded collection before deciding a display name is unique.
+        if (visited.has(nextPage) || visited.size >= 10) {
+          logError('[main] WorkIQ Teams send:', 'INCOMPLETE_PAGINATION', 'pages:', visited.size);
+          return teamsFailure('RESOLUTION_FAILED');
+        }
+        visited.add(nextPage);
+        const chatsResult = await sendRequest('tools/call', {
+          name: fetchTool,
+          arguments: { entityUrls: [nextPage] },
+        }, probeTimeout);
+        assertReadResult(chatsResult);
+        const collection = extractChatCollection(chatsResult);
+        if (!collection) {
+          logError('[main] WorkIQ Teams send:', 'INVALID_CHAT_COLLECTION');
+          return teamsFailure('RESOLUTION_FAILED');
+        }
+        chats.push(...collection.values);
+        nextPage = collection.nextPage;
+      }
+
       const targetName = payload.targetDisplayName.toLocaleLowerCase();
-      const matches = chats.filter((chat) =>
+      const targetEmail = payload.targetEmail?.toLowerCase();
+      const matches = identity ? (canonicalChat ? [canonicalChat] : []) : chats.filter((chat) =>
         chat?.chatType === 'oneOnOne'
         && typeof chat.id === 'string'
         && chat.id
         && Array.isArray(chat.members)
-        && chat.members.some((member) => String(member?.displayName || '').trim().toLocaleLowerCase() === targetName)
+        && !chat['members@odata.nextLink']
+        && chat.members.some((member) => targetEmail
+          ? [member?.email, member?.userPrincipalName].some(identity =>
+            isValidEmail(identity) && identity.toLowerCase() === targetEmail)
+          : String(member?.displayName || '').trim().toLocaleLowerCase() === targetName)
       );
+      if (chats.some(chat => chat?.chatType === 'oneOnOne'
+        && (!Array.isArray(chat.members) || chat['members@odata.nextLink']))) {
+        logError('[main] WorkIQ Teams send:', 'INCOMPLETE_MEMBERS');
+        return teamsFailure('RESOLUTION_FAILED');
+      }
+      log('[main] WorkIQ Teams send:', 'RESOLUTION_COMPLETED', 'pages:', visited.size, 'matches:', matches.length);
       if (!matches.length) return teamsFailure('TARGET_NOT_FOUND');
       if (matches.length > 1) return teamsFailure('TARGET_AMBIGUOUS');
 
@@ -591,19 +664,94 @@ function createWorkiqMcpClient(options = {}) {
         },
       }, probeTimeout);
       createDispatched = true;
+      log('[main] WorkIQ Teams send:', 'CREATE_DISPATCHED');
       const sendResult = await sendPromise;
       if (!sendResult || typeof sendResult !== 'object' || Array.isArray(sendResult)
         || sendResult.structuredContent?.isError === true || sendResult.structuredContent?.error
         || (Object.prototype.hasOwnProperty.call(sendResult, 'isError') && sendResult.isError !== false)) {
+        logError('[main] WorkIQ Teams send:', 'CREATE_ERROR_RESULT');
         return teamsFailure('SEND_UNCONFIRMED');
       }
-      if (!hasCreatedTeamsMessageEvidence(sendResult, matches[0].id, payload.message)) {
+      const receiptFailure = teamsMessageReceiptFailure(sendResult, matches[0].id, payload.message);
+      if (receiptFailure) {
+        logError('[main] WorkIQ Teams send:', 'RECEIPT_NOT_VERIFIED', receiptFailure);
         return teamsFailure('SEND_UNCONFIRMED');
       }
+      log('[main] WorkIQ Teams send:', 'RECEIPT_VERIFIED');
       return { ok: true, action: 'teams-message-sent' };
     } catch (error) {
       const code = error && typeof error.code === 'string' ? error.code : 'SEND_FAILED';
-      return teamsFailure(createDispatched ? 'SEND_UNCONFIRMED' : code);
+      logError('[main] WorkIQ Teams send:', createDispatched ? 'CREATE_UNCONFIRMED' : 'PRE_DISPATCH_FAILED',
+        /^[A-Z_]{1,40}$/.test(code) ? code : 'SEND_FAILED');
+      return teamsFailure(createDispatched ? 'SEND_UNCONFIRMED'
+        : openingChat && !['AUTH_REQUIRED', 'THROTTLED'].includes(code) ? 'CHAT_OPEN_FAILED'
+          : code === 'TOOL_ERROR' ? 'RESOLUTION_FAILED' : code);
+    }
+  }
+
+  async function resolveDirectoryRecipient(fetchTool, { address, name }) {
+    const literal = (address || name).replace(/'/g, "''");
+    const exact = address
+      ? `mail eq '${literal}' or userPrincipalName eq '${literal}'`
+      : `displayName eq '${literal}'`;
+    const fallback = address
+      ? `proxyAddresses/any(a:a eq 'smtp:${literal}') or proxyAddresses/any(a:a eq 'SMTP:${literal}') or otherMails/any(a:a eq '${literal}')`
+      : `startswith(displayName,'${literal} (')`;
+    for (const [index, filter] of [exact, fallback].entries()) {
+      const response = await sendRequest('tools/call', {
+        name: fetchTool,
+        arguments: { entityUrls: [`/users?$filter=${encodeURIComponent(filter)}&$select=id,displayName,mail,userPrincipalName,otherMails,proxyAddresses,userType&$top=3`] },
+      }, probeTimeout);
+      assertReadResult(response);
+      const collection = extractEntityCollection(response);
+      if (!collection || collection['@odata.nextLink']) return { code: 'RESOLUTION_INCOMPLETE' };
+      if (collection.value.length > 1) return { code: 'TARGET_AMBIGUOUS' };
+      if (!collection.value.length) continue;
+      const [user] = collection.value;
+      const addresses = directoryAddresses(user);
+      const displayName = typeof user?.displayName === 'string' ? user.displayName.trim().toLowerCase() : '';
+      const baseName = name?.toLowerCase();
+      const matchesName = !name || displayName === baseName || (index === 1
+        && displayName.startsWith(`${baseName} (`) && /^\([^()]+\)$/.test(displayName.slice(baseName.length + 1)));
+      if (!DIRECTORY_ID_PATTERN.test(user?.id) || !addresses.length
+        || (address ? !addresses.includes(address.toLowerCase()) : !matchesName)) {
+        return { code: 'INVALID_IDENTITY' };
+      }
+      return { user, addresses, address: addresses[0], code: 'TARGET_VERIFIED' };
+    }
+    return { code: 'TARGET_NOT_FOUND' };
+  }
+
+  async function enrichProposalRecipients(result, tools) {
+    const fetchTool = resolveEntityTool(tools, 'fetch');
+    const resolutions = new Map();
+    for (const proposal of result.proposals) {
+      if (!['email', 'teams'].includes(proposal.channel) || proposal.target.address) continue;
+      const name = proposal.target.displayName;
+      let resolution = resolutions.get(name);
+      if (!resolution) {
+        resolution = { code: 'TARGET_NOT_FOUND' };
+        if (!fetchTool) resolution.code = 'UNSUPPORTED';
+        else if (!name || name.length > 160 || C0_OR_DEL_PATTERN.test(name)) resolution.code = 'INVALID_TARGET';
+        else {
+          try {
+            resolution = await resolveDirectoryRecipient(fetchTool, { name });
+          } catch (error) {
+            resolution.code = ['AUTH_REQUIRED', 'THROTTLED', 'TIMEOUT', 'PROTOCOL_ERROR'].includes(error?.code)
+              ? error.code : 'RESOLUTION_FAILED';
+          }
+        }
+        resolutions.set(name, resolution);
+        log('[main] WorkIQ proposal recipient resolution:', resolution.code);
+      }
+      if (resolution.address) {
+        proposal.target.address = resolution.address;
+        proposal.needsTargetResolution = false;
+      } else {
+        proposal.needsTargetResolution = true;
+        proposal.missingContext = [...proposal.missingContext.slice(0, 7), `Verified recipient address required (${resolution.code}).`];
+        proposal.reviewNote = `${proposal.reviewNote ? `${proposal.reviewNote} ` : ''}Recipient could not be uniquely verified; resolve manually (${resolution.code}).`.slice(-500);
+      }
     }
   }
 
@@ -621,21 +769,17 @@ function createWorkiqMcpClient(options = {}) {
 
       const template = fs.readFileSync(SYNTHESIS_PROMPT_PATH, 'utf8');
       const question = `${template.trim()}\n\nSelected thread context:\n${JSON.stringify(normalizedContext)}`;
+      log('[main] WorkIQ proposal synthesis started:', normalizedContext.requestedChannel || 'automatic');
       const result = await sendRequest('tools/call', {
         name: askTool,
         arguments: { question },
       }, semanticTimeout);
 
-      if (!result || typeof result !== 'object' || result.isError === true
-        || result.structuredContent?.isError === true || result.structuredContent?.error) {
-        const content = extractToolText(result);
-        return synthesisFailure(/auth|sign[ -]?in|login|unauthorized|consent/i.test(content)
-          ? 'AUTH_REQUIRED'
-          : 'SYNTHESIS_FAILED');
-      }
-
-      const normalizedResult = synthesis.parseProposalSynthesisResponse(extractToolText(result));
+      assertReadResult(result);
+      const normalizedResult = synthesis.parseProposalSynthesisResponse(normalizeAskAnswer(result));
       if (!normalizedResult) return synthesisFailure('INVALID_RESPONSE');
+      await enrichProposalRecipients(normalizedResult, tools);
+      log('[main] WorkIQ proposal synthesis completed:', normalizedResult.proposals.length, 'proposals');
       return {
         ok: true,
         readOnly: true,
@@ -759,7 +903,7 @@ function classifyRemoteFailure(remote, fallback) {
   const status = data?.status ?? data?.statusCode;
   const code = status === 429 || /throttl|rate.?limit|too many requests/i.test(text)
     ? 'THROTTLED'
-    : /auth|sign[ -]?in|login|unauthorized|consent/i.test(text) ? 'AUTH_REQUIRED' : fallback;
+    : status === 401 || status === 403 || /auth|sign[ -]?in|login|unauthorized|consent/i.test(text) ? 'AUTH_REQUIRED' : fallback;
   const error = createClientError(code);
   // Only an actual HTTP Retry-After header establishes a shared server cooldown.
   const headers = data?.headers;
@@ -778,11 +922,15 @@ function classifyRemoteFailure(remote, fallback) {
 function assertReadResult(result) {
   if (!result || typeof result !== 'object' || Array.isArray(result)) throw createClientError('INVALID_RESPONSE');
   const structured = result.structuredContent;
+  const failedEntityResult = Array.isArray(structured?.results)
+    ? structured.results.find((entry) => entry?.error || (Number.isInteger(entry?.statusCode)
+      && (entry.statusCode < 200 || entry.statusCode >= 300))) : null;
   if ((result.isError !== undefined && result.isError !== false)
-    || structured?.isError === true || structured?.error) {
+    || structured?.isError === true || structured?.error || failedEntityResult) {
+    const remoteError = failedEntityResult?.error?.error || failedEntityResult?.error || structured?.error;
     throw classifyRemoteFailure({
-      message: `${extractToolText(result)} ${typeof structured?.error?.message === 'string' ? structured.error.message : ''}`,
-      data: structured?.error?.data,
+      message: `${extractToolText(result)} ${typeof remoteError?.message === 'string' ? remoteError.message : ''}`,
+      data: failedEntityResult ? { ...remoteError?.data, statusCode: failedEntityResult.statusCode } : remoteError?.data,
     }, 'TOOL_ERROR');
   }
 }
@@ -801,6 +949,17 @@ function normalizeAskAnswer(result) {
       return text;
     }
   }
+  // Some installed WorkIQ versions label the verified ask envelope as an object.
+  for (const item of Array.isArray(result.content) ? result.content : []) {
+    if (item?.type !== 'object' || typeof item.text !== 'string') continue;
+    let envelope;
+    try {
+      envelope = JSON.parse(item.text);
+    } catch {
+      continue;
+    }
+    if (typeof envelope?.response === 'string') return envelope.response.trim();
+  }
   // WorkIQ's verified ask envelope, not arbitrary structured entity payloads.
   return typeof result.structuredContent?.response === 'string'
     ? result.structuredContent.response.trim() : '';
@@ -813,16 +972,95 @@ function resolveEntityTool(tools, logicalName) {
   return [...tools].find((name) => new RegExp(`(?:^|[-_.:])${escaped}$`, 'i').test(name) && /workiq/i.test(name)) || null;
 }
 
-function extractEntityValues(result) {
+function extractEntityData(result) {
+  const candidates = [];
   const text = extractToolText(result);
-  if (!text) return [];
-  try {
-    const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) return parsed;
-    return Array.isArray(parsed?.value) ? parsed.value : [];
-  } catch (_) {
-    return [];
+  if (text) {
+    try { candidates.push(JSON.parse(text)); } catch (_) { return null; }
   }
+  if (result?.structuredContent !== undefined) {
+    const entries = result.structuredContent?.results;
+    if (!Array.isArray(entries) || entries.length !== 1) return null;
+    const [entry] = entries;
+    if (entry?.statusCode !== 200 || entry.error || entry.data?.error) return null;
+    candidates.push(entry.data);
+  }
+  if (candidates.length !== 1 || !candidates[0] || typeof candidates[0] !== 'object'
+    || Array.isArray(candidates[0])) return null;
+  return candidates[0];
+}
+
+function extractEntityCollection(result) {
+  const collection = extractEntityData(result);
+  return Array.isArray(collection?.value) && collection.value.length <= 1000 ? collection : null;
+}
+
+function directoryAddresses(user) {
+  const proxies = Array.isArray(user?.proxyAddresses)
+    ? user.proxyAddresses.filter(value => typeof value === 'string' && /^smtp:/i.test(value)).map(value => value.slice(5)) : [];
+  return [...new Set([
+    user?.mail,
+    typeof user?.userPrincipalName === 'string' && !/#EXT#@/i.test(user.userPrincipalName) ? user.userPrincipalName : null,
+    ...proxies,
+    ...(Array.isArray(user?.otherMails) ? user.otherMails : []),
+  ].filter(isValidEmail).map(value => value.toLowerCase()))];
+}
+
+function extractCreatedChat(result) {
+  const structured = result?.structuredContent;
+  const chat = structured?.data;
+  if (!result || typeof result !== 'object' || result.error
+    || (result.isError !== undefined && result.isError !== false)
+    || (Array.isArray(result.content) && result.content.length)
+    || !structured || Object.keys(structured).some(key => !['statusCode', 'data'].includes(key))
+    || ![200, 201].includes(structured.statusCode) || chat?.error || chat?.chatType !== 'oneOnOne'
+    || typeof chat.id !== 'string' || !chat.id || chat.id.length > 512 || C0_OR_DEL_PATTERN.test(chat.id)) return null;
+  return chat;
+}
+
+function findCanonicalPair(chats, identity) {
+  const matches = [];
+  for (const chat of chats) {
+    if (chat?.chatType !== 'oneOnOne' || !Array.isArray(chat.members)) continue;
+    for (const member of chat.members) {
+      const id = typeof member?.userId === 'string' ? member.userId.toLowerCase() : '';
+      const addressMatch = isValidEmail(member?.email) && identity.addresses.includes(member.email.toLowerCase());
+      if ((addressMatch && id !== identity.targetId)
+        || (id === identity.targetId && !addressMatch)) return { matches: [], conflict: true };
+    }
+    if (typeof chat.id !== 'string' || !chat.id || chat.members.length !== 2 || chat['members@odata.nextLink']) continue;
+    const ids = chat.members.map(member => typeof member?.userId === 'string' ? member.userId.toLowerCase() : '');
+    if (ids.includes(identity.selfId) && ids.includes(identity.targetId)) matches.push(chat);
+  }
+  return { matches, conflict: false };
+}
+
+function extractChatCollection(result) {
+  const candidates = [];
+  const text = extractToolText(result);
+  if (text) {
+    try { candidates.push(JSON.parse(text)); } catch (_) { return null; }
+  }
+  const structured = result?.structuredContent;
+  if (structured !== undefined) {
+    // WorkIQ 1.0.1 fetch returns one status-bearing result per requested path.
+    if (!Array.isArray(structured?.results) || structured.results.length !== 1) return null;
+    const [entry] = structured.results;
+    if (entry?.statusCode !== 200 || entry.error || entry.data?.error) return null;
+    candidates.push(entry.data);
+  }
+  if (candidates.length !== 1) return null;
+  const [collection] = candidates;
+  const values = Array.isArray(collection) ? collection : collection?.value;
+  if (!Array.isArray(values) || values.length > 1000) return null;
+  const nextLink = collection?.['@odata.nextLink'];
+  if (nextLink === undefined) return { values, nextPage: null };
+  if (typeof nextLink !== 'string' || !nextLink || nextLink.length > 16000) return null;
+  let url;
+  try { url = new URL(nextLink, 'https://graph.microsoft.com'); } catch (_) { return null; }
+  if (url.origin !== 'https://graph.microsoft.com' || url.username || url.password || url.hash
+    || !/^\/(?:v1\.0\/)?me\/chats$/.test(url.pathname)) return null;
+  return { values, nextPage: `/me/chats${url.search}` };
 }
 
 function isValidGraphTimestamp(value) {
@@ -855,9 +1093,7 @@ function hasCreatedOutlookDraftEvidence(result) {
 
   const structuredContent = result?.structuredContent;
   if (structuredContent !== undefined) {
-    const hasResult = structuredContent && typeof structuredContent === 'object'
-      && Object.prototype.hasOwnProperty.call(structuredContent, 'result');
-    candidates.push(hasResult ? structuredContent.result : structuredContent);
+    candidates.push(createdStructuredEntity(structuredContent));
   }
 
   if (candidates.length !== 1) return false;
@@ -868,7 +1104,7 @@ function hasCreatedOutlookDraftEvidence(result) {
   return typeof entity.id === 'string' && Boolean(entity.id.trim()) && entity.isDraft === true;
 }
 
-function hasCreatedTeamsMessageEvidence(result, expectedChatId, expectedContent) {
+function teamsMessageReceiptFailure(result, expectedChatId, expectedContent) {
   const candidates = [];
   if (Array.isArray(result?.content)) {
     for (const item of result.content) {
@@ -888,30 +1124,41 @@ function hasCreatedTeamsMessageEvidence(result, expectedChatId, expectedContent)
 
   const structuredContent = result?.structuredContent;
   if (structuredContent !== undefined) {
-    const hasResult = structuredContent && typeof structuredContent === 'object'
-      && Object.prototype.hasOwnProperty.call(structuredContent, 'result');
-    candidates.push(hasResult ? structuredContent.result : structuredContent);
+    candidates.push(createdStructuredEntity(structuredContent));
   }
 
-  if (candidates.length !== 1) return false;
+  if (candidates.length !== 1) return 'ENTITY_COUNT';
 
   const [entity] = candidates;
-  if (!entity || typeof entity !== 'object' || Array.isArray(entity)) return false;
+  if (!entity || typeof entity !== 'object' || Array.isArray(entity)) return 'ENTITY_SHAPE';
   if (Object.prototype.hasOwnProperty.call(entity, '@odata.type')
-    && entity['@odata.type'] !== '#microsoft.graph.chatMessage') return false;
-  if (typeof entity.id !== 'string' || !entity.id.trim()) return false;
-  if (typeof entity.chatId !== 'string' || entity.chatId !== expectedChatId) return false;
-  if (entity.id === expectedChatId) return false;
-  if (!isValidGraphTimestamp(entity.createdDateTime)) return false;
-  if (!entity.body || typeof entity.body !== 'object' || Array.isArray(entity.body)) return false;
+    && entity['@odata.type'] !== '#microsoft.graph.chatMessage') return 'ENTITY_TYPE';
+  if (typeof entity.id !== 'string' || !entity.id.trim()) return 'MESSAGE_ID';
+  if (typeof entity.chatId !== 'string' || entity.chatId !== expectedChatId) return 'CHAT_MISMATCH';
+  if (entity.id === expectedChatId) return 'MESSAGE_ID';
+  if (!isValidGraphTimestamp(entity.createdDateTime)) return 'CREATED_TIMESTAMP';
+  if (!entity.body || typeof entity.body !== 'object' || Array.isArray(entity.body)) return 'BODY_SHAPE';
   if (Object.prototype.hasOwnProperty.call(entity.body, '@odata.type')
-    && entity.body['@odata.type'] !== '#microsoft.graph.itemBody') return false;
+    && entity.body['@odata.type'] !== '#microsoft.graph.itemBody') return 'BODY_TYPE';
   if (entity.body.contentType !== 'text'
     || typeof entity.body.content !== 'string'
-    || entity.body.content !== expectedContent) return false;
+    || entity.body.content !== expectedContent) return 'BODY_MISMATCH';
   if (Object.prototype.hasOwnProperty.call(entity, 'messageType')
-    && entity.messageType !== 'message') return false;
-  return true;
+    && entity.messageType !== 'message') return 'MESSAGE_TYPE';
+  return null;
+}
+
+function createdStructuredEntity(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (Object.prototype.hasOwnProperty.call(value, 'statusCode') || Object.prototype.hasOwnProperty.call(value, 'data')) {
+    // Observed on installed WorkIQ 1.0.1 create_entity. Fetch uses results[],
+    // while creates return one status-bearing data object.
+    if (Object.keys(value).length !== 2
+      || !Number.isInteger(value.statusCode) || value.statusCode < 200 || value.statusCode >= 300
+      || !Object.prototype.hasOwnProperty.call(value, 'data')) return null;
+    return value.data;
+  }
+  return Object.prototype.hasOwnProperty.call(value, 'result') ? value.result : value;
 }
 
 function resolveAskTool(tools) {

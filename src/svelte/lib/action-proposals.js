@@ -38,6 +38,22 @@ export const ACTION_PROPOSAL_STATES = Object.freeze(STATES);
 export const ACTION_PROPOSAL_VIEWS = Object.freeze(['open', 'resolved', 'archived']);
 export const ACTION_PROPOSAL_DISPATCH_STATUSES = Object.freeze([...DISPATCH_STATUSES]);
 
+export function normalizeWorkPlanStep(value) {
+  return typeof value === 'string' ? value.trim().slice(0, 500) : '';
+}
+
+export function isWorkPlanStepCompleted(item, step) {
+  const normalized = normalizeWorkPlanStep(step);
+  return Boolean(normalized && Array.isArray(item?.completedNextSteps)
+    && item.completedNextSteps.some((entry) => normalizeWorkPlanStep(entry) === normalized));
+}
+
+export function isConfirmedCommunication(proposal) {
+  return proposal?.state === 'Succeeded' && proposal.executionVerification === 'runtime-backend-confirmed'
+    && ((proposal.channel === 'teams' && proposal.executionCode === 'SEND_CONFIRMED')
+      || (proposal.channel === 'outlook-draft' && proposal.executionCode === 'DRAFT_SAVED'));
+}
+
 export function normalizeActionProposal(proposal) {
   if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) return null;
   if (proposal.localOnly !== true || !STATES.includes(proposal.state)) return null;
@@ -47,7 +63,7 @@ export function normalizeActionProposal(proposal) {
   const content = String(proposal.content || '').trim();
   const createdAt = normalizeTimestamp(proposal.createdAt);
   const updatedAt = normalizeTimestamp(proposal.updatedAt);
-  if (!id || !target || !content || !createdAt || !updatedAt || !CHANNELS.has(proposal.channel)) {
+  if (!id || ((!target || !content) && proposal.channel !== 'outlook-draft') || !createdAt || !updatedAt || !CHANNELS.has(proposal.channel)) {
     return null;
   }
 
@@ -76,10 +92,12 @@ export function normalizeActionProposal(proposal) {
   return {
     id,
     sourceItemId: nullableString(proposal.sourceItemId),
-    sourceTitle: String(proposal.sourceTitle || 'Local proposal').trim(),
+    sourceTitle: String(proposal.channel === 'outlook-draft'
+      ? proposal.sourceTitle ?? 'Local proposal' : proposal.sourceTitle || 'Local proposal').trim(),
     sourceType: String(proposal.sourceType || 'FlightDeck').trim(),
     sourceDestination: String(proposal.sourceDestination || 'Radar').trim(),
     sourceContextId: nullableString(proposal.sourceContextId),
+    ...(normalizeWorkPlanStep(proposal.sourceNextStep) ? { sourceNextStep: normalizeWorkPlanStep(proposal.sourceNextStep) } : {}),
     channel: proposal.channel,
     target,
     content,
@@ -118,6 +136,7 @@ export function createActionProposal(item, suggestion, overrides = {}) {
     sourceType: item?.sourceType || 'FlightDeck',
     sourceDestination: overrides.sourceDestination || 'Radar',
     sourceContextId: overrides.sourceContextId || item?.id || null,
+    ...(normalizeWorkPlanStep(overrides.sourceNextStep) ? { sourceNextStep: normalizeWorkPlanStep(overrides.sourceNextStep) } : {}),
     channel,
     target: overrides.target || targetFor(item, channel),
     content: String(overrides.content || suggestion || item?.suggestedNextSteps?.[0] || 'Review the proposed next action.').trim(),
@@ -244,6 +263,7 @@ export function actionProposalDuplicateKey(proposal) {
     normalizeDuplicateTarget(proposal.target),
     normalizeDuplicateText(proposal.sourceTitle),
     normalizeDuplicateText(proposal.content),
+    ...(normalizeWorkPlanStep(proposal.sourceNextStep) ? [normalizeDuplicateText(proposal.sourceNextStep)] : []),
   ].join('|');
 }
 
@@ -484,6 +504,7 @@ export function actionForState(proposal) {
 export function updateActionProposal(proposal, patch, at = new Date().toISOString()) {
   if (!proposal || proposal.auditOnly === true || proposal.archivedAt || proposal.state !== 'Drafted') return proposal;
   const next = {};
+  if (Object.hasOwn(patch || {}, 'sourceTitle')) next.sourceTitle = String(patch.sourceTitle || '').trim().slice(0, 500);
   if (Object.hasOwn(patch || {}, 'target')) next.target = String(patch.target || '').trim();
   if (Object.hasOwn(patch || {}, 'content')) next.content = String(patch.content || '').trim();
   if (Object.hasOwn(patch || {}, 'reason')) next.reason = String(patch.reason || '').trim();

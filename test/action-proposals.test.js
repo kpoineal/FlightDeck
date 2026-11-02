@@ -152,6 +152,25 @@ beforeEach(() => {
 });
 
 describe('local action proposal lifecycle', () => {
+  it('retains the work-plan identity and immutable confirmed Teams content across serialization', async () => {
+    const { isConfirmedCommunication } = await import('../src/svelte/lib/action-proposals.js');
+    const first = createActionProposal({ id: 'thread-1', title: 'Deployment' }, 'Exact reviewed message', {
+      channel: 'teams', target: 'alex@example.com', sourceNextStep: 'Confirm the owner.',
+    });
+    const otherStep = { ...first, id: 'other-step', sourceNextStep: 'Confirm the window.' };
+    assert.equal(canInsertActionProposal([first], otherStep), true, 'Distinct next moves were incorrectly deduplicated');
+    assert.equal(canInsertActionProposal([first], { ...first, id: 'same-step' }), false);
+    const saved = normalizeActionProposal(JSON.parse(JSON.stringify({
+      ...first, state: 'Succeeded', executionVerification: 'runtime-backend-confirmed',
+      executionCode: 'SEND_CONFIRMED', dispatchStatus: 'dispatched',
+    })));
+    assert.equal(saved.sourceNextStep, 'Confirm the owner.');
+    assert.equal(saved.content, 'Exact reviewed message');
+    assert.equal(isConfirmedCommunication(saved), true);
+    assert.equal(isConfirmedCommunication({ ...saved, executionVerification: 'local-demo' }), false);
+    assert.equal(isConfirmedCommunication({ ...saved, executionCode: 'SEND_UNCONFIRMED' }), false);
+  });
+
   it('keeps approval distinct from queueing and execution', () => {
     const drafted = createActionProposal({ id: '1', title: 'Escalation', severity: 'Critical' }, 'Draft an update', {
       id: 'proposal-1',

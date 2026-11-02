@@ -42,12 +42,13 @@ test('keeps persisted proposals scoped to their source item', () => {
   assert.deepEqual(persisted.map((proposal) => proposal.sourceItemId), ['thread-a', 'thread-b']);
 });
 
-test('RadarView uses generation checks around both composer proposal paths', () => {
+test('RadarView uses thread-owned composition and exposes saved email reviews', () => {
   const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
 
-  assert.match(source, /createThreadComposerRequestTracker/);
-  assert.match(source, /await window\.workiq\.proposeThreadActions\(context\);\s*if \(!isCurrentComposerRequest\(request\)\) return;/s);
-  assert.match(source, /await recordRadarActionEvent\([\s\S]*?\);\s*if \(!isCurrentComposerRequest\(request\)\) return;/s);
-  assert.match(source, /selectedProposalId\.set\(emailProposal\.id\);\s*openActionsQueue\(initiator\);/s);
-  assert.match(source, /sourceItemId: sourceItem\.id/);
+  assert.match(source, /await threadComposer\.generate\(/);
+  assert.match(source, /await recordRadarActionEvent\([\s\S]*?\);\s*if \(!current\(\)\) return null;/s);
+  assert.match(source, /emailProposalId: proposalId, emailOpen: true/);
+  assert.match(source, /<EmailDraft proposalId=\{emailProposal\.id\}/);
+  assert.match(source, /data-testid="radar-review-email"/);
+  assert.doesNotMatch(source, /composerRequestTracker|isCurrentComposerRequest|resetThreadComposer/);
 });

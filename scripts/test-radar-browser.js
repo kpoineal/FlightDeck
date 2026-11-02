@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { expect } = require('@playwright/test');
 const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
@@ -152,11 +153,15 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
           proposals: [],
           noCommunicationReason: '',
         };
-        if (synthesisMode === 'teams') {
+        if (synthesisMode === 'teams' || synthesisMode === 'teams-missing-recipient') {
           base.proposals = [{
             channel: 'teams',
             intent: 'Confirm an owner',
-            target: { displayName: 'James Farquharson', channelId: '', threadId: '' },
+            target: {
+              displayName: synthesisMode === 'teams-missing-recipient' ? '' : 'James Farquharson',
+              address: synthesisMode === 'teams-missing-recipient' ? '' : 'james@example.com',
+              channelId: '', threadId: '',
+            },
             payload: { message: 'Who can confirm the renewal deployment owner?' },
             expectedOutcome: 'An owner is identified.',
             risk: 'Confirm the recipient is the current owner.',
@@ -168,12 +173,14 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
           base.recommendation = 'Review Sofia\'s latest note before taking another action.';
           base.noCommunicationReason = 'Another message would add noise until the note is reviewed.';
         } else {
+          const missingRecipient = synthesisMode === 'missing-recipient';
+          const missingAddress = missingRecipient || synthesisMode === 'missing-address';
           base.proposals = [{
             channel: 'email',
             intent: 'Confirm the deployment window',
             target: {
-              displayName: 'Sofia Martinez',
-              address: synthesisMode === 'missing-address' ? '' : 'sofia@example.com',
+              displayName: missingRecipient ? '' : 'Sofia Martinez',
+              address: missingAddress ? '' : 'sofia@example.com',
               channelId: '',
               threadId: '',
             },
@@ -184,8 +191,8 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
             expectedOutcome: 'A confirmed deployment window.',
             risk: 'Verify the recipient and timing.',
             reviewNote: 'Review before creating an Outlook draft.',
-            needsTargetResolution: synthesisMode === 'missing-address',
-            missingContext: synthesisMode === 'missing-address' ? ['Verified email address for Sofia Martinez'] : [],
+            needsTargetResolution: missingAddress,
+            missingContext: missingAddress ? ['Verified recipient email address'] : [],
           }];
         }
         return { ok: true, readOnly: true, result: base };
@@ -320,7 +327,7 @@ async function assertHealthy(session, kind = 'desktop') {
 }
 
 async function runScenario(name, browser, baseUrl, callback, options) {
-  if (SCENARIO_FILTER && name !== SCENARIO_FILTER) return;
+  if (SCENARIO_FILTER && !SCENARIO_FILTER.split(',').map((entry) => entry.trim()).includes(name)) return;
   process.stdout.write(`SCENARIO ${name} START\n`);
   const session = await createSession(browser, baseUrl, options);
   try {
@@ -683,6 +690,9 @@ async function draftScenario(session, expectedMode) {
   assert.equal(Object.hasOwn(proposalCalls[0].thread, 'body'), false);
   assert.equal(Object.hasOwn(proposalCalls[0], 'question'), false);
   assert.equal(JSON.stringify(proposalCalls[0]).includes('http'), false, 'Renderer synthesis context contained an arbitrary URL');
+  await session.page.getByTestId('email-draft-editor').waitFor({ state: 'visible' });
+  assert.equal(await session.page.getByTestId('action-queue').count(), 0, 'Email drafting opened a different review flow');
+  await session.page.getByTestId('email-open-actions').click();
   const queue = session.page.getByTestId('action-queue');
   await queue.waitFor({ state: 'visible' });
   const recipient = `${expectedMode}@example.com`;
@@ -761,16 +771,32 @@ async function draftScenario(session, expectedMode) {
   await assertHealthy(session);
 }
 
-async function missingAddressScenario(session) {
+async function missingAddressScenario(session, missingRecipient = false) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
-  const queue = session.page.getByTestId('action-queue');
-  await queue.getByText(/Email address required for Sofia Martinez/).waitFor({ state: 'visible' });
-  await queue.locator('#action-target').fill('sofia@example.com');
-  await queue.locator('#action-target').press('Tab');
-  await queue.getByRole('button', { name: 'Submit for review', exact: true }).waitFor({ state: 'visible' });
-  assert.equal(await queue.getByText(/Email address required for Sofia Martinez/).count(), 0);
+  const editor = session.page.getByTestId('email-draft-editor');
+  await editor.getByRole('alert').waitFor({ state: 'visible' });
+  assert.equal(await editor.getByTestId('email-draft-create').isDisabled(), true);
+  assert.equal(await session.page.getByTestId('action-queue').count(), 0);
+  if (missingRecipient) {
+    assert.equal(await editor.getByTestId('email-draft-recipient').inputValue(), '');
+    const body = await editor.getByTestId('email-draft-message').inputValue();
+    await session.page.waitForFunction(async (id) => {
+      const state = await window.workiq.storeGet('flightdeck.demo.v2');
+      return state?.actionProposals?.some((proposal) => proposal.sourceItemId === id && proposal.target === '');
+    }, FIXTURE_ITEM_ID);
+    await openApp(session, { reseed: false });
+    await selectFixtureThread(session.page);
+    await session.page.getByTestId('radar-review-email').click();
+    await editor.waitFor({ state: 'visible' });
+    assert.equal(await editor.getByTestId('email-draft-recipient').inputValue(), '');
+    assert.equal(await editor.getByTestId('email-draft-message').inputValue(), body, 'Unresolved recipient discarded the saved draft');
+  }
+  await editor.getByTestId('email-draft-recipient').fill('sofia@example.com');
+  assert.equal(await editor.getByTestId('email-draft-create').isEnabled(), true);
+  assert.equal(await editor.getByRole('alert').count(), 0);
+  assert.equal(await session.page.evaluate(() => window.__draftCalls.length), 0);
   await assertHealthy(session);
 }
 
@@ -783,6 +809,7 @@ async function actionQueueManagementScenario(session) {
     lifecycleStatus: await session.page.getByLabel('Work state').inputValue(),
   };
   await session.page.getByTestId('radar-draft-email').click();
+  await session.page.getByTestId('email-open-actions').click();
   const queue = session.page.getByTestId('action-queue');
   await queue.waitFor({ state: 'visible' });
   await queue.locator('#action-target').fill('sofia@example.com');
@@ -858,6 +885,7 @@ async function actionQueueEligibilityScenario(session) {
     await openApp(session);
     await selectFixtureThread(session.page);
     await session.page.getByTestId('radar-draft-email').click();
+    await session.page.getByTestId('email-open-actions').click();
     const queue = session.page.getByTestId('action-queue');
     await queue.locator('#action-target').fill('sofia@example.com');
     await queue.locator('#action-target').press('Tab');
@@ -891,6 +919,7 @@ async function actionQueueExecutingLockoutScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
+  await session.page.getByTestId('email-open-actions').click();
   const queue = session.page.getByTestId('action-queue');
   await queue.locator('#action-target').fill('sofia@example.com');
   await queue.locator('#action-target').press('Tab');
@@ -1048,6 +1077,7 @@ async function actionQueueDeleteNoEffectRollbackScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
+  await session.page.getByTestId('email-open-actions').click();
   const queue = session.page.getByTestId('action-queue');
   const proposalId = await queue.locator('.action-queue__list > button.active').getAttribute('data-proposal-id');
   await queue.getByTestId('action-delete').click();
@@ -1085,6 +1115,7 @@ async function actionQueueDeleteConfirmedScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
+  await session.page.getByTestId('email-open-actions').click();
   const queue = session.page.getByTestId('action-queue');
   await queue.locator('#action-target').fill('sofia@example.com');
   await queue.locator('#action-target').press('Tab');
@@ -1115,6 +1146,7 @@ async function actionQueueDeleteLateResultScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
+  await session.page.getByTestId('email-open-actions').click();
   const queue = session.page.getByTestId('action-queue');
   await queue.locator('#action-target').fill('sofia@example.com');
   await queue.locator('#action-target').press('Tab');
@@ -1179,6 +1211,11 @@ async function actionQueueDeleteResponsiveScenario(session, viewportWidth, captu
       };
       })(),
     };
+  });
+  await queue.evaluate(async (element) => {
+    await Promise.all(element.getAnimations({ subtree: true })
+      .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+      .map((animation) => animation.finished));
   });
   const geometry = await measureQueue();
   assert.equal(geometry.scrollWidth > geometry.documentWidth + 1, false, `Deletion controls overflowed at ${viewportWidth}px`);
@@ -1276,7 +1313,8 @@ async function actionQueueDeleteResponsiveScenario(session, viewportWidth, captu
 async function actionQueueReliabilityScenario(session, viewportWidth) {
   await openApp(session);
   await selectFixtureThread(session.page);
-  const radarTrigger = session.page.getByTestId('radar-draft-email');
+  await session.page.getByTestId('radar-draft-email').click();
+  const radarTrigger = session.page.getByTestId('email-open-actions');
   await radarTrigger.focus();
   await radarTrigger.click();
   const queue = session.page.getByTestId('action-queue');
@@ -1377,6 +1415,7 @@ async function actionQueueReliabilityScenario(session, viewportWidth) {
 
   await queue.press('Escape');
   await queue.waitFor({ state: 'detached' });
+  await session.page.waitForFunction(() => document.activeElement === document.querySelector('[data-testid="email-open-actions"]'));
   assert.equal(await radarTrigger.evaluate((element) => element === document.activeElement), true, 'Queue Escape did not restore the async Radar trigger');
 
   const topbarTrigger = session.page.getByRole('button', { name: /^Actions/ });
@@ -1428,6 +1467,7 @@ async function actionQueueScreenshotScenario(session, viewportLabel) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
+  await session.page.getByTestId('email-open-actions').click();
   const queue = session.page.getByTestId('action-queue');
   await queue.waitFor({ state: 'visible' });
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -1450,12 +1490,165 @@ async function actionQueueScreenshotScenario(session, viewportLabel) {
   await assertHealthy(session, queueViewport.width > 960 ? 'desktop' : 'mobile');
 }
 
-async function teamsReviewScenario(session) {
+async function assertDraftContextStyles(editor) {
+  const context = editor.locator('.radar-draft-context');
+  await context.waitFor({ state: 'visible' });
+  const metrics = await context.evaluate((element) => {
+    const heading = getComputedStyle(element.querySelector('dt'));
+    const text = getComputedStyle(element.querySelector('dd'));
+    const layout = getComputedStyle(element);
+    const message = element.closest('[data-testid]').querySelector('textarea');
+    return {
+      display: layout.display, columns: layout.gridTemplateColumns.split(' ').length,
+      gap: parseFloat(layout.rowGap), headingSize: parseFloat(heading.fontSize),
+      headingWeight: Number(heading.fontWeight), headingTransform: heading.textTransform,
+      textSize: parseFloat(text.fontSize), messageSize: parseFloat(getComputedStyle(message).fontSize),
+      whiteSpace: text.whiteSpace, wrapping: text.overflowWrap, overflow: text.textOverflow,
+      lineHeight: parseFloat(text.lineHeight), leftMargin: parseFloat(text.marginLeft),
+      separation: element.getBoundingClientRect().top - message.getBoundingClientRect().bottom,
+      overflows: [...element.querySelectorAll('dd')].some((entry) => entry.scrollWidth > entry.clientWidth + 1),
+    };
+  });
+  assert.equal(metrics.display, 'grid', 'Draft explanation lost its context styling');
+  assert.equal(metrics.columns, 1, 'Long draft explanations must not be squeezed into metadata columns');
+  assert.ok(metrics.gap >= 12 && metrics.separation >= 12, 'Draft explanations lack spacing');
+  assert.ok(metrics.headingSize < metrics.textSize && metrics.headingWeight >= 600);
+  assert.equal(metrics.headingTransform, 'uppercase');
+  assert.equal(metrics.textSize, metrics.messageSize, 'Explanation text does not match the editor typography');
+  assert.equal(metrics.whiteSpace, 'pre-wrap');
+  assert.equal(metrics.wrapping, 'anywhere');
+  assert.notEqual(metrics.overflow, 'ellipsis', 'Draft explanations must not be truncated');
+  assert.ok(metrics.lineHeight >= metrics.textSize * 1.4);
+  assert.equal(metrics.leftMargin, 0);
+  assert.equal(metrics.overflows, false, 'Draft explanation overflows its container');
+}
+
+async function inlineEmailScenario(session, outcome = 'success') {
+  const { page } = session;
+  await openApp(session);
+  await selectFixtureThread(page);
+  await page.getByTestId('radar-draft-email').click();
+  const editor = page.getByTestId('email-draft-editor');
+  await editor.waitFor({ state: 'visible' });
+  await assertDraftContextStyles(editor);
+  assert.equal(await page.getByTestId('action-queue').count(), 0, 'Email generation opened Actions instead of the inline composer');
+  assert.equal(await page.evaluate(() => window.__draftCalls.length), 0);
+  const recipient = editor.getByTestId('email-draft-recipient');
+  const subject = editor.getByTestId('email-draft-subject');
+  const message = editor.getByTestId('email-draft-message');
+  const create = editor.getByTestId('email-draft-create');
+  await recipient.fill('invalid');
+  assert.equal(await create.isDisabled(), true);
+  await recipient.fill('sofia@example.com');
+  await subject.fill('');
+  assert.equal(await create.isDisabled(), true);
+  await subject.fill('Edited deployment window');
+  await message.fill('Please confirm the deployment window. ');
+  assert.equal(await message.inputValue(), 'Please confirm the deployment window. ', 'Typing lost whitespace in the email body');
+  await editor.getByRole('button', { name: 'Close', exact: true }).click();
+  assert.equal(await editor.count(), 0);
+  await page.getByTestId('radar-review-email').click();
+  assert.equal(await message.inputValue(), 'Please confirm the deployment window. ');
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Radar', exact: true }).click();
+  await selectFixtureThread(page);
+  assert.equal(await message.inputValue(), 'Please confirm the deployment window. ');
+  await expect.poll(() => page.evaluate(async (id) => (await window.workiq.storeGet('flightdeck.demo.v2'))?.actionProposals
+    ?.some((proposal) => proposal.sourceItemId === id && proposal.sourceTitle === 'Edited deployment window'), FIXTURE_ITEM_ID)).toBe(true);
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  await page.getByTestId('radar-review-email').click();
+  assert.equal(await recipient.inputValue(), 'sofia@example.com');
+  assert.equal(await subject.inputValue(), 'Edited deployment window');
+  assert.equal((await message.inputValue()).trim(), 'Please confirm the deployment window.');
+  await page.evaluate(() => {
+    window.workiq.createOutlookDraft = (payload) => new Promise((resolve) => {
+      window.__draftCalls.push(structuredClone(payload));
+      window.__resolveInlineDraft = resolve;
+    });
+  });
+  await create.click();
+  const actionStatus = page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`).getByTestId('thread-action-status');
+  await actionStatus.filter({ hasText: 'Creating Outlook draft...' }).waitFor({ state: 'attached' });
+  assert.equal(await create.isDisabled(), true);
+  assert.equal(await recipient.isDisabled(), true);
+  assert.equal(await message.isDisabled(), true);
+  assert.equal(await page.getByTestId('radar-draft-email').isDisabled(), true);
+  assert.equal(await page.getByTestId('radar-draft-teams').isDisabled(), true);
+  await editor.getByTestId('email-open-actions').click();
+  const queue = page.getByTestId('action-queue');
+  await queue.getByText('Executing', { exact: true }).first().waitFor({ state: 'visible' });
+  assert.equal(await page.evaluate(() => window.__draftCalls.length), 1, 'Actions dispatched a duplicate inline operation');
+  await queue.getByRole('button', { name: 'Close actions' }).click();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.evaluate((result) => window.__resolveInlineDraft(result), outcome === 'success'
+    ? { ok: true, action: 'outlook-draft-created' }
+    : outcome === 'cancel' ? { ok: false, code: 'CANCELLED', dispatched: false }
+      : { ok: true, draftId: 'not-an-authoritative-receipt' });
+  await page.getByRole('button', { name: 'Radar', exact: true }).click();
+  await selectFixtureThread(page);
+  if (outcome === 'success') {
+    await editor.waitFor({ state: 'hidden' });
+  } else {
+    const status = editor.getByTestId('email-draft-status');
+    await status.filter({ hasText: outcome === 'cancel'
+      ? 'cancelled before dispatch. No external action occurred.' : 'Check Outlook Drafts before trying again' }).waitFor({ state: 'visible' });
+    assert.equal(await create.isDisabled(), outcome !== 'cancel', 'Unexpected retry availability for the Outlook result');
+  }
+  assert.equal(await actionStatus.count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.__draftCalls), [{
+    to: ['sofia@example.com'], subject: 'Edited deployment window', body: 'Please confirm the deployment window.',
+  }]);
+  const audit = page.getByTestId('action-timeline-entry');
+  assert.equal(await audit.filter({ hasText: 'Action proposal execution started' }).count(), 1);
+  if (outcome === 'success') {
+    assert.equal(await audit.filter({ hasText: 'Outlook draft saved in Outlook Drafts. Nothing was sent.' }).count(), 1);
+    await page.getByRole('button', { name: 'View created Outlook draft', exact: true }).click();
+    const preview = page.getByTestId('action-message-preview');
+    await preview.waitFor({ state: 'visible' });
+    assert.equal(await preview.getByTestId('action-message-subject').textContent(), 'Edited deployment window');
+    assert.equal((await preview.getByTestId('action-message-body').textContent()).trim(), 'Please confirm the deployment window.');
+    assert.equal(await preview.locator('input, textarea').count(), 0, 'Completed draft history was editable');
+    assert.equal(await editor.count(), 0, 'Viewing history reopened the editable composer');
+  } else if (outcome === 'cancel') {
+    assert.equal(await message.isEnabled(), true, 'Cancellation locked the editable inline draft');
+    await message.fill('Revised after cancelling confirmation');
+    assert.equal(await create.isEnabled(), true);
+    assert.equal(await page.evaluate(() => window.__draftCalls.length), 1, 'Editing a cancelled draft retried a write');
+  }
+  await assertHealthy(session, page.viewportSize().width > 960 ? 'desktop' : 'mobile');
+}
+
+async function inlineEmailIncompleteScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  await selectFixtureThread(page);
+  await page.getByTestId('radar-draft-email').click();
+  const editor = page.getByTestId('email-draft-editor');
+  await editor.getByTestId('email-draft-recipient').fill('');
+  await editor.getByTestId('email-draft-subject').fill('');
+  await editor.getByTestId('email-draft-message').fill('');
+  assert.equal(await editor.getByTestId('email-draft-create').isDisabled(), true);
+  await expect.poll(() => page.evaluate(async (id) => (await window.workiq.storeGet('flightdeck.demo.v2'))?.actionProposals
+    ?.some((proposal) => proposal.sourceItemId === id && proposal.sourceTitle === '' && proposal.content === '' && proposal.target === ''), FIXTURE_ITEM_ID)).toBe(true);
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  await page.getByTestId('radar-review-email').click();
+  for (const field of ['recipient', 'subject', 'message']) {
+    assert.equal(await editor.getByTestId(`email-draft-${field}`).inputValue(), '');
+  }
+  assert.equal(await editor.getByTestId('email-draft-create').isDisabled(), true);
+  assert.equal(await page.evaluate(() => window.__draftCalls.length), 0);
+  await assertHealthy(session);
+}
+
+async function teamsReviewScenario(session, missingRecipient = false) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-teams').click();
   const draft = session.page.getByTestId('teams-draft-editor');
   await draft.waitFor({ state: 'visible' });
+  await assertDraftContextStyles(draft);
   const proposalCalls = await session.page.evaluate(() => structuredClone(window.__proposalCalls));
   assert.equal(proposalCalls.length, 1, 'Draft Teams message did not invoke the narrow API exactly once');
   assert.equal(proposalCalls[0].requestedChannel, 'teams');
@@ -1463,9 +1656,24 @@ async function teamsReviewScenario(session) {
   await draft.getByText('Confirm the recipient is the current owner.', { exact: true }).waitFor({ state: 'visible' });
   await draft.getByText('Verify the channel.', { exact: true }).waitFor({ state: 'visible' });
   const recipient = draft.locator('input[type="text"]');
-  assert.equal(await recipient.inputValue(), 'James Farquharson');
+  const recipientEmail = draft.locator('input[type="email"]');
+  assert.equal(await recipient.inputValue(), missingRecipient ? '' : 'James Farquharson');
+  assert.equal(await recipientEmail.inputValue(), missingRecipient ? '' : 'james@example.com',
+    'Generated recipient email was discarded before review');
+  if (missingRecipient) {
+    assert.equal(await draft.getByTestId('teams-draft-send').isDisabled(), true, 'An unknown Teams recipient must block sending, not composing');
+    assert.ok((await draft.locator('textarea').inputValue()).trim(), 'Missing Teams recipient discarded the draft');
+  }
   await recipient.fill('Alex Johnson');
   assert.equal(await recipient.inputValue(), 'Alex Johnson', 'Teams recipient was not editable');
+  assert.equal(await recipientEmail.inputValue(), '', 'Editing the name retained a stale recipient email');
+  await recipientEmail.fill('not-an-email');
+  assert.equal(await draft.getByTestId('teams-draft-send').isDisabled(), true,
+    'Invalid explicit email fell back to the display name');
+  await recipient.fill('');
+  await recipientEmail.fill('alex@example.com');
+  assert.equal(await draft.getByTestId('teams-draft-send').isEnabled(), true,
+    'A verified email-only target could not be reviewed for sending');
   await recipient.fill('James Farquharson');
   const message = draft.locator('textarea');
   assert.equal(await message.inputValue(), 'Who can confirm the renewal deployment owner?');
@@ -1482,6 +1690,140 @@ async function teamsReviewScenario(session) {
   await assertHealthy(session);
 }
 
+async function concurrentThreadDraftsScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  await selectFixtureThread(page);
+  const otherId = await page.locator('.radar-thread').evaluateAll((rows, firstId) =>
+    rows.find((row) => row.dataset.threadId !== firstId).dataset.threadId, FIXTURE_ITEM_ID);
+  const select = (id) => page.locator(`[data-thread-id="${id}"]`).click();
+  const actionStatus = (id) => page.locator(`[data-thread-id="${id}"]`).getByTestId('thread-action-status');
+  await page.evaluate(() => {
+    window.__pendingProposals = {};
+    window.workiq.proposeThreadActions = (context) => new Promise((resolve) => {
+      window.__pendingProposals[context.thread.id] = { resolve, context };
+    });
+  });
+  const resolve = (id, fail = false) => page.evaluate(({ id, fail }) => {
+    const { resolve, context } = window.__pendingProposals[id];
+    delete window.__pendingProposals[id];
+    resolve(fail ? { ok: false, code: 'TIMEOUT' } : { ok: true, result: {
+      schemaVersion: 1, recommendation: 'Confirm the window', confidence: 'high',
+      evidence: [{ kind: 'observed', text: 'Owner requested confirmation' }],
+      proposals: [{
+        channel: context.requestedChannel,
+        target: { displayName: 'Alex', address: 'alex@example.com' },
+        payload: context.requestedChannel === 'email'
+          ? { subject: 'Window', body: `Please confirm ${id}` } : { message: `Please confirm ${id}` },
+      }],
+    } });
+  }, { id, fail });
+  await page.getByTestId('radar-draft-email').click();
+  await actionStatus(FIXTURE_ITEM_ID).filter({ hasText: 'Drafting email...' }).waitFor({ state: 'visible' });
+  await select(otherId);
+  await page.getByTestId('radar-draft-teams').click();
+  await actionStatus(otherId).filter({ hasText: 'Drafting Teams message...' }).waitFor({ state: 'visible' });
+  assert.equal(await actionStatus(FIXTURE_ITEM_ID).isVisible(), true, 'Navigating hid the first thread action');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  assert.equal(await actionStatus(otherId).locator('.radar-thread__action-spinner')
+    .evaluate((element) => getComputedStyle(element).animationName), 'none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  assert.equal(await actionStatus(otherId).locator('.radar-thread__action-spinner')
+    .evaluate((element) => getComputedStyle(element).animationName), 'draftSpin');
+  assert.equal(await page.evaluate(() => Object.keys(window.__pendingProposals).length), 2);
+  await select(FIXTURE_ITEM_ID);
+  assert.equal(await page.getByTestId('radar-draft-email').textContent().then((text) => text.trim()), 'Drafting…');
+  assert.equal(await page.getByTestId('radar-draft-email').isDisabled(), true);
+  await select(otherId);
+  await resolve(otherId, true);
+  await page.getByTestId('proposal-error').filter({ hasText: 'timed out' }).waitFor({ state: 'visible' });
+  assert.equal(await actionStatus(otherId).textContent().then((text) => text.trim()), 'Teams draft failed');
+  assert.equal(await actionStatus(otherId).locator('.radar-thread__action-spinner').count(), 0, 'Failed action retained its spinner');
+  assert.equal(await actionStatus(FIXTURE_ITEM_ID).isVisible(), true, 'Failure cleared another thread spinner');
+  await page.getByTestId('proposal-error').getByRole('button', { name: 'Retry Teams draft', exact: true }).click();
+  await actionStatus(otherId).filter({ hasText: 'Drafting Teams message...' }).waitFor({ state: 'visible' });
+  await resolve(otherId);
+  const editor = page.getByTestId('teams-draft-editor');
+  await editor.locator('textarea').fill('Edited thread B draft');
+  assert.equal(await actionStatus(otherId).count(), 0, 'Completed draft retained its spinner');
+  await editor.locator('input[type="text"]').fill('Taylor');
+  await select(FIXTURE_ITEM_ID);
+  assert.equal(await page.getByTestId('teams-draft-editor').count(), 0);
+  assert.equal(await page.getByTestId('proposal-error').count(), 0);
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await resolve(FIXTURE_ITEM_ID);
+  await page.waitForFunction(async (id) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return state?.actionProposals?.some((proposal) => proposal.sourceItemId === id && proposal.content === `Please confirm ${id}`);
+  }, FIXTURE_ITEM_ID);
+  assert.equal(await page.getByTestId('action-queue').count(), 0, 'Background completion stole the current view');
+  await page.getByRole('button', { name: 'Radar', exact: true }).click();
+  await select(FIXTURE_ITEM_ID);
+  assert.equal(await actionStatus(FIXTURE_ITEM_ID).count(), 0, 'Background completion retained its spinner');
+  await page.getByTestId('email-open-actions').click();
+  const queue = page.getByTestId('action-queue');
+  await queue.waitFor({ state: 'visible' });
+  assert.equal(await queue.locator('textarea').inputValue(), `Please confirm ${FIXTURE_ITEM_ID}`);
+  await queue.getByTestId('action-segment-archived').click();
+  await queue.getByRole('button', { name: 'Close actions' }).click();
+  await page.getByTestId('email-open-actions').click();
+  assert.equal(await queue.getByTestId('action-segment-open').getAttribute('aria-selected'), 'true');
+  assert.equal(await queue.locator('textarea').inputValue(), `Please confirm ${FIXTURE_ITEM_ID}`);
+  await queue.getByRole('button', { name: 'Close actions' }).click();
+  await select(otherId);
+  assert.equal(await editor.locator('textarea').inputValue(), 'Edited thread B draft');
+  assert.equal(await editor.locator('input[type="text"]').inputValue(), 'Taylor');
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0],
+    'Synthesis dispatched an unapproved external write');
+  await page.evaluate(() => {
+    window.workiq.sendTeamsMessage = (payload) => new Promise((resolve) => {
+      window.__teamsSendCalls.push(payload);
+      window.__resolveThreadSend = resolve;
+    });
+  });
+  await editor.getByTestId('teams-draft-send').click();
+  await actionStatus(otherId).filter({ hasText: 'Sending Teams message...' }).waitFor({ state: 'visible' });
+  await select(FIXTURE_ITEM_ID);
+  assert.equal(await actionStatus(otherId).isVisible(), true, 'Navigation hid the sending indicator');
+  await select(otherId);
+  assert.equal(await editor.getByTestId('teams-draft-send').textContent().then((text) => text.trim()), 'Sending…');
+  assert.equal(await editor.getByTestId('teams-draft-send').isDisabled(), true);
+  await select(FIXTURE_ITEM_ID);
+  await page.evaluate(() => window.__resolveThreadSend({ ok: true, action: 'teams-message-sent' }));
+  await select(otherId);
+  await editor.waitFor({ state: 'hidden' });
+  assert.equal(await actionStatus(otherId).count(), 0, 'Sent message retained its spinner');
+  assert.equal(await editor.getByTestId('teams-draft-send').count(), 0);
+  await page.getByRole('button', { name: 'View sent Teams message', exact: true }).click();
+  assert.equal(await page.getByTestId('action-message-body').textContent(), 'Edited thread B draft',
+    'A background send displayed the wrong thread message');
+  assert.deepEqual(await page.evaluate(() => window.__teamsSendCalls), [
+    { targetDisplayName: 'Taylor', message: 'Edited thread B draft' },
+  ]);
+  await openApp(session, { reseed: false });
+  await select(FIXTURE_ITEM_ID);
+  await page.getByTestId('radar-review-email').click();
+  await page.getByTestId('email-open-actions').click();
+  assert.equal(await queue.locator('textarea').inputValue(), `Please confirm ${FIXTURE_ITEM_ID}`,
+    'Persisted email lost its source-thread review action after reload');
+  await queue.getByRole('button', { name: 'Close actions' }).click();
+  await assertHealthy(session);
+}
+
+async function assertTeamsStatusAppearance(status, isError) {
+  assert.equal(await status.getAttribute('role'), isError ? 'alert' : 'status');
+  const colors = await status.evaluate((element, error) => {
+    const style = getComputedStyle(element);
+    const probe = document.createElement('span');
+    probe.style.color = style.getPropertyValue(error ? '--color-critical' : '--text-muted');
+    document.body.append(probe);
+    const expected = getComputedStyle(probe).color;
+    probe.remove();
+    return { actual: style.color, expected };
+  }, isError);
+  assert.equal(colors.actual, colors.expected, 'Teams outcome color did not match its severity');
+}
+
 async function teamsSendScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
@@ -1494,30 +1836,57 @@ async function teamsSendScenario(session) {
 
   await send.click();
   await draft.getByTestId('teams-send-status').filter({ hasText: 'Send cancelled. No request was dispatched.' }).waitFor({ state: 'visible' });
+  await assertTeamsStatusAppearance(draft.getByTestId('teams-send-status'), false);
   assert.equal(await message.inputValue(), editedMessage, 'Cancellation discarded the edited Teams draft');
 
   await send.click();
   await draft.getByTestId('teams-send-status').filter({ hasText: 'Delivery could not be confirmed. Check Teams before trying again.' }).waitFor({ state: 'visible' });
+  await assertTeamsStatusAppearance(draft.getByTestId('teams-send-status'), true);
   assert.equal(await message.inputValue(), editedMessage, 'Unconfirmed send discarded the edited Teams draft');
+  assert.equal(await send.isDisabled(), true, 'An unconfirmed write allowed an immediate duplicate retry');
+  assert.equal(await session.page.getByTestId('radar-draft-teams').isDisabled(), true,
+    'Regeneration could bypass unconfirmed delivery protection');
+  assert.equal(await draft.getByRole('button', { name: 'Close', exact: true }).isDisabled(), true,
+    'Discarding the draft could bypass unconfirmed delivery protection');
+  assert.equal(await session.page.evaluate(() => window.__teamsSendCalls.length), 2);
+  const allowRetry = draft.getByTestId('teams-allow-retry');
+  await session.page.getByRole('button', { name: 'Today', exact: true }).click();
+  await session.page.getByRole('button', { name: 'Radar', exact: true }).click();
+  await selectFixtureThread(session.page);
+  assert.equal(await send.isDisabled(), true, 'Navigation cleared unconfirmed delivery protection');
+  await allowRetry.click();
+  assert.equal(await session.page.evaluate(() => window.__teamsSendCalls.length), 2,
+    'Acknowledging a Teams check dispatched a message without pressing Send');
 
   await send.click();
   await draft.getByTestId('teams-send-status').filter({ hasText: 'Teams reported that the message was not sent' }).waitFor({ state: 'visible' });
+  await assertTeamsStatusAppearance(draft.getByTestId('teams-send-status'), true);
   assert.equal(await message.inputValue(), editedMessage, 'Failure discarded the edited Teams draft');
 
   await send.click();
-  await draft.getByTestId('teams-send-status').filter({ hasText: 'Message sent. Teams returned a matching send receipt.' }).waitFor({ state: 'visible' });
-  assert.equal(await send.isDisabled(), true, 'Authoritative success did not disable duplicate sending');
+  await draft.waitFor({ state: 'hidden' });
+  assert.equal(await send.count(), 0, 'Authoritative success left a duplicate-send control in the editor');
   const calls = await session.page.evaluate(() => structuredClone(window.__teamsSendCalls));
   assert.equal(calls.length, 4, 'Teams send did not preserve explicit retry attempts');
-  assert.deepEqual(calls[3], { targetDisplayName: 'James Farquharson', message: editedMessage });
+  assert.deepEqual(calls[3], {
+    targetDisplayName: 'James Farquharson', targetEmail: 'james@example.com', message: editedMessage,
+  });
   const timeline = session.page.getByTestId('action-timeline-entry');
   await timeline.filter({ hasText: 'Teams send cancelled before dispatch. No request was dispatched.' }).waitFor({ state: 'visible' });
   await timeline.filter({ hasText: 'Teams send could not be confirmed. Check Teams before trying again.' }).waitFor({ state: 'visible' });
   await timeline.filter({ hasText: 'Teams message sent with a matching receipt.' }).waitFor({ state: 'visible' });
+  await session.page.getByRole('button', { name: 'View sent Teams message', exact: true }).click();
+  const preview = session.page.getByTestId('action-message-preview');
+  assert.equal(await preview.getByTestId('action-message-body').textContent(), editedMessage);
+  assert.equal(await preview.getByTestId('action-message-recipient').textContent(), 'james@example.com');
+  assert.equal(await preview.locator('input, textarea').count(), 0);
   const beforeReload = await timeline.count();
   await openApp(session, { reseed: false });
   await selectFixtureThread(session.page);
   assert.equal(await session.page.getByTestId('action-timeline-entry').count(), beforeReload, 'Reload duplicated Teams action callbacks');
+  await session.page.getByRole('button', { name: 'View sent Teams message', exact: true }).click();
+  assert.equal(await preview.getByTestId('action-message-body').textContent(), editedMessage, 'Reload lost the confirmed message');
+  assert.equal(await session.page.evaluate(() => window.__teamsSendCalls.length), 0, 'Viewing persisted message history resent it');
   await assertHealthy(session);
 }
 
@@ -1525,6 +1894,7 @@ async function historySourceNavigationScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
+  await session.page.getByTestId('email-open-actions').click();
   await session.page.getByTestId('action-queue').getByRole('button', { name: 'Return to source', exact: true }).click();
   await session.page.getByRole('button', { name: 'History', exact: true }).click();
   await session.page.getByRole('heading', { name: 'Source timeline & audit', exact: true }).waitFor({ state: 'visible' });
@@ -1581,6 +1951,7 @@ async function externalRadarNavigationScenario(session) {
   await openApp(session, { reseed: false });
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
+  await session.page.getByTestId('email-open-actions').click();
   await session.page.getByTestId('action-queue').getByRole('button', { name: 'Return to source', exact: true }).click();
   await assertExternalRadarSelection(session.page, { id: FIXTURE_ITEM_ID, title: FIXTURE_ITEM_TITLE });
 
@@ -1756,14 +2127,13 @@ async function synthesisDedupeScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
-  const queue = session.page.getByTestId('action-queue');
-  await queue.waitFor({ state: 'visible' });
+  const editor = session.page.getByTestId('email-draft-editor');
+  await editor.waitFor({ state: 'visible' });
   await session.page.waitForTimeout(700);
   const firstCount = await session.page.evaluate(async () => (await window.workiq.storeGet('flightdeck.demo.v2'))?.actionProposals?.length || 0);
-  await queue.getByRole('button', { name: 'Return to source', exact: true }).click();
   await session.page.getByTestId('radar-draft-email').click();
   await session.page.waitForFunction(() => window.__proposalCalls.length === 2);
-  await session.page.getByTestId('action-queue').waitFor({ state: 'visible' });
+  await editor.waitFor({ state: 'visible' });
   await session.page.waitForTimeout(700);
   const secondCount = await session.page.evaluate(async () => (await window.workiq.storeGet('flightdeck.demo.v2'))?.actionProposals?.length || 0);
   assert.equal(secondCount, firstCount, 'Repeated synthesis duplicated the local action queue');
@@ -1776,7 +2146,7 @@ async function synthesisRetryScenario(session) {
   await session.page.getByTestId('radar-draft-email').click();
   await session.page.getByTestId('proposal-error').filter({ hasText: /timed out/i }).waitFor({ state: 'visible' });
   await session.page.getByTestId('radar-draft-email').click();
-  await session.page.getByTestId('action-queue').waitFor({ state: 'visible' });
+  await session.page.getByTestId('email-draft-editor').waitFor({ state: 'visible' });
   assert.equal(await session.page.evaluate(() => window.__proposalCalls.length), 2);
   await assertHealthy(session);
 }
@@ -1954,8 +2324,7 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   await thread.click();
   await session.page.locator('.radar-thread-detail h2').filter({ hasText: FIXTURE_ITEM_TITLE }).waitFor({ state: 'visible' });
 
-  const toolbar = session.page.locator('.radar-action-toolbar');
-  const compose = session.page.getByRole('group', { name: 'Compose a response', exact: true });
+  const compose = session.page.getByRole('group', { name: 'Draft work plan message', exact: true });
   const disposition = session.page.getByRole('group', { name: 'Update thread status', exact: true });
   const email = session.page.getByTestId('radar-draft-email');
   const teams = session.page.getByTestId('radar-draft-teams');
@@ -2025,7 +2394,7 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   assert.ok(semanticStyles.snooze.classes.includes('radar-action-button--snooze'));
   assert.ok(semanticStyles.archive.classes.includes('radar-more-menu__item'));
   assert.ok(semanticStyles.deleteCard.classes.includes('radar-more-menu__item--delete'));
-  assert.equal(semanticStyles.snooze.backgroundColor, semanticStyles.email.backgroundColor, 'Snooze was not neutral');
+  assert.equal(semanticStyles.snooze.fontWeight, semanticStyles.email.fontWeight, 'Snooze received primary emphasis');
   assert.equal(semanticStyles.complete.color, semanticStyles.tokens.success, 'Complete did not use the success token');
   assert.notEqual(semanticStyles.complete.backgroundColor, semanticStyles.snooze.backgroundColor, 'Complete and Snooze lacked a non-color semantic distinction');
   assert.equal(semanticStyles.archive.classes.some((className) => className === 'warn' || className === 'primary'), false, 'Archive received high-emphasis styling');
@@ -2039,15 +2408,21 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   assert.equal(await teams.evaluate((element) => element === document.activeElement), true, 'Tab did not advance to Draft Teams message');
   assert.equal(await teams.evaluate((element) => element.matches(':focus-visible') && parseFloat(getComputedStyle(element).outlineWidth) >= 2), true, 'Draft Teams message lacked visible keyboard focus');
 
-  const geometry = await toolbar.evaluate((element) => {
+  for (const group of [compose, disposition]) {
+    await group.evaluate(async (element) => {
+      await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    });
+  }
+  const geometry = await session.page.locator('.radar-thread-detail').evaluate((element) => {
     const rectangle = (target) => target.getBoundingClientRect().toJSON();
-    const buttons = [...element.querySelectorAll('button, summary')].filter((button) => {
+    const buttons = [...element.querySelectorAll('.radar-action-button')].filter((button) => {
       const menu = button.closest('details');
       return button.getClientRects().length && (!menu || button.tagName === 'SUMMARY' || menu.open);
     });
     return {
-      toolbar: rectangle(element),
-      workPanel: rectangle(element.closest('.radar-work-panel')),
+      toolbar: rectangle(element.querySelector('.radar-thread-toolbar')),
+      header: rectangle(element.querySelector(':scope > header')),
+      recommendations: rectangle(element.querySelector('[data-testid="scanner-recommendations"]')),
       compose: rectangle(element.querySelector('.radar-action-group--compose')),
       disposition: rectangle(element.querySelector('.radar-action-group--disposition')),
       buttons: buttons.map((button) => ({
@@ -2069,9 +2444,14 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   assert.equal(geometry.scrollWidth > geometry.documentWidth + 1, false, `Action hierarchy overflowed at ${viewportWidth}px`);
   assert.equal(geometry.buttons.some((button) => button.clipped), false, `Action label clipped at ${viewportWidth}px: ${JSON.stringify(geometry.buttons)}`);
   assert.equal(geometry.buttons.length, 5, `Expected four commands and one More disclosure at ${viewportWidth}px`);
-  assert.ok(geometry.toolbar.x >= geometry.workPanel.x - 1
-    && geometry.toolbar.x + geometry.toolbar.width <= geometry.workPanel.x + geometry.workPanel.width + 1,
-  `Action toolbar escaped the Work plan pane at ${viewportWidth}px`);
+  assert.ok(geometry.toolbar.x >= geometry.header.x - 1
+    && geometry.toolbar.x + geometry.toolbar.width <= geometry.header.x + geometry.header.width + 1,
+  `Thread toolbar escaped the header at ${viewportWidth}px`);
+  assert.ok(geometry.disposition.bottom <= geometry.recommendations.top,
+    `Management commands were not above the Work plan at ${viewportWidth}px`);
+  assert.ok(geometry.compose.x >= geometry.recommendations.x - 1
+    && geometry.compose.right <= geometry.recommendations.right + 1,
+  `Compose controls escaped the recommended next moves at ${viewportWidth}px`);
   if (viewportWidth > 960) {
     assert.equal(geometry.buttons.every((button) => button.rect.height >= 36), true, `Desktop command was under 36px at ${viewportWidth}px`);
   } else {
@@ -2084,13 +2464,218 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
     window.workiq.proposeThreadActions = () => new Promise(() => {});
   });
   await email.click();
-  await session.page.waitForFunction(() => document.querySelector('[role="group"][aria-label="Compose a response"]')?.getAttribute('aria-busy') === 'true');
+  await session.page.waitForFunction(() => document.querySelector('[role="group"][aria-label="Draft work plan message"]')?.getAttribute('aria-busy') === 'true');
   assert.equal(await email.isDisabled(), true, 'Active compose action remained enabled while synthesis was pending');
   assert.equal(await teams.isDisabled(), true, 'Alternate compose action remained enabled while synthesis was pending');
   assert.equal(await email.evaluate((element) => element.classList.contains('is-loading')), true, 'Pending compose action lacked loading state');
   const widthsAfter = await Promise.all([email.evaluate((element) => element.getBoundingClientRect().width), teams.evaluate((element) => element.getBoundingClientRect().width)]);
   assert.equal(widthsAfter.every((width, index) => Math.abs(width - widthsBefore[index]) <= 1), true, `Compose labels shifted widths while loading at ${viewportWidth}px`);
   await assertHealthy(session, viewportWidth > 960 ? 'desktop' : 'mobile');
+}
+
+async function prepareWorkPlanFixture(session, noMoves = false) {
+  const { page } = session;
+  const moves = ['Confirm the deployment window with Sofia.', 'Ask Alex to verify the deployment owner.'];
+  await openApp(session);
+  await page.evaluate(async ({ id, steps }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    await window.workiq.storeSet('flightdeck.demo.v2', {
+      ...state, items: state.items.map((item) => item.id === id ? { ...item, suggestedNextSteps: steps } : item),
+    });
+  }, { id: FIXTURE_ITEM_ID, steps: noMoves ? [] : moves });
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  await page.evaluate(() => {
+    const original = window.workiq.proposeThreadActions;
+    window.workiq.proposeThreadActions = async (context) => {
+      if (window.__failWorkPlanNext) {
+        window.__failWorkPlanNext = false;
+        window.__proposalCalls.push(structuredClone(context));
+        return { ok: false, code: 'TIMEOUT' };
+      }
+      const response = await original(context);
+      response.result.proposals[0].channel = context.requestedChannel;
+      const message = context.requestedNextStep || 'Follow up on the thread.';
+      response.result.proposals[0].payload = context.requestedChannel === 'email'
+        ? { subject: 'Selected next move', body: message } : { message };
+      return response;
+    };
+  });
+  return moves;
+}
+
+async function workPlanDraftScenario(session, noMoves = false) {
+  const { page } = session;
+  const moves = await prepareWorkPlanFixture(session, noMoves);
+  if (noMoves) {
+    assert.equal(await page.getByRole('radio').count(), 0, 'Empty recommendations displayed a selectable placeholder');
+    for (const channel of ['email', 'teams']) {
+      await page.getByTestId(`radar-draft-${channel}`).click();
+      await page.getByTestId(`${channel}-draft-editor`).waitFor({ state: 'visible' });
+    }
+    const calls = await page.evaluate(() => window.__proposalCalls);
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every((context) => !Object.hasOwn(context, 'requestedNextStep')),
+      'A thread without recommendations invented a selected next step');
+  } else {
+    const first = page.getByTestId('radar-next-move-0');
+    const second = page.getByTestId('radar-next-move-1');
+    assert.equal(await first.isChecked(), true, 'The first recommendation was not selected initially');
+    await first.focus();
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await second.isChecked(), true, 'Keyboard selection did not choose the second recommendation');
+    await page.getByTestId('radar-draft-teams').click();
+    const teamsEditor = page.getByTestId('teams-draft-editor');
+    await expect.poll(() => teamsEditor.locator('textarea').inputValue()).toBe(moves[1]);
+    const showThreads = async () => {
+      const threadsStep = page.getByRole('button', { name: 'Threads', exact: true });
+      if (await threadsStep.isVisible()) await threadsStep.click();
+    };
+    await showThreads();
+    await page.locator(`.radar-thread:not([data-thread-id="${FIXTURE_ITEM_ID}"])`).first().click();
+    await showThreads();
+    await page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`).click();
+    assert.equal(await second.isChecked(), true, 'Navigating to another thread discarded the chosen next move');
+    assert.equal(await teamsEditor.locator('textarea').inputValue(), moves[1], 'Thread navigation lost the inline draft');
+    await page.getByTestId('radar-draft-email').click();
+    await expect.poll(() => page.getByTestId('email-draft-message').inputValue()).toBe(moves[1]);
+    let calls = await page.evaluate(() => window.__proposalCalls);
+    assert.deepEqual(calls.map((context) => [context.requestedChannel, context.requestedNextStep]),
+      [['teams', moves[1]], ['email', moves[1]]], 'The channel buttons did not compose for the selected work-plan step');
+
+    await first.check();
+    await page.evaluate(() => { window.__failWorkPlanNext = true; });
+    await page.getByTestId('radar-draft-teams').click();
+    await page.getByTestId('proposal-error').waitFor({ state: 'visible' });
+    await second.check();
+    await page.getByRole('button', { name: 'Retry Teams draft', exact: true }).click();
+    await expect.poll(() => teamsEditor.locator('textarea').inputValue()).toBe(moves[0]);
+    calls = await page.evaluate(() => window.__proposalCalls);
+    assert.deepEqual(calls.slice(-2).map((context) => context.requestedNextStep), [moves[0], moves[0]],
+      'Retry silently switched to a different work-plan step');
+  }
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0],
+    'Selecting a next move or drafting caused an external write');
+  await assertHealthy(session, page.viewportSize().width > 960 ? 'desktop' : 'mobile');
+}
+
+async function workPlanCompletionScenario(session) {
+  const { page } = session;
+  const moves = await prepareWorkPlanFixture(session);
+  const message = 'Please confirm the owner.\n<This is literal message text, not markup>';
+  await page.getByTestId('radar-draft-teams').click();
+  await page.getByTestId('teams-draft-editor').locator('textarea').fill(message);
+  await page.getByTestId('teams-draft-send').click();
+  await page.getByTestId('teams-draft-editor').waitFor({ state: 'hidden' });
+  assert.equal(await page.getByTestId('radar-next-move-0').isDisabled(), true, 'Confirmed Teams send did not disable its next move');
+  assert.equal(await page.getByTestId('radar-next-move-1').isChecked(), true, 'The next unfinished move was not available');
+  assert.equal(await page.getByTestId('radar-draft-email').isEnabled(), true, 'Completing one move incorrectly disabled another');
+  const viewTeams = page.getByRole('button', { name: 'View sent Teams message', exact: true });
+  await viewTeams.focus();
+  await page.keyboard.press('Enter');
+  const preview = page.getByTestId('action-message-preview');
+  await preview.waitFor({ state: 'visible' });
+  await expect(preview.getByTestId('action-message-body')).toBeInViewport();
+  assert.equal(await preview.locator('h3').evaluate((element) => element === document.activeElement), true);
+  assert.equal(await preview.getByTestId('action-message-body').textContent(), message);
+  assert.equal(await preview.getByTestId('action-message-body').locator('*').count(), 0, 'Message content was treated as markup');
+  assert.equal(await preview.locator('input, textarea').count(), 0, 'Sent message history was editable');
+  assert.deepEqual(await preview.locator('button').allTextContents(), ['Close'], 'History exposed an execution control');
+  await page.getByTestId('action-preview-close').click();
+  assert.equal(await viewTeams.evaluate((element) => element === document.activeElement), true, 'Closing message history lost timeline focus');
+
+  await page.getByTestId('radar-draft-email').click();
+  const email = page.getByTestId('email-draft-editor');
+  await email.getByTestId('email-draft-message').fill('Please confirm the deployment window by reply.');
+  await email.getByTestId('email-draft-create').click();
+  await email.waitFor({ state: 'hidden' });
+  assert.equal(await page.getByTestId('radar-next-move-1').isDisabled(), true, 'Confirmed Outlook draft did not finish its next move');
+  for (const channel of ['email', 'teams']) {
+    assert.equal(await page.getByTestId(`radar-draft-${channel}`).isDisabled(), true, 'A completed plan still allowed another draft');
+  }
+  await expect.poll(() => page.evaluate(async (id) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return state.items.find((item) => item.id === id)?.completedNextSteps || [];
+  }, FIXTURE_ITEM_ID)).toEqual(moves);
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  assert.equal(await page.getByTestId('teams-draft-editor').count(), 0);
+  assert.equal(await page.getByTestId('email-draft-editor').count(), 0);
+  for (const index of [0, 1]) assert.equal(await page.getByTestId(`radar-next-move-${index}`).isDisabled(), true);
+  for (const channel of ['email', 'teams']) assert.equal(await page.getByTestId(`radar-draft-${channel}`).isDisabled(), true);
+  await page.getByRole('button', { name: 'View created Outlook draft', exact: true }).click();
+  assert.equal(await preview.getByTestId('action-message-body').textContent(), 'Please confirm the deployment window by reply.');
+  await preview.getByText('Saved in Outlook Drafts. Nothing was sent.', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByTestId('action-preview-close').click();
+  const showOlder = page.getByRole('button', { name: /^Show \d+ older$/ });
+  if (await showOlder.isVisible()) await showOlder.click();
+  await page.getByRole('button', { name: 'View sent Teams message', exact: true }).click();
+  assert.equal(await preview.getByTestId('action-message-body').textContent(), message, 'Sent message text did not survive restart');
+  await expect(preview.getByTestId('action-message-body')).toBeInViewport();
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0],
+    'Inspecting completed actions dispatched another write');
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  const screenshotPath = path.join(SCREENSHOT_DIR, `completed-action-message-${page.viewportSize().width}.png`);
+  await page.screenshot({ path: screenshotPath, fullPage: page.viewportSize().width <= 960, animations: 'disabled' });
+  screenshotPaths.push(screenshotPath);
+  process.stdout.write(`SCREENSHOT view=completed-message path=${screenshotPath}\n`);
+  await assertHealthy(session, page.viewportSize().width > 960 ? 'desktop' : 'mobile');
+}
+
+async function workPlanUnfinishedOutcomeScenario(session, channel, outcome) {
+  const { page } = session;
+  await prepareWorkPlanFixture(session);
+  await page.getByTestId(`radar-draft-${channel}`).click();
+  await page.getByTestId(`${channel}-draft-editor`).waitFor({ state: 'visible' });
+  await page.evaluate(({ channel, outcome }) => {
+    const response = outcome === 'cancel' ? { ok: false, code: 'CANCELLED', dispatched: false }
+      : outcome === 'unconfirmed' ? { ok: false, code: channel === 'teams' ? 'SEND_UNCONFIRMED' : 'ACTION_UNCONFIRMED', dispatched: true }
+        : { ok: false, code: outcome === 'resolution' ? 'RESOLUTION_FAILED'
+          : outcome === 'chat-open' ? 'CHAT_OPEN_FAILED' : channel === 'teams' ? 'SEND_FAILED' : 'CREATE_FAILED', dispatched: false };
+    window.workiq[channel === 'teams' ? 'sendTeamsMessage' : 'createOutlookDraft'] = async (payload) => {
+      window[channel === 'teams' ? '__teamsSendCalls' : '__draftCalls'].push(structuredClone(payload));
+      return response;
+    };
+  }, { channel, outcome });
+  await page.getByTestId(channel === 'teams' ? 'teams-draft-send' : 'email-draft-create').click();
+  const editor = page.getByTestId(`${channel}-draft-editor`);
+  const status = editor.getByTestId(channel === 'teams' ? 'teams-send-status' : 'email-draft-status');
+  await expect.poll(() => status.textContent()).toMatch(outcome === 'cancel' ? /cancelled/i
+    : outcome === 'unconfirmed' ? /confirm|check.*before/i : /failed|not.*created|not.*sent/i);
+  if (channel === 'teams') await assertTeamsStatusAppearance(status, outcome !== 'cancel');
+  assert.equal(await editor.isVisible(), true, `${outcome} closed the ${channel} editor`);
+  assert.equal(await page.getByTestId('radar-next-move-0').isDisabled(), false, `${outcome} completed the next move`);
+  const state = await page.evaluate(async () => window.workiq.storeGet('flightdeck.demo.v2'));
+  assert.deepEqual(state.items.find((item) => item.id === FIXTURE_ITEM_ID).completedNextSteps, []);
+  assert.equal(await page.getByRole('button', { name: /^View (sent Teams message|created Outlook draft)$/ }).count(), 0);
+  await assertHealthy(session);
+}
+
+async function legacyActionMessageScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  await page.evaluate(async (id) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    await window.workiq.storeSet('flightdeck.demo.v2', {
+      ...state, items: state.items.map((item) => item.id === id ? {
+        ...item, updateHistory: [{
+          kind: 'action', eventId: 'legacy-sent-message', proposalId: 'missing-old-message',
+          itemId: id, event: 'succeeded', outcome: 'succeeded', channel: 'teams',
+          verification: 'runtime-backend-confirmed', code: 'SEND_CONFIRMED',
+          timestamp: new Date().toISOString(), target: 'alex@example.com', seen: true,
+        }, ...item.updateHistory],
+      } : item),
+    });
+  }, FIXTURE_ITEM_ID);
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  await page.getByRole('button', { name: 'View sent Teams message', exact: true }).click();
+  const preview = page.getByTestId('action-message-preview');
+  await preview.getByTestId('action-message-unavailable').waitFor({ state: 'visible' });
+  assert.equal(await preview.getByTestId('action-message-recipient').textContent(), 'alex@example.com');
+  assert.equal(await preview.getByTestId('action-message-body').count(), 0, 'Legacy history invented missing message content');
+  assert.deepEqual(await page.evaluate(() => [window.__proposalCalls.length, window.__teamsSendCalls.length]), [0, 0]);
+  await assertHealthy(session);
 }
 
 async function cardDeletionScenario(session, viewportWidth) {
@@ -2273,6 +2858,22 @@ async function radarActivityResponsiveHeightScenario(session) {
   await selectFixtureThread(page);
 
   const timeline = page.locator('.radar-activity-panel .activity-timeline');
+  await timeline.locator('.at-summary').filter({ hasText: 'Update 1.' }).waitFor({ state: 'visible' });
+  const assertCompactWorkColumn = async () => {
+    const gap = await page.evaluate(() => {
+      const work = document.querySelector('.radar-work-panel');
+      const children = [...work.children].filter(element => {
+        const bounds = element.getBoundingClientRect();
+        return bounds.width > 0 && bounds.height > 0 && getComputedStyle(element).display !== 'none';
+      });
+      return document.querySelector('[data-testid="radar-context-reason"]').getBoundingClientRect().top
+        - children.at(-1).getBoundingClientRect().bottom;
+    });
+    assert.ok(gap >= 0 && gap <= 48,
+      `Work plan and context should be separated by at most 48px, not ${gap}px`);
+    process.stdout.write(`WORK_COLUMN_GAP width=${page.viewportSize().width} gap=${gap}\n`);
+    return gap;
+  };
   const measure = () => timeline.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
     const detailBounds = element.closest('.radar-thread-detail').getBoundingClientRect();
@@ -2295,6 +2896,7 @@ async function radarActivityResponsiveHeightScenario(session) {
     assert.equal(measurement.maxHeight, 'none', 'Radar timeline retained the fixed height cap');
     assert.equal(measurement.animation, 'none', 'Timeline reveal animation reinstated the height cap');
     assert.equal(measurement.overflowY, 'visible', 'Radar timeline retained a nested scrollbar');
+    await assertCompactWorkColumn();
     assert.ok(measurement.height > 420, `Timeline is still constrained: ${JSON.stringify(measurement)}`);
     assert.ok(measurement.scrollHeight <= measurement.height + 1, 'Timeline content is clipped');
     measurements.push(measurement);
@@ -2304,14 +2906,20 @@ async function radarActivityResponsiveHeightScenario(session) {
     `Activity did not gain space in a taller window: ${JSON.stringify(measurements)}`);
   assert.ok(measurements[1].visibleHeight > 420, 'Tall windows still show only a 420px activity viewport');
   assert.equal(await timeline.locator('.at-event').count(), 5);
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  const screenshotPath = path.join(SCREENSHOT_DIR, 'radar-work-column-spacing-1440.png');
+  await page.screenshot({ path: screenshotPath, animations: 'disabled' });
+  screenshotPaths.push(screenshotPath);
   await timeline.getByRole('button', { name: 'Show 7 older', exact: true }).click();
   assert.equal(await timeline.locator('.at-event').count(), 12, 'Expanding history lost activity entries');
+  await assertCompactWorkColumn();
 
   await page.setViewportSize({ width: 360, height: 900 });
   await timeline.waitFor({ state: 'visible' });
   const mobile = await measure();
   assert.equal(mobile.overflowY, 'visible', 'Mobile timeline has a nested scroll trap');
   assert.ok(mobile.scrollHeight <= mobile.height + 1, 'Mobile timeline clips activity');
+  await assertCompactWorkColumn();
   const mobileFlow = await page.evaluate(() => ({
     overflow: getComputedStyle(document.body).overflow,
     scrollHeight: document.documentElement.scrollHeight,
@@ -2356,12 +2964,16 @@ async function radarRichContextScenario(session) {
   await session.page.getByRole('heading', { name: 'Work plan', exact: true }).waitFor({ state: 'visible' });
   assert.equal(await session.page.getByRole('heading', { name: 'Context', exact: true }).count(), 0,
     'The combined Work plan pane retained the old Context heading');
-  assert.deepEqual(await recommendations.locator('li').allTextContents(), recommendedMoves,
+  assert.deepEqual(await recommendations.locator('[data-next-move-text]').allTextContents(), recommendedMoves,
     'Radar Work plan did not preserve both scanner recommendations');
   assert.equal(await recommendations.locator('xpath=ancestor::*[contains(@class, "radar-detail-columns")]').count(), 1,
     'Scanner recommendations were not moved into the Work plan column');
-  assert.equal(await session.page.locator('.radar-work-panel .radar-action-toolbar').count(), 1,
-    'Respond and Manage controls were not moved into the Work plan pane');
+  assert.equal(await recommendations.locator('.radar-action-group--compose').count(), 1,
+    'Draft controls were not integrated with the recommended next moves');
+  assert.equal(await session.page.locator('.radar-thread-detail > header .radar-action-group--disposition').count(), 1,
+    'Management controls were not moved into the thread header');
+  assert.equal(await session.page.locator('.radar-work-panel .radar-action-group--disposition').count(), 0,
+    'Management controls were duplicated below the draft editor');
   const columnTops = await session.page.evaluate(() => ({
     activity: document.querySelector('.radar-activity-panel')?.getBoundingClientRect().top,
     context: document.querySelector('[data-testid="scanner-recommendations"]')?.getBoundingClientRect().top,
@@ -2592,7 +3204,40 @@ async function doneWhenEditingScenario(session, width) {
     }
     await runScenario('action-queue-source-focus-restoration', browser, rendererServer.baseUrl, actionQueueSourceFocusScenario);
     await runScenario('proposal-missing-address-edit-state', browser, rendererServer.baseUrl, missingAddressScenario, { proposalMode: 'missing-address' });
+    await runScenario('proposal-missing-recipient-retains-draft', browser, rendererServer.baseUrl,
+      (session) => missingAddressScenario(session, true), { proposalMode: 'missing-recipient' });
     await runScenario('proposal-teams-review-only', browser, rendererServer.baseUrl, teamsReviewScenario, { proposalMode: 'teams' });
+    for (const width of [1440, 360]) {
+      await runScenario(`work-plan-selected-step-${width}`, browser, rendererServer.baseUrl, workPlanDraftScenario,
+        { viewport: { width, height: width === 1440 ? 1000 : 900 } });
+    }
+    await runScenario('work-plan-no-recommendations', browser, rendererServer.baseUrl,
+      (session) => workPlanDraftScenario(session, true));
+    for (const width of [1440, 360]) {
+      await runScenario(`work-plan-completion-${width}`, browser, rendererServer.baseUrl, workPlanCompletionScenario,
+        { viewport: { width, height: width === 1440 ? 1000 : 900 } });
+    }
+    for (const channel of ['email', 'teams']) {
+      for (const outcome of channel === 'teams' ? ['cancel', 'unconfirmed', 'failed', 'resolution', 'chat-open'] : ['cancel', 'unconfirmed', 'failed']) {
+        await runScenario(`work-plan-${channel}-${outcome}`, browser, rendererServer.baseUrl,
+          (session) => workPlanUnfinishedOutcomeScenario(session, channel, outcome));
+      }
+    }
+    await runScenario('teams-resolution-error-mobile', browser, rendererServer.baseUrl,
+      (session) => workPlanUnfinishedOutcomeScenario(session, 'teams', 'resolution'),
+      { viewport: { width: 360, height: 900 } });
+    await runScenario('timeline-legacy-message-unavailable', browser, rendererServer.baseUrl, legacyActionMessageScenario);
+    await runScenario('email-inline-create-success', browser, rendererServer.baseUrl, inlineEmailScenario);
+    await runScenario('email-inline-incomplete-edits-persist', browser, rendererServer.baseUrl, inlineEmailIncompleteScenario);
+    await runScenario('email-inline-cancel', browser, rendererServer.baseUrl,
+      (session) => inlineEmailScenario(session, 'cancel'));
+    await runScenario('email-inline-unconfirmed', browser, rendererServer.baseUrl,
+      (session) => inlineEmailScenario(session, 'unconfirmed'));
+    await runScenario('email-inline-mobile', browser, rendererServer.baseUrl, inlineEmailScenario,
+      { viewport: { width: 360, height: 900 } });
+    await runScenario('proposal-teams-missing-recipient', browser, rendererServer.baseUrl,
+      (session) => teamsReviewScenario(session, true), { proposalMode: 'teams-missing-recipient' });
+    await runScenario('proposal-concurrent-thread-lifecycle', browser, rendererServer.baseUrl, concurrentThreadDraftsScenario);
     await runScenario('teams-send-cancel-error-success', browser, rendererServer.baseUrl, teamsSendScenario, { proposalMode: 'teams', teamsSendMode: 'sequence' });
     await runScenario('history-source-navigation-and-dedupe', browser, rendererServer.baseUrl, historySourceNavigationScenario);
     await runScenario('external-radar-navigation-sources', browser, rendererServer.baseUrl, externalRadarNavigationScenario);

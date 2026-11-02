@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { nextRadarSelectionAfterRemoval, reconcileRadarSelection } from '../src/svelte/lib/radar-selection.js';
+import { createThreadComposer } from '../src/svelte/lib/thread-composer.js';
 
 test('reconcileRadarSelection clears stale selected thread and resets detail view without altering filters', () => {
   const state = {
@@ -86,14 +87,30 @@ test('Today urgent work uses the canonical blocked lifecycle regardless of sever
   assert.doesNotMatch(urgent, /item\.isBlocked/);
 });
 
-test('Radar Teams review preserves and displays synthesis rationale, risk, and review note', () => {
+test('Radar Teams review preserves and displays synthesis rationale, risk, and review note', async () => {
   const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
-  const assignment = source.match(/teamsDraft = \{\s*proposalId:.*?needsTargetResolution:.*?\n\s*\};/s)?.[0] || '';
   const editor = source.match(/<section class="radar-teams-draft".*?<\/section>/s)?.[0] || '';
+  const composer = createThreadComposer();
+  await composer.generate({
+    item: { id: 'review-thread', title: 'Review request', sourceType: 'Email' },
+    channel: 'teams',
+    propose: async () => ({ ok: true, result: {
+      schemaVersion: 1, recommendation: 'Confirm the window', confidence: 'high',
+      why: 'The owner requested confirmation',
+      evidence: [{ kind: 'observed', text: 'Confirmation requested' }],
+      proposals: [{
+        channel: 'teams', target: { displayName: 'Alex' },
+        payload: { message: 'Please confirm the window' },
+        risk: 'Verify the recipient', reviewNote: 'Check the window before sending',
+      }],
+    } }),
+  });
+  const draft = composer.read('review-thread').teamsDraft;
 
-  assert.match(assignment, /why:\s*result\.why/);
-  assert.match(assignment, /risk:\s*proposal\.risk/);
-  assert.match(assignment, /reviewNote:\s*proposal\.reviewNote/);
+  assert.equal(draft.why, 'The owner requested confirmation');
+  assert.equal(draft.risk, 'Verify the recipient');
+  assert.equal(draft.reviewNote, 'Check the window before sending');
+  assert.match(source, /\$threadComposer\.get\(selectedId\)/);
   assert.match(editor, /teamsDraft\.why/);
   assert.match(editor, /teamsDraft\.risk/);
   assert.match(editor, /teamsDraft\.reviewNote/);
@@ -181,7 +198,8 @@ test('RadarView tells users to check Teams before retrying uncertain sends', () 
 test('RadarView exposes a secondary card delete command with explicit local-only confirmation', () => {
   const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
   const contract = fs.readFileSync(new URL('../src/svelte/lib/item-deletion-ui.js', import.meta.url), 'utf8');
-  const disposition = source.match(/<div class="radar-action-cluster radar-action-cluster--manage".*?<\/details>/s)?.[0] || '';
+  const toolbar = source.match(/<div class="radar-action-toolbar radar-thread-toolbar".*?<\/header>/s)?.[0] || '';
+  const disposition = toolbar.match(/<div class="radar-action-group radar-action-group--disposition".*?<\/details>/s)?.[0] || '';
   const confirmation = source.match(/<ConfirmModal open=\{Boolean\(deleteRequest\)\}.*?\/>/s)?.[0] || '';
 
   assert.match(disposition, /data-testid="radar-delete"/);
