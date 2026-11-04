@@ -93,6 +93,20 @@ beforeEach(() => {
 });
 
 describe('permanent card deletion persistence boundary', () => {
+  it('preserves explicit unread flags on completed and archived threads through hydration', async () => {
+    storedState = persistedFixture({ items: ['complete', 'archived'].map((lifecycleStatus) => ({
+      ...card(), id: lifecycleStatus, lifecycleStatus, status: lifecycleStatus,
+      hasNewUpdate: true, isNew: false,
+      updateHistory: [{ kind: 'reply', timestamp: new Date().toISOString(), seen: false }],
+    })) });
+    await loadPersistentState();
+    assert.equal(get(items).length, 2);
+    for (const item of get(items)) {
+      assert.equal(item.hasNewUpdate, true);
+      assert.equal(item.updateHistory.some((entry) => entry.seen === false), true);
+      assert.equal(item.monitorEnabled, false);
+    }
+  });
   it('accepts exactly literal true and the established IPC success receipt', () => {
     const symbolExtra = { success: true, [Symbol('extra')]: true };
     const nonEnumerableExtra = { success: true };

@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { get } from 'svelte/store';
   import {
     actionProposals,
@@ -61,6 +61,7 @@
   import ScannerDeletionModal from './ScannerDeletionModal.svelte';
   import ScannerSettingsModal from './ScannerSettingsModal.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
+  import ThreadContextMenu from './ThreadContextMenu.svelte';
   import { showToast } from './Toast.svelte';
 
   const VIEWS = [
@@ -114,6 +115,16 @@
   );
   let deleteRequest = $state(null);
   let deleteState = $state({ status: 'idle', message: '' });
+  let contextMenu = $state(null);
+  let contextTarget = $derived(threads.find((item) => item.id === contextMenu?.id) || null);
+  let contextEntries = $derived(contextTarget ? threadMenuEntries(contextTarget) : []);
+
+  $effect(() => {
+    const menu = contextMenu;
+    if (menu && (!contextTarget || menu.view !== smartView || menu.scanner !== scannerId
+      || menu.query !== query || menu.quickFilter !== quickFilter || menu.sort !== sort
+      || menu.refine !== JSON.stringify(refineFilters))) closeThreadMenu(false);
+  });
 
   let projected = $derived.by(() => {
     const hotItemIds = new Set($items.map((item) => item.id));
@@ -274,6 +285,10 @@
   }
 
   function handleThreadKeydown(event, item) {
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      openThreadMenu(event, item, true);
+      return;
+    }
     if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
     if (event.target?.matches?.('input, select, textarea, [contenteditable="true"]')) return;
     const currentIndex = threads.findIndex((thread) => thread.id === item.id);
@@ -378,9 +393,11 @@
     });
   }
 
-  async function draftMessage(requestedChannel, initiator = null, requestedNextStep = selectedNextMove) {
-    if (!selected || creatingEmailItemIds.has(selected.id) || workPlanCompleted || isWorkPlanStepCompleted(selected, requestedNextStep)) return;
-    const sourceItem = selected;
+  async function draftMessage(requestedChannel, initiator = null, requestedNextStep = selectedNextMove, sourceItem = selected) {
+    if (!sourceItem || creatingEmailItemIds.has(sourceItem.id)
+      || (sourceItem.suggestedNextSteps?.slice(0, 2).length > 0
+        && sourceItem.suggestedNextSteps.slice(0, 2).every((step) => isWorkPlanStepCompleted(sourceItem, step)))
+      || isWorkPlanStepCompleted(sourceItem, requestedNextStep)) return;
     const state = await threadComposer.generate({
       item: sourceItem,
       channel: requestedChannel,
@@ -637,7 +654,122 @@
 
   function snoozeSelected() {
     if (!selected) return;
-    setItemField(selected.id, 'snoozeUntil', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+    snoozeThread(selected, false);
+  }
+
+  function snoozeThread(item, toggle = true) {
+    setItemField(item.id, 'snoozeUntil', toggle && isMailboxSnoozed(item, now)
+      ? null : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+  }
+
+  function closeThreadMenu(restoreFocus = false) {
+    const origin = contextMenu?.origin;
+    contextMenu = null;
+    if (restoreFocus && origin?.isConnected) origin.focus({ preventScroll: true });
+  }
+
+  function openThreadMenu(event, item, keyboard = false) {
+    event.preventDefault();
+    event.stopPropagation();
+    const origin = event.currentTarget;
+    const rect = origin.getBoundingClientRect();
+    contextMenu = {
+      id: item.id, origin, x: keyboard ? rect.left + 16 : event.clientX,
+      y: keyboard ? rect.top + 16 : event.clientY,
+      view: smartView, scanner: scannerId, query, quickFilter, sort, refine: JSON.stringify(refineFilters),
+    };
+  }
+
+  function threadDraft(item, channel) {
+    const composer = $threadComposer.get(item.id) || emptyThreadComposer();
+    const proposal = $actionProposals.find((entry) => entry.sourceItemId === item.id
+      && entry.channel === 'outlook-draft' && !entry.archivedAt && !entry.auditOnly
+      && !['Succeeded', 'Rejected'].includes(entry.state) && !isWorkPlanStepCompleted(item, entry.sourceNextStep));
+    const existing = (channel === 'email' ? Boolean(proposal) : Boolean(composer.teamsDraft
+      && composer.teamsSendState.status !== 'sent' && !isWorkPlanStepCompleted(item, composer.teamsDraft.nextStep)))
+      || (composer.status === 'ready' && composer.requestedChannel === channel && !composer.result?.proposals?.length);
+    const busy = composer.status === 'generating' || composer.teamsSendState.status === 'sending'
+      || creatingEmailItemIds.has(item.id);
+    const moves = item.suggestedNextSteps?.slice(0, 2) || [];
+    const available = moves.filter((step) => !isWorkPlanStepCompleted(item, step));
+    const step = available.includes(composer.selectedNextStep) ? composer.selectedNextStep : available[0] || '';
+    const completed = moves.length > 0 && !available.length;
+    const serviceUnavailable = typeof window.workiq?.proposeThreadActions !== 'function';
+    const unavailable = !existing && !busy && (serviceUnavailable || completed || item.lifecycleStatus === 'complete'
+      || (channel === 'teams' && composer.teamsSendState.status === 'unconfirmed'));
+    return { composer, proposal, existing, busy, step, unavailable,
+      reason: unavailable ? serviceUnavailable ? 'WorkIQ draft generation is unavailable.'
+        : 'Completed work — reopen its work status or review Activity.' : '' };
+  }
+
+  function threadMenuEntries(item) {
+    return [
+      { id: 'open', label: 'Open thread' },
+      { id: 'read', label: isMailboxUnread(item) ? 'Mark read' : 'Mark unread' },
+      { id: 'status', label: 'Change work status', children: LIFECYCLE_STATUSES.map((status) => ({
+        id: `status:${status}`, label: LIFECYCLE_LABELS[status], current: item.lifecycleStatus === status,
+      })) },
+      { id: 'severity', label: 'Change criticality', children: ['Critical', 'Elevated', 'Observe'].map((severity) => ({
+        id: `severity:${severity}`, label: severity, current: item.severity === severity,
+      })) },
+      { id: 'snooze', label: isMailboxSnoozed(item, now) ? 'Unsnooze' : 'Snooze for 24 hours',
+        disabled: !isMailboxActive(item) && !isMailboxSnoozed(item, now),
+        reason: !isMailboxActive(item) && !isMailboxSnoozed(item, now) ? 'Reopen this thread first.' : '' },
+      { id: 'archive', label: isMailboxArchived(item) ? 'Restore to In Progress' : 'Archive' },
+      ...['email', 'teams'].map((channel) => {
+        const draft = threadDraft(item, channel);
+        return { id: `draft:${channel}`, label: `${draft.existing || draft.busy ? 'View' : 'Draft'} ${channel === 'email' ? 'email' : 'Teams message'}`,
+          disabled: draft.unavailable, reason: draft.reason };
+      }),
+      { id: 'delete', label: 'Delete from FlightDeck…', danger: true, disabled: deleteState.status === 'deleting' },
+    ];
+  }
+
+  async function chooseThreadAction(action) {
+    const menu = contextMenu;
+    const item = threads.find((entry) => entry.id === menu?.id);
+    if (!item) { closeThreadMenu(false); return; }
+    closeThreadMenu(false);
+    if (action === 'delete') {
+      requestDeleteThread(item, menu.origin);
+      return;
+    }
+    if (action === 'open' || action.startsWith('draft:')) {
+      const channel = action.split(':')[1];
+      const draft = channel ? threadDraft(item, channel) : null;
+      selectThread(item, menu.origin, { markRead: action === 'open' });
+      if (!draft || draft.unavailable) return;
+      threadComposer.update(item.id, { viewedActionId: null });
+      // Resolve the target before selecting; reactive selection must never choose the draft's owner.
+      if (channel === 'email' && draft.proposal) {
+        threadComposer.update(item.id, { emailProposalId: draft.proposal.id, emailOpen: true, viewedActionId: null });
+      } else if (!draft.existing && !draft.busy) {
+        await draftMessage(channel, menu.origin, draft.step, item);
+      }
+      await tick();
+      if (selectedId === item.id) {
+        viewRoot?.querySelector(channel === 'email' ? '[data-testid="email-draft-recipient"]'
+          : '[data-testid="teams-draft-editor"] textarea')?.focus({ preventScroll: true });
+        viewRoot?.querySelector('.radar-work-panel')?.scrollIntoView({ block: 'nearest' });
+      }
+      return;
+    }
+    if (action === 'read') {
+      if (isMailboxUnread(item)) markItemRead(item.id);
+      else setItemField(item.id, 'hasNewUpdate', true);
+    } else if (action.startsWith('status:')) setItemLifecycle(item.id, action.slice(7));
+    else if (action.startsWith('severity:')) setItemSeverity(item.id, action.slice(9));
+    else if (action === 'snooze') snoozeThread(item);
+    else if (action === 'archive') {
+      if (isMailboxArchived(item)) {
+        setItemLifecycle(item.id, 'in-progress');
+      } else setItemLifecycle(item.id, 'archived');
+    }
+    requestAnimationFrame(() => {
+      const target = menu.origin?.isConnected ? menu.origin
+        : viewRoot?.querySelector('.radar-thread[tabindex="0"]') || viewRoot?.querySelector('.radar-thread-list-pane > header');
+      target?.focus({ preventScroll: true });
+    });
   }
 
   function requestDeleteSelected(event) {
@@ -645,11 +777,16 @@
     const menu = event.currentTarget.closest('details');
     const returnFocus = menu?.querySelector('summary') || event.currentTarget;
     if (menu) menu.open = false;
+    requestDeleteThread(selected, returnFocus);
+  }
+
+  function requestDeleteThread(item, returnFocus) {
+    if (!item || deleteState.status === 'deleting') return;
     deleteState = { status: 'idle', message: '' };
     deleteRequest = {
-      id: selected.id,
-      title: selected.title || 'Untitled item',
-      replacementId: nextItemSelectionAfterRemoval(threads, selected.id),
+      id: item.id,
+      title: item.title || 'Untitled item',
+      replacementId: nextItemSelectionAfterRemoval(threads, item.id),
       returnFocus,
     };
   }
@@ -659,8 +796,15 @@
     if (!request || deleteState.status === 'deleting') return;
     deleteRequest = null;
     deleteState = { status: 'deleting', message: '' };
+    const selectedBefore = selectedId;
+    const deletingSelected = selectedBefore === request.id;
     const result = await deleteItem(request.id);
     if (result.ok) {
+      if (!deletingSelected) {
+        deleteState = { status: 'idle', message: '' };
+        requestAnimationFrame(() => viewRoot?.querySelector(`[data-thread-id="${CSS.escape(selectedId || request.replacementId || '')}"]`)?.focus({ preventScroll: true }));
+        return;
+      }
       const replacementId = threads.some((thread) => thread.id === request.replacementId)
         ? request.replacementId
         : null;
@@ -672,13 +816,19 @@
       return;
     }
 
-    setSelectedThreadId(threads.some((thread) => thread.id === request.id) ? request.id : null);
-    mobileStep = selectedId ? 'detail' : 'list';
+    if (deletingSelected) {
+      setSelectedThreadId(threads.some((thread) => thread.id === request.id) ? request.id : null);
+      mobileStep = selectedId ? 'detail' : 'list';
+    }
     deleteState = {
       status: 'error',
       message: itemDeletionFailureMessage(result.code),
     };
-    if (selectedId) requestAnimationFrame(() => viewRoot?.querySelector('.radar-thread-detail h2')?.focus());
+    requestAnimationFrame(() => {
+      const target = deletingSelected ? viewRoot?.querySelector('.radar-thread-detail h2')
+        : viewRoot?.querySelector(`[data-thread-id="${CSS.escape(request.id)}"]`) || request.returnFocus;
+      target?.focus({ preventScroll: true });
+    });
   }
 
   function preview(item) {
@@ -952,7 +1102,17 @@
 
 </script>
 
+{#if contextMenu && contextTarget}
+  {#key contextMenu}
+    <ThreadContextMenu title={contextTarget.title || 'Untitled item'} x={contextMenu.x} y={contextMenu.y}
+      origin={contextMenu.origin} entries={contextEntries} onchoose={chooseThreadAction} onclose={closeThreadMenu} />
+  {/key}
+{/if}
+
 <section class="command-view radar-workspace" aria-label="Radar workspace" bind:this={viewRoot}>
+  {#if deleteState.status === 'error'}
+    <p class="radar-change" role="alert" data-testid="radar-delete-error">{deleteState.message}</p>
+  {/if}
   <header class="command-view__heading radar-workspace__heading">
     <div>
       <span>WORK TRIAGE</span>
@@ -1132,6 +1292,7 @@
               aria-current={selectedId === item.id ? 'true' : undefined}
               tabindex={selectedId === item.id || (!selectedId && item.id === firstThreadId) ? 0 : -1}
               use:onkeydown={item}
+              on:contextmenu={(event) => openThreadMenu(event, item)}
               on:click={(event) => selectThread(item, event.currentTarget, { markRead: true })}>
               <span class="mailbox-row-topline radar-thread__top">
                 <span class="mailbox-unread-dot" aria-label={isMailboxUnread(item) ? 'Unread' : 'Read'}></span>
@@ -1403,9 +1564,6 @@
                   })}>I checked Teams; allow retry</button>
               {/if}
             </section>
-          {/if}
-          {#if deleteState.status === 'error'}
-            <p class="radar-change" role="alert" data-testid="radar-delete-error">{deleteState.message}</p>
           {/if}
         </section>
 

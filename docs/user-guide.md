@@ -174,6 +174,14 @@ Next to the counters:
 
 ## Radar View
 
+**Experimental thread menu:** Right-click a thread in Inbox, Priority, Monitored, Snoozed, Completed, or Archive, or focus its row and press **Context Menu** / **Shift+F10**. Opening or dismissing the menu does not select or mark the thread read, or discard another thread's draft. Actions always apply to the named thread. The existing toolbar and left-click behavior remain available.
+
+Use **Open thread**, **Mark read / unread**, **Change work status**, **Change criticality**, **Snooze for 24 hours / Unsnooze**, **Archive / Restore to In Progress**, or **Delete from FlightDeck…** (requires confirmation and never deletes M365 source content). Restore reopens work as In Progress; it does not automatically re-enable monitoring. Completed or archived work must be reopened before snoozing.
+
+Hover over **Change work status** or **Change criticality** to expand its choices beside the compact, opaque menu. Both menu levels use solid backgrounds in dark and light themes so thread content does not show through. Choices open to the left when needed to stay on screen. Clicking and keyboard navigation still work; narrow windows show the choices inside the menu instead.
+
+**Draft email / Teams message** opens that thread's existing Work plan editor and uses its selected available next move. Existing or busy drafts are exposed instead of regenerated; drafts on other threads remain untouched. Completed work cannot generate new drafts, but existing drafts can still be viewed. Nothing is sent or saved to Outlook automatically. Use arrow keys and Home/End within the menu; Right/Left opens/returns from status and criticality choices. Escape returns to the row (or the parent menu); clicking outside, scrolling elsewhere, resizing, or changing the view dismisses it.
+
 The Radar is FlightDeck's primary view. It shows **all your items** — both inbound signals discovered by scanners and items you're actively monitoring — organized into collapsible sections grouped by scanner.
 
 ![Radar view showing prioritized inbound signals organized as cards](screenshots/01-radar-view-dark.png)
