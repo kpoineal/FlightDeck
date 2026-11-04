@@ -451,7 +451,7 @@ export async function loadPersistentState(isDemo = false) {
       loadedItems = migratedItems.filter((entry) => !loadedDeletedItemIdSet.has(entry.id));
     }
 
-    // Trim oversized histories + enforce evidence caps + clear stale flags
+    // Trim oversized histories and enforce evidence caps.
     for (const item of loadedItems) {
       if (Array.isArray(item.updateHistory) && item.updateHistory.length > 20) {
         item.updateHistory = capItemUpdateHistory(item.updateHistory);
@@ -460,15 +460,10 @@ export async function loadPersistentState(isDemo = false) {
         item.evidenceLinks = item.evidenceLinks.slice(-MAX_EVIDENCE_LINKS_PER_ITEM);
       }
       if (item.lifecycleStatus === 'complete' || item.lifecycleStatus === 'archived') {
-        item.hasNewUpdate = false;
-        item.isNew = false;
         item.monitorEnabled = false;
         item.nextRunAt = null;
         if (!item.completedAt && item.lifecycleStatus === 'complete') {
           item.completedAt = item.lastChangedAt || new Date().toISOString();
-        }
-        if (Array.isArray(item.updateHistory)) {
-          item.updateHistory.forEach((e) => { e.seen = true; });
         }
       }
     }

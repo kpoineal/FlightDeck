@@ -2,7 +2,6 @@ const assert = require('node:assert/strict');
 const { expect } = require('@playwright/test');
 const fs = require('node:fs');
 const http = require('node:http');
-const os = require('node:os');
 const path = require('node:path');
 const { chromium } = require('playwright');
 
@@ -15,7 +14,7 @@ const EDGE_PATHS = [
 ];
 const FIXTURE_ITEM_ID = 'track_acme_renewal';
 const FIXTURE_ITEM_TITLE = 'Acme Corp — Master Services Agreement Renewal';
-const SCREENSHOT_DIR = path.join(os.tmpdir(), 'flightdeck-radar-acceptance');
+const SCREENSHOT_DIR = path.join(ROOT, 'test-results', 'radar-acceptance');
 const SCENARIO_FILTER = String(process.env.FLIGHTDECK_BROWSER_SCENARIO || '').trim();
 const results = [];
 const screenshotPaths = [];
@@ -644,6 +643,355 @@ async function scannerDeletionUnhydratedArchiveScenario(session) {
     coldPresent: false,
     coldTombstoned: true,
   });
+  await assertHealthy(session);
+}
+
+async function openThreadContext(page, id = FIXTURE_ITEM_ID, action = null) {
+  const row = page.locator(`[data-thread-id="${id}"]`);
+  await row.click({ button: 'right' });
+  const menu = page.getByTestId('thread-context-menu');
+  await expect(menu).toBeVisible();
+  if (action) await menu.getByRole('menuitem', { name: action, exact: true }).click();
+  return menu;
+}
+
+async function contextMenuAppearanceScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  const backgrounds = [];
+  for (const theme of ['dark', 'light']) {
+    await page.locator('html').evaluate((element, nextTheme) => element.setAttribute('data-theme', nextTheme), theme);
+    const menu = await openThreadContext(page);
+    const dimensions = await menu.boundingBox();
+    assert.ok(dimensions.width <= 232, `Context menu was too wide in ${theme}: ${dimensions.width}px`);
+    assert.ok(dimensions.height <= 300, `Context menu was too tall in ${theme}: ${dimensions.height}px`);
+    const targets = await menu.getByRole('menuitem').evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height));
+    assert.ok(targets.every((height) => height >= 28), `Context menu targets were too small in ${theme}: ${targets}`);
+    await menu.getByRole('menuitem', { name: 'Change work status', exact: true }).hover();
+    const submenu = menu.getByRole('menu', { name: `Change work status: ${FIXTURE_ITEM_TITLE}`, exact: true });
+    await expect(submenu).toBeVisible();
+    for (const panel of [menu, submenu]) {
+      const surface = await panel.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { background: style.backgroundColor, opacity: Number(style.opacity), width: element.getBoundingClientRect().width };
+      });
+      const alpha = surface.background.match(/[\d.]+/g)?.map(Number)?.[3] ?? 1;
+      assert.equal(alpha, 1, `Context menu was translucent in ${theme}: ${surface.background}`);
+      assert.equal(surface.opacity, 1, `Context menu reduced opacity in ${theme}`);
+      assert.ok(surface.width <= 232, `Context submenu was too wide in ${theme}: ${surface.width}px`);
+      backgrounds.push(surface.background);
+    }
+    fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+    const screenshotPath = path.join(SCREENSHOT_DIR, `context-menu-${theme}.png`);
+    await page.screenshot({ path: screenshotPath, fullPage: false });
+    screenshotPaths.push(screenshotPath);
+    process.stdout.write(`SCREENSHOT view=context-menu theme=${theme} width=${dimensions.width} height=${dimensions.height} path=${screenshotPath}\n`);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+  }
+  assert.equal(backgrounds[0], backgrounds[1], 'Dark context menu and submenu backgrounds differ');
+  assert.equal(backgrounds[2], backgrounds[3], 'Light context menu and submenu backgrounds differ');
+  assert.notEqual(backgrounds[0], backgrounds[2], 'Context menu did not adapt to the selected theme');
+  await page.locator('html').evaluate((element) => element.setAttribute('data-theme', 'dark'));
+  await assertHealthy(session);
+}
+
+async function contextMenuInteractionScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  const other = page.locator('.radar-thread').filter({ hasNotText: FIXTURE_ITEM_TITLE }).first();
+  await other.click();
+  const selectedId = await other.getAttribute('data-thread-id');
+  const row = page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`);
+  const before = await row.getAttribute('class');
+  let menu = await openThreadContext(page);
+  await expect(menu).toContainText(FIXTURE_ITEM_TITLE);
+  assert.equal(await row.getAttribute('class'), before);
+  await expect(page.locator('.radar-thread[aria-current="true"]')).toHaveAttribute('data-thread-id', selectedId);
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(row).toBeFocused();
+  await row.press('Shift+F10');
+  menu = page.getByTestId('thread-context-menu');
+  await expect(menu.getByRole('menuitem', { name: 'Open thread', exact: true })).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(menu.getByRole('menuitem', { name: 'Delete from FlightDeck…', exact: true })).toBeFocused();
+  await menu.getByRole('menuitem', { name: 'Open thread', exact: true }).dispatchEvent('pointerenter', { pointerType: 'mouse' });
+  await expect(menu.getByRole('menuitem', { name: 'Delete from FlightDeck…', exact: true })).toBeFocused();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowRight');
+  await expect(menu.getByRole('menu', { name: `Change work status: ${FIXTURE_ITEM_TITLE}`, exact: true })).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(menu.getByRole('menuitem', { name: 'Change work status', exact: true })).toBeFocused();
+  await menu.getByRole('menuitem', { name: 'Change work status', exact: true }).hover();
+  let submenu = menu.getByRole('menu', { name: `Change work status: ${FIXTURE_ITEM_TITLE}`, exact: true });
+  await expect(submenu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Change work status', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await submenu.getByRole('menuitem', { name: 'Waiting', exact: true }).hover();
+  await expect(submenu).toBeVisible();
+  await expect(page.locator('.radar-thread[aria-current="true"]')).toHaveAttribute('data-thread-id', selectedId);
+  assert.equal(await row.getAttribute('class'), before);
+  await menu.getByRole('menuitem', { name: 'Change criticality', exact: true }).hover();
+  submenu = menu.getByRole('menu', { name: `Change criticality: ${FIXTURE_ITEM_TITLE}`, exact: true });
+  await expect(submenu).toBeVisible();
+  await expect(menu.getByRole('menu', { name: `Change work status: ${FIXTURE_ITEM_TITLE}`, exact: true })).toHaveCount(0);
+  await submenu.getByRole('menuitem', { name: 'Elevated', exact: true }).hover();
+  await expect(submenu).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Open thread', exact: true }).hover();
+  await expect(submenu).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await row.press('ContextMenu');
+  await expect(menu).toBeVisible();
+  await page.getByLabel('Search Radar').click();
+  await expect(menu).toHaveCount(0);
+  await expect(page.getByLabel('Search Radar')).toBeFocused();
+  await openThreadContext(page);
+  await other.click({ button: 'right' });
+  await expect(menu).toContainText(await other.locator('strong').textContent());
+  await page.getByTestId('radar-view-priority').click();
+  await expect(menu).toHaveCount(0);
+  await page.getByTestId('radar-view-inbox').click();
+  for (const width of [1440, 360]) {
+    await page.setViewportSize({ width, height: 900 });
+    const threads = page.getByRole('button', { name: 'Threads', exact: true });
+    if (await threads.isVisible()) await threads.click();
+    await row.evaluate((node, { x, y }) => node.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: x, clientY: y,
+    })), { x: width - 1, y: 899 });
+    await expect(menu).toBeVisible();
+    await expect.poll(async () => {
+      const box = await menu.boundingBox();
+      return box.x >= 8 && box.y >= 8
+        && Math.abs(box.x + box.width - (width - 8)) <= 1
+        && Math.abs(box.y + box.height - 892) <= 1;
+    }).toBe(true);
+    const status = menu.getByRole('menuitem', { name: 'Change work status', exact: true });
+    await status.hover();
+    if (width > 960) {
+      submenu = menu.getByRole('menu', { name: `Change work status: ${FIXTURE_ITEM_TITLE}`, exact: true });
+      await expect(submenu).toBeVisible();
+      await expect.poll(async () => {
+        const box = await submenu.boundingBox();
+        const parentBox = await menu.boundingBox();
+        return {
+          horizontalOverflow: Math.max(8 - box.x, box.x + box.width - width + 8, 0),
+          verticalOverflow: Math.max(8 - box.y, box.y + box.height - 892, 0),
+          opensToLeft: box.x < parentBox.x,
+        };
+      }).toEqual({ horizontalOverflow: 0, verticalOverflow: 0, opensToLeft: true });
+      await submenu.getByRole('menuitem', { name: 'Waiting', exact: true }).hover();
+      await expect(submenu).toBeVisible();
+    } else {
+      await expect(status).toHaveAttribute('aria-expanded', 'false');
+      await status.click();
+      await expect(menu).toHaveAttribute('aria-label', `Change work status: ${FIXTURE_ITEM_TITLE}`);
+      await expect(menu.getByRole('menuitem', { name: 'Waiting', exact: true })).toBeVisible();
+    }
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await row.press('Shift+F10');
+    await page.locator('.radar-thread-detail').dispatchEvent('scroll');
+    await expect(menu).toHaveCount(0);
+    await row.press('Shift+F10');
+    await page.setViewportSize({ width: width - 1, height: 900 });
+    await expect(menu).toHaveCount(0);
+  }
+  await assertHealthy(session, 'mobile');
+}
+
+async function contextMenuPersistenceScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  const other = page.locator('.radar-thread').filter({ hasNotText: FIXTURE_ITEM_TITLE }).first();
+  await other.click();
+  const otherId = await other.getAttribute('data-thread-id');
+  const row = page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`);
+  let menu = await openThreadContext(page);
+  if (await menu.getByRole('menuitem', { name: 'Mark read', exact: true }).count()) {
+    await menu.getByRole('menuitem', { name: 'Mark read', exact: true }).click();
+    await expect(row).not.toHaveClass(/unread/);
+    menu = await openThreadContext(page);
+  }
+  await menu.getByRole('menuitem', { name: 'Mark unread', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(row).toHaveClass(/unread/);
+  await expect(other).toHaveAttribute('aria-current', 'true');
+  menu = await openThreadContext(page, FIXTURE_ITEM_ID, 'Change work status');
+  await menu.getByRole('menuitem', { name: 'Waiting', exact: true }).click();
+  menu = await openThreadContext(page, FIXTURE_ITEM_ID, 'Change criticality');
+  await menu.getByRole('menuitem', { name: 'Elevated', exact: true }).click();
+  await expect(row).toContainText('Elevated');
+  await page.waitForFunction(async ({ id, otherId }) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const item = state.items.find((item) => item.id === id);
+    return item.lifecycleStatus === 'waiting' && item.severity === 'Elevated'
+      && item.hasNewUpdate && state.items.some((item) => item.id === otherId);
+  }, { id: FIXTURE_ITEM_ID, otherId });
+  await openApp(session, { reseed: false });
+  await expect(row).toHaveClass(/unread/);
+  await expect(row).toContainText('Waiting');
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Snooze for 24 hours');
+  await expect(row).toHaveCount(0);
+  await page.getByTestId('radar-view-snoozed').click();
+  await expect(row).toBeVisible();
+  await openApp(session, { reseed: false });
+  await page.getByTestId('radar-view-snoozed').click();
+  await expect(row).toBeVisible();
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Unsnooze');
+  await expect(row).toHaveCount(0);
+  await page.getByTestId('radar-view-inbox').click();
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Archive');
+  await expect(row).toHaveCount(0);
+  await openApp(session, { reseed: false });
+  await page.getByTestId('radar-view-archived').click();
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Restore to In Progress');
+  await expect(row).toHaveCount(0);
+  await page.getByTestId('radar-view-inbox').click();
+  await expect(row).toContainText('In Progress');
+  await openApp(session, { reseed: false });
+  await expect(row).toBeVisible();
+  await expect(row).toHaveClass(/unread/);
+  for (const view of ['priority', 'monitored', 'completed']) {
+    // Seed only local bridge fixtures so every shared list projection is exercised.
+    await page.evaluate(async ({ id, view }) => {
+      const state = await window.workiq.storeGet('flightdeck.demo.v2');
+      const item = state.items.find((item) => item.id === id);
+      item.lifecycleStatus = view === 'completed' ? 'complete' : 'in-progress';
+      item.monitorEnabled = true;
+      item.severity = 'Critical';
+      await window.workiq.storeSet('flightdeck.demo.v2', state);
+    }, { id: FIXTURE_ITEM_ID, view });
+    await openApp(session, { reseed: false });
+    await page.getByTestId(`radar-view-${view}`).click();
+    menu = await openThreadContext(page);
+    await expect(menu).toContainText(FIXTURE_ITEM_TITLE);
+    if (view === 'completed') await expect(menu.getByRole('menuitem', { name: 'Draft email', exact: false })).toBeDisabled();
+    await page.keyboard.press('Escape');
+  }
+  await assertHealthy(session);
+}
+
+async function contextMenuDeleteScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  const other = page.locator('.radar-thread').filter({ hasNotText: FIXTURE_ITEM_TITLE }).first();
+  await other.click();
+  const otherId = await other.getAttribute('data-thread-id');
+  const row = page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`);
+  const confirm = page.getByTestId('confirm-modal');
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Delete from FlightDeck…');
+  await expect(confirm).toContainText(FIXTURE_ITEM_TITLE);
+  await confirm.getByTestId('confirm-cancel').click();
+  await expect(row).toBeFocused();
+  await expect(other).toHaveAttribute('aria-current', 'true');
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Delete from FlightDeck…');
+  await page.evaluate((id) => { window.__failDeletionForItemId = id; }, FIXTURE_ITEM_ID);
+  await confirm.getByTestId('confirm-submit').click();
+  await expect(page.getByTestId('radar-delete-error')).toContainText('Nothing was removed.');
+  await expect(row).toBeVisible();
+  await expect(other).toHaveAttribute('aria-current', 'true');
+  await expect(row).toBeFocused();
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Delete from FlightDeck…');
+  await confirm.getByTestId('confirm-submit').click();
+  await expect(row).toHaveCount(0);
+  await expect(page.locator('.radar-thread[aria-current="true"]')).toHaveAttribute('data-thread-id', otherId);
+  await openApp(session, { reseed: false });
+  await expect(row).toHaveCount(0);
+  await expect(page.locator('.radar-thread[aria-current="true"]')).toHaveCount(0);
+  await openThreadContext(page, otherId, 'Delete from FlightDeck…');
+  await confirm.getByTestId('confirm-cancel').click();
+  await expect(page.locator('.radar-thread[aria-current="true"]')).toHaveCount(0);
+  await openThreadContext(page, otherId, 'Delete from FlightDeck…');
+  await confirm.getByTestId('confirm-submit').click();
+  await expect(page.locator(`[data-thread-id="${otherId}"]`)).toHaveCount(0);
+  await expect(page.locator('.radar-thread[aria-current="true"]')).toHaveCount(0);
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0]);
+  await assertHealthy(session);
+}
+
+async function contextMenuDraftScenario(session) {
+  const { page } = session;
+  const moves = await prepareWorkPlanFixture(session);
+  await page.getByTestId('radar-next-move-1').check();
+  const other = page.locator('.radar-thread').filter({ hasNotText: FIXTURE_ITEM_TITLE }).first();
+  const otherId = await other.getAttribute('data-thread-id');
+  await other.click();
+  await page.evaluate(() => {
+    window.__pendingProposals = {};
+    window.workiq.proposeThreadActions = (context) => {
+      window.__proposalCalls.push(structuredClone(context));
+      return new Promise((resolve) => { window.__pendingProposals[context.thread.id] = { resolve, context }; });
+    };
+  });
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Draft email');
+  await expect(page.locator('.radar-thread[aria-current="true"]')).toHaveAttribute('data-thread-id', FIXTURE_ITEM_ID);
+  await expect(page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`)).toContainText('Drafting email');
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'View email');
+  assert.equal(await page.evaluate(() => window.__proposalCalls.length), 1);
+  await openThreadContext(page, otherId, 'Draft Teams message');
+  await expect(other).toContainText('Drafting Teams message');
+  assert.equal(await page.evaluate(() => window.__proposalCalls.length), 2);
+  await page.evaluate(() => {
+    for (const [id, { resolve, context }] of Object.entries(window.__pendingProposals)) {
+      resolve({ ok: true, result: {
+        schemaVersion: 1, recommendation: 'Confirm the window', confidence: 'high',
+        evidence: [{ kind: 'observed', text: 'Owner requested confirmation' }],
+        proposals: [{ channel: context.requestedChannel,
+          target: { displayName: 'Alex', address: 'alex@example.com' },
+          payload: context.requestedChannel === 'email'
+            ? { subject: 'Window', body: `Please confirm ${id}` } : { message: `Please confirm ${id}` },
+        }],
+      } });
+    }
+  });
+  const teams = page.getByTestId('teams-draft-editor');
+  await expect(teams).toBeVisible();
+  await teams.locator('textarea').fill('Keep my edited Teams message');
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'View email');
+  await expect(page.getByTestId('email-draft-message')).toHaveValue(`Please confirm ${FIXTURE_ITEM_ID}`);
+  await page.getByTestId('email-draft-message').fill('Keep my edited email');
+  await openThreadContext(page, otherId, 'View Teams message');
+  await expect(teams.locator('textarea')).toHaveValue('Keep my edited Teams message');
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'View email');
+  await expect(page.getByTestId('email-draft-message')).toHaveValue('Keep my edited email');
+  await openThreadContext(page, otherId);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('email-draft-message')).toHaveValue('Keep my edited email');
+  await expect(page.locator('.radar-thread[aria-current="true"]')).toHaveAttribute('data-thread-id', FIXTURE_ITEM_ID);
+  const calls = await page.evaluate(() => window.__proposalCalls);
+  assert.equal(calls.length, 2, 'Viewing existing drafts regenerated them');
+  assert.equal(calls[0].thread.id, FIXTURE_ITEM_ID);
+  assert.equal(calls[1].thread.id, otherId);
+  assert.equal(calls[0].requestedNextStep, moves[1], 'Menu draft omitted the selected work-plan move');
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0]);
+  await assertHealthy(session);
+}
+
+async function contextMenuColdScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  await page.evaluate(async (id) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const item = state.items.find((item) => item.id === id);
+    await window.workiq.setColdItems([{ ...item, lifecycleStatus: 'archived', status: 'Archived',
+      isNew: false, hasNewUpdate: false, archived: true, completed: true,
+      updateHistory: item.updateHistory.map((entry) => ({ ...entry, seen: true })) }]);
+    await window.workiq.storeSet('flightdeck.demo.v2', { ...state, items: state.items.filter((item) => item.id !== id) });
+  }, FIXTURE_ITEM_ID);
+  await openApp(session, { reseed: false });
+  await page.getByTestId('radar-view-archived').click();
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Mark unread');
+  const row = page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`);
+  await expect(row).toHaveClass(/unread/);
+  await openThreadContext(page, FIXTURE_ITEM_ID, 'Restore to In Progress');
+  await page.getByTestId('radar-view-inbox').click();
+  await expect(row).toBeVisible();
+  await expect(row).toHaveClass(/unread/);
+  await openApp(session, { reseed: false });
+  await expect(row).toBeVisible();
+  await expect(row).toHaveClass(/unread/);
   await assertHealthy(session);
 }
 
@@ -3406,6 +3754,12 @@ async function doneWhenEditingScenario(session, width) {
     await runScenario('scanner-delete-keep-and-reassign', browser, rendererServer.baseUrl, scannerDeletionReassignScenario);
     await runScenario('scanner-delete-all', browser, rendererServer.baseUrl, scannerDeletionDeleteAllScenario);
     await runScenario('scanner-delete-unhydrated-archive', browser, rendererServer.baseUrl, scannerDeletionUnhydratedArchiveScenario);
+    await runScenario('context-menu-appearance', browser, rendererServer.baseUrl, contextMenuAppearanceScenario);
+    await runScenario('context-menu-interaction', browser, rendererServer.baseUrl, contextMenuInteractionScenario);
+    await runScenario('context-menu-persistence', browser, rendererServer.baseUrl, contextMenuPersistenceScenario);
+    await runScenario('context-menu-delete', browser, rendererServer.baseUrl, contextMenuDeleteScenario);
+    await runScenario('context-menu-drafts', browser, rendererServer.baseUrl, contextMenuDraftScenario);
+    await runScenario('context-menu-cold', browser, rendererServer.baseUrl, contextMenuColdScenario);
     await runScenario('criticality-edit-and-persist', browser, rendererServer.baseUrl, criticalityScenario);
     await runScenario('completed-view-and-active-restore', browser, rendererServer.baseUrl, completedRestoreScenario);
     await runScenario('action-draft-cancel', browser, rendererServer.baseUrl, (session) => draftScenario(session, 'cancel'), { draftMode: 'cancel' });

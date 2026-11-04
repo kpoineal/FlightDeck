@@ -62,6 +62,7 @@ registerHooks({
 
 let get;
 let items;
+let coldItems;
 let history;
 let activeOperations;
 let createActionEventId;
@@ -283,13 +284,14 @@ function matchingPayload(overrides = {}) {
 
 before(async () => {
   ({ get } = await import('svelte/store'));
-  ({ items, history, activeOperations, connected, isDemo } = await import('../src/svelte/lib/stores.js'));
+  ({ items, coldItems, history, activeOperations, connected, isDemo } = await import('../src/svelte/lib/stores.js'));
   ({ createActionEventId, markItemRead, recordActionEvent, setItemLifecycle, setItemField } = await import('../src/svelte/lib/item-actions.js'));
   ({ runItemCheck, startMonitoringLoop, stopMonitoringLoop } = await import('../src/svelte/lib/monitor-engine.js'));
 });
 
 beforeEach(() => {
   items.set([]);
+  coldItems.set([]);
   history.set([]);
   activeOperations.set(new Map());
   connected.set(false);
@@ -312,6 +314,20 @@ beforeEach(() => {
 });
 
 describe('shared item actions', () => {
+  it('promotes an edited cold thread to canonical storage without changing another thread', () => {
+    const cold = monitoredItem({ id: 'cold-thread', lifecycleStatus: 'archived', archived: true, completed: true });
+    const active = monitoredItem();
+    items.set([active]);
+    coldItems.set([cold]);
+    assert.equal(setItemField('cold-thread', 'hasNewUpdate', true), true);
+    assert.equal(get(items).find((item) => item.id === 'cold-thread').hasNewUpdate, true);
+    assert.equal(get(items).find((item) => item.id === active.id), active);
+    assert.equal(setItemLifecycle('cold-thread', 'in-progress'), true);
+    assert.equal(get(items).find((item) => item.id === 'cold-thread').lifecycleStatus, 'in-progress');
+    assert.equal(get(items).find((item) => item.id === 'cold-thread').archived, false);
+    assert.equal(get(items).find((item) => item.id === 'cold-thread').completed, false);
+    assert.equal(globalThis.__mailboxTestSaveCalls, 2);
+  });
   it('saves edited completion criteria to the current storage mode without trimming typed text', () => {
     const doneCriteria = 'Legal approves the renewal.\nBoth parties sign. ';
     for (const demoMode of [false, true]) {

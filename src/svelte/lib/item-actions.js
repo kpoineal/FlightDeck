@@ -51,13 +51,30 @@ export const ACTION_EVENT_NAMES = Object.freeze(Object.keys(ACTION_EVENT_LABELS)
 
 function updateItem(itemId, updater) {
   let changed = false;
+  let changedItem;
+  const cold = !get(items).some((item) => item.id === itemId)
+    && !get(deletedItemIds).includes(itemId)
+    ? get(coldItems).find((item) => item.id === itemId) : null;
   items.update(($items) => $items.map((item) => {
     if (item.id !== itemId) return item;
     const updated = updater(item);
     changed = updated !== item;
+    if (changed) changedItem = updated;
     return updated;
   }));
-  if (changed) savePersistentState(get(isDemo));
+  if (cold) {
+    const updated = updater(cold);
+    if (updated !== cold) {
+      // Edited cold records rejoin canonical storage; hot records win over cold snapshots.
+      items.update(($items) => [updated, ...$items]);
+      changed = true;
+      changedItem = updated;
+    }
+  }
+  if (changed) {
+    coldItems.update(($coldItems) => $coldItems.map((item) => item.id === itemId ? changedItem : item));
+    savePersistentState(get(isDemo));
+  }
   return changed;
 }
 
@@ -67,7 +84,8 @@ export function setItemSeverity(itemId, severity) {
 
 export function setItemLifecycle(itemId, lifecycleStatus) {
   return updateItem(itemId, (item) => {
-    if (item.lifecycleStatus === lifecycleStatus) return item;
+    if (item.lifecycleStatus === lifecycleStatus
+      && (lifecycleStatus === 'archived' || (!item.archived && !item.completed))) return item;
 
     const changedAt = new Date().toISOString();
     const updateHistory = prependItemUpdateHistory(item.updateHistory, {
@@ -83,6 +101,7 @@ export function setItemLifecycle(itemId, lifecycleStatus) {
     const updated = {
       ...item,
       lifecycleStatus,
+      ...(lifecycleStatus !== 'archived' ? { archived: false, completed: false } : {}),
       status: LIFECYCLE_LABELS[lifecycleStatus] || item.status,
       lastChangedAt: changedAt,
       updateHistory,
