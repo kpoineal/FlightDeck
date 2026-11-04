@@ -8,6 +8,7 @@ FlightDeck is a personal work-intelligence dashboard that connects to Microsoft 
 
 - [First Launch](#first-launch)
 - [Dashboard Overview](#dashboard-overview)
+- [Today View](#today-view)
 - [Navigation](#navigation)
 - [KPI Summary Bar](#kpi-summary-bar)
 - [Radar View](#radar-view)
@@ -58,7 +59,7 @@ On subsequent launches, if you were previously connected, FlightDeck automatical
 
 ## Dashboard Overview
 
-When you launch FlightDeck, you'll see the main dashboard with three tabs: **Radar**, **Briefings**, and **History**. The active tab is highlighted in the top navigation bar.
+When you launch FlightDeck, you'll see the main dashboard with **Today**, **Radar**, **Briefings**, and **History** views. The active view is highlighted in the top navigation bar.
 
 ![FlightDeck Radar View — the main dashboard showing inbound signals prioritized by severity](screenshots/01-radar-view-dark.png)
 
@@ -67,6 +68,25 @@ The dashboard is organized into three horizontal zones:
 1. **Top bar** — App branding (with version badge), global search, tab navigation, theme toggle, and status pill
 2. **KPI summary** — At-a-glance severity counts, severity distribution bar, and item totals
 3. **Main content** — The active view's cards and details
+
+## Today View
+
+**Today** is a chart-led overview of existing tracked work: understand what is happening here, then open a thread in Radar to act.
+
+- **The shape of your work** is a status donut with exact counts for **In progress**, **Blocked**, **Waiting**, and **Unclassified**. Click a segment or its label to explore the underlying threads. Segments also support Enter/Space; the labels provide standard keyboard-accessible buttons.
+- **The deadline picture** compares **Overdue**, **Due today**, **Next 7 days**, **Later**, and **No valid deadline**. These buckets do not overlap: a deadline earlier today is overdue, not also due today. Date-only deadlines run through the end of that local calendar day; the next-seven-days bucket covers the seven calendar days after today. Missing or invalid dates are never invented.
+- **What has been moving** shows seven local calendar days of recorded new signals, updates, status changes, and verified communication actions. Click a day's bar to see its related threads. This is a count of retained events, not a historical snapshot of workload or a productivity score; zero means no events in the available history.
+- **Where work sits** shows active work grouped by saved scanner assignment, colored using the same status legend as the donut. It does not infer account/project names from thread titles. Unassigned or unavailable scanners are labeled explicitly; a long tail is grouped into **Other scanners**.
+- **Worth your attention** shows at most three distinct threads, with remaining due-today deadlines first, followed by critical/blocked work and follow-ups. Older deadlines are flagged for verification rather than automatically outranking everything newer. **Open thread** takes you to the existing Radar work plan and its Email/Teams editors.
+- **Today's schedule** uses the saved calendar data, with upcoming/ongoing meetings before earlier meetings. Selecting a meeting opens, expands, and focuses that specific meeting in Briefings. Use Briefings to refresh the calendar.
+- **Progress recorded today** shows timestamped thread completions and verified communication activity. **Teams message sent** and **Outlook draft created** are distinct outcomes; creating a draft does not mean an email was sent. Failed or unconfirmed attempts are excluded. Reopened threads do not count as currently completed.
+- **Review drafts** opens existing pending proposals in Actions; it does not manufacture another generic draft. Closing Actions returns focus to that button.
+
+Selecting a chart opens a single matching-thread list rather than duplicating threads across multiple task queues. **Clear selection** returns focus to the chart control. Status and deadline charts describe different dimensions of the same active work; do not add their totals together.
+
+Chart results (including **In progress**) and **Worth your attention** use the same compact thread cards. The default view shows badges, a title and next move of up to two lines each, owner, and a short deadline. **Show details** reveals the full title/next move, available summary, full deadline, scanner, and last recorded activity; **Hide details** collapses that card again. Expanding one card does not expand adjacent cards. Completed/archived threads do not suggest another next move. Use the title or **Open thread** to open the existing Radar work plan. Em dashes are removed from Today's displayed titles, without modifying saved source titles or navigation targets.
+
+Counts describe FlightDeck's locally available tracked records, not all activity in Microsoft 365. Snoozed, completed, archived, and deleted threads are excluded from active-work charts; retained activity can still include completed threads. Older events outside retained history are not reconstructed. The view refreshes its clock every minute and when the window regains focus, including across midnight. Opening Today or selecting charts does not issue Microsoft 365 reads or writes.
 
 ### WorkIQ activity and waiting
 
