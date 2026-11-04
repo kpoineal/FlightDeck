@@ -1435,11 +1435,238 @@ async function actionQueueReliabilityScenario(session, viewportWidth) {
   await assertHealthy(session, viewportWidth > 960 ? 'desktop' : 'mobile');
 }
 
+async function seedTodayDashboard(session) {
+  await session.page.evaluate(async () => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const base = state.items.find(item => item.id === 'track_acme_renewal');
+    const day = new Date();
+    const at = (offset, hour) => new Date(day.getFullYear(), day.getMonth(), day.getDate() + offset, hour).toISOString();
+    const task = (id, fields = {}) => ({
+      ...base, id, title: id, severity: 'Observe', lifecycleStatus: 'in-progress',
+      archived: false, dueAt: null, snoozeUntil: null, completedAt: null,
+      monitorEnabled: false, nextRunAt: null, lastChangedAt: at(0, 9), updateHistory: [],
+      suggestedNextSteps: ['Already completed move', 'Confirm the delivery date with the owner'],
+      completedNextSteps: ['Already completed move'], scannerId: 'today-customer',
+      ...fields, status: fields.lifecycleStatus || 'in-progress',
+    });
+    const confirmed = (proposalId, channel, code) => ({
+      kind: 'action', event: 'succeeded', proposalId, channel, code,
+      verification: 'runtime-backend-confirmed', timestamp: at(0, 9),
+      summary: channel === 'teams' ? 'Teams message sent' : 'Outlook draft created', seen: true,
+    });
+    await window.workiq.storeSet('flightdeck.demo.v2', {
+      ...state, actionProposals: [], deletedItemIds: [],
+      scanners: [
+        ...state.scanners,
+        { ...state.scanners[0], id: 'today-customer', name: 'Customer work' },
+        { ...state.scanners[0], id: 'today-internal', name: 'Internal work' },
+      ],
+      meetings: [
+        { ...state.meetings[0], id: 'today-meeting', title: 'Customer planning \u2014 sync', startAt: at(0, 15), endAt: at(0, 16) },
+        { ...state.meetings[0], id: 'tomorrow-meeting', title: 'Tomorrow planning', startAt: at(1, 15), endAt: at(1, 16) },
+      ],
+      items: [
+        task('today-overdue', { title: 'Overdue customer decision requiring a clear next move', dueAt: at(-1, 12), lifecycleStatus: 'blocked' }),
+        task('today-due', { title: 'Due today \u2014 confirm delivery and ownership', dueAt: at(0, 17) }),
+        ...Array.from({ length: 5 }, (_, index) => task(`today-extra-${index}`, {
+          dueAt: at(0, 18),
+          ...(index === 0 ? {
+            title: 'Review the customer migration plan and confirm the remaining delivery dependencies. '.repeat(4),
+            suggestedNextSteps: ['Already completed move', 'Confirm the delivery dependencies with the customer and record the next milestone. '.repeat(12)],
+          } : {}),
+        })),
+        task('today-waiting', { title: 'Waiting for the customer response', lifecycleStatus: 'waiting', scannerId: 'today-internal',
+          updateHistory: [confirmed('today-sent', 'teams', 'SEND_CONFIRMED')] }),
+        task('today-future', { title: 'Tomorrow, not today', dueAt: at(1, 12), scannerId: 'today-internal',
+          updateHistory: [confirmed('today-draft', 'outlook-draft', 'DRAFT_SAVED')] }),
+        task('today-snoozed', { title: 'Snoozed work stays out of Today', dueAt: at(-1, 12), snoozeUntil: at(1, 12) }),
+        task('today-completed', { title: 'Completed delivery check', lifecycleStatus: 'complete',
+          completedAt: at(-5, 9), updateHistory: [{ kind: 'lifecycle', summary: 'Status changed to complete', timestamp: at(0, 9), seen: true }] }),
+        task('today-reopened', { title: 'Reopened thread is not completed', completedAt: at(0, 9) }),
+      ],
+    });
+  });
+  await session.page.goto(`${session.baseUrl}/app.html?demo=1`, { waitUntil: 'domcontentloaded' });
+  await session.page.getByRole('button', { name: 'Today', exact: true }).click();
+  await expect(session.page.getByTestId('today-completed-count')).toHaveText('1');
+}
+
+async function todayDashboardScenario(session, width) {
+  await openApp(session);
+  await session.page.clock.install({ time: new Date(2026, 10, 2, 12) });
+  await seedTodayDashboard(session);
+  const { page } = session;
+  await expect(page.getByTestId('today-active-count')).toHaveText('10');
+  await expect(page.getByTestId('today-overdue-count')).toHaveText('1');
+  await expect(page.getByTestId('today-due-count')).toHaveText('6');
+  await expect(page.getByTestId('today-blocked-count')).toHaveText('2');
+  await expect(page.locator('.next-move h2')).toHaveText('Due today confirm delivery and ownership');
+  await expect(page.locator('.next-move')).toContainText('Confirm the delivery date with the owner');
+  await expect(page.locator('.next-move')).not.toContainText('Already completed move');
+  await expect(page.getByTestId('today-attention').locator('article')).toHaveCount(3);
+  const selection = page.getByTestId('today-chart-selection');
+  const blockedSegment = page.getByRole('button', { name: 'Blocked: 1 threads', exact: true });
+  await blockedSegment.focus();
+  await blockedSegment.press('Enter');
+  await expect(selection.locator('[data-item-id]')).toHaveCount(1);
+  await expect(selection.locator('[data-item-id="today-overdue"]')).toBeVisible();
+  await selection.getByRole('button', { name: 'Clear selection', exact: true }).click();
+  assert.equal(await blockedSegment.evaluate(element => element === document.activeElement), true, 'Clearing chart selection did not restore segment focus');
+  await page.getByTestId('today-deadline-today').click();
+  await expect(selection.locator('[data-item-id]')).toHaveCount(6);
+  await expect(selection.locator('[data-item-id="today-overdue"]')).toHaveCount(0);
+  await expect(page.getByTestId('today-deadline-today')).toHaveAttribute('aria-pressed', 'true');
+  const selectedCard = selection.locator('[data-item-id="today-due"]');
+  await expect(selectedCard.locator('.today-thread-card__next')).toContainText('Confirm the delivery date with the owner');
+  assert.deepEqual(await selectedCard.locator('dt').allTextContents(), ['Owner', 'Deadline', 'Scanner', 'Last activity']);
+  await expect(selectedCard.locator('.today-thread-card__summary')).toBeHidden();
+  await expect(selectedCard.locator('.today-thread-card__details--secondary')).toBeHidden();
+  const compactHeight = await selectedCard.evaluate(card => card.getBoundingClientRect().height);
+  const compactHeights = await selection.locator('.today-thread-card').evaluateAll(cards =>
+    cards.map(card => card.getBoundingClientRect().height));
+  assert.ok(Math.max(...compactHeights) <= (width > 960 ? 260 : 330),
+    `Compact thread cards exceeded the height budget at ${width}px: ${compactHeights.join(', ')}`);
+  const neighbor = selection.locator('[data-item-id="today-extra-0"]');
+  const neighborHeight = await neighbor.evaluate(card => card.getBoundingClientRect().height);
+  const toggle = selectedCard.getByRole('button', { name: 'Show details', exact: true });
+  await toggle.focus();
+  await toggle.press('Enter');
+  await expect(selectedCard.getByRole('button', { name: 'Hide details', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await expect(selectedCard.locator('.today-thread-card__summary')).toBeVisible();
+  await expect(selectedCard.locator('.today-thread-card__details--secondary')).toContainText('Customer work');
+  const expandedHeight = await selectedCard.evaluate(card => card.getBoundingClientRect().height);
+  assert.ok(expandedHeight >= compactHeight * 1.35, `Details did not meaningfully reduce default card size: ${compactHeight}px / ${expandedHeight}px`);
+  assert.ok(Math.abs(await neighbor.evaluate(card => card.getBoundingClientRect().height) - neighborHeight) <= 1,
+    'Expanding one card stretched the neighboring card');
+  await selectedCard.getByRole('button', { name: 'Hide details', exact: true }).click();
+  await expect(selectedCard.locator('.today-thread-card__summary')).toBeHidden();
+  assert.ok(Math.abs(await selectedCard.evaluate(card => card.getBoundingClientRect().height) - compactHeight) <= 1,
+    'Collapsing details did not restore compact height');
+  const nextMoveSize = await neighbor.locator('.today-thread-card__next p').evaluate(element => ({
+    height: element.clientHeight, fullHeight: element.scrollHeight, lineHeight: parseFloat(getComputedStyle(element).lineHeight),
+  }));
+  assert.ok(nextMoveSize.height <= nextMoveSize.lineHeight * 2 + 1 && nextMoveSize.fullHeight > nextMoveSize.height,
+    'Long next moves were not compacted to two lines');
+  await neighbor.getByRole('button', { name: 'Show details', exact: true }).click();
+  assert.equal(await neighbor.locator('.today-thread-card__next p').evaluate(element => element.scrollHeight <= element.clientHeight + 1), true,
+    'Expanded details still clip the full next move');
+  await neighbor.getByRole('button', { name: 'Hide details', exact: true }).click();
+  const uniqueDetails = await page.locator('.today-thread-card button[aria-controls]').evaluateAll(buttons => {
+    const ids = buttons.map(button => button.getAttribute('aria-controls'));
+    return new Set(ids).size === ids.length && ids.every(id => document.getElementById(id));
+  });
+  assert.equal(uniqueDetails, true, 'Duplicate thread cards share a details control ID');
+  process.stdout.write(`COMPACT_CARD width=${width} compact=${compactHeight}px expanded=${expandedHeight}px\n`);
+  await expect(selectedCard.locator('.today-thread-card__badges')).toContainText('In Progress');
+  await expect(selectedCard.locator('h2')).toHaveText('Due today confirm delivery and ownership');
+  const cardStyles = await page.locator('.next-move, [data-testid="today-chart-selection"] [data-item-id="today-due"]').evaluateAll(cards =>
+    cards.map(card => {
+      const style = getComputedStyle(card);
+      return { border: style.borderTopWidth, radius: style.borderRadius, background: style.backgroundColor, padding: style.padding };
+    }));
+  assert.equal(cardStyles.length, 2);
+  assert.deepEqual(cardStyles[0], cardStyles[1], 'Selected threads and attention threads have different base card styling');
+  assert.ok(parseFloat(cardStyles[0].border) >= 1 && parseFloat(cardStyles[0].radius) >= 6, 'Thread cards lack distinct boundaries');
+  const clippedCard = await selection.locator('.today-thread-card').evaluateAll(cards =>
+    cards.some(card => card.scrollWidth > card.clientWidth + 1));
+  assert.equal(clippedCard, false, 'A selected thread card has horizontal overflow');
+  await selectedCard.getByRole('button', { name: 'Open thread', exact: true }).click();
+  await expect(page.locator('.radar-thread-detail h2')).toContainText('Due today \u2014 confirm delivery and ownership');
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByTestId('today-scanner-chart').getByRole('button', { name: /Internal work/ }).click();
+  await expect(selection.locator('[data-item-id]')).toHaveCount(2);
+  await expect(selection.locator('[data-item-id="today-future"]')).toBeVisible();
+  await page.getByTestId('today-activity-2026-11-02').click();
+  await expect(selection.locator('[data-item-id="today-completed"]')).toBeVisible();
+  await expect(selection.locator('[data-item-id="today-completed"] .today-thread-card__next')).toHaveCount(0);
+  await selection.getByRole('button', { name: 'Clear selection', exact: true }).click();
+  await expect(selection).toHaveCount(0);
+  const progress = page.getByTestId('today-progress');
+  await expect(progress.locator('.today-progress-row')).toHaveCount(3);
+  await expect(progress).toContainText('Teams message sent');
+  await expect(progress).toContainText('Outlook draft created');
+  await expect(progress).not.toContainText('Reopened thread is not completed');
+  await expect(page.getByRole('button', { name: 'Review drafts (0)', exact: true })).toBeDisabled();
+  const hasEmDash = await page.getByTestId('today-dashboard').locator('h1, h2, header p, .today-meeting-row strong, .today-progress-row strong').evaluateAll(elements =>
+    elements.some(element => element.textContent.includes('\u2014')));
+  assert.equal(hasEmDash, false, 'Today titles or section subtitles still contain em dashes');
+  const dimensions = await page.getByTestId('today-dashboard').evaluate(element => ({
+    scroll: element.scrollWidth, client: element.clientWidth,
+  }));
+  assert.ok(dimensions.scroll <= dimensions.client + 1, 'Today dashboard has horizontal overflow');
+  const invalidGeometry = await page.getByTestId('today-dashboard').locator('svg').evaluateAll(charts =>
+    charts.some(chart => [...chart.querySelectorAll('rect, circle')].some(element =>
+      ['width', 'height', 'stroke-dasharray', 'stroke-dashoffset'].some(name => /NaN|Infinity/.test(element.getAttribute(name) || '')))));
+  assert.equal(invalidGeometry, false, 'A chart rendered invalid geometry');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  const screenshotPath = path.join(SCREENSHOT_DIR, `today-dashboard-${width}.png`);
+  await page.screenshot({ path: screenshotPath, fullPage: true });
+  screenshotPaths.push(screenshotPath);
+  process.stdout.write(`SCREENSHOT view=today width=${width} path=${screenshotPath}\n`);
+  await assertHealthy(session, width <= 960 ? 'mobile' : 'desktop');
+
+  await page.getByTestId('today-status-waiting').click();
+  await selection.locator('[data-item-id="today-waiting"]').getByRole('button', { name: 'Open thread', exact: true }).click();
+  await page.locator('.radar-thread-detail h2').filter({ hasText: 'Waiting for the customer response' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await progress.getByRole('button').filter({ hasText: 'Completed delivery check' }).click();
+  await page.locator('.radar-thread-detail h2').filter({ hasText: 'Completed delivery check' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByTestId('today-schedule').getByRole('button', { name: /Customer planning sync/ }).click();
+  const meetingHeader = page.locator('[data-briefing-meeting-id="today-meeting"] .meeting-card__header');
+  await expect(meetingHeader).toHaveAttribute('aria-expanded', 'true');
+  assert.equal(await meetingHeader.evaluate(element => element === document.activeElement), true, 'Today calendar did not focus the selected meeting');
+  await assertHealthy(session, width <= 960 ? 'mobile' : 'desktop');
+}
+
+async function todayRolloverScenario(session) {
+  await openApp(session);
+  await session.page.clock.install({ time: new Date(2026, 10, 2, 23, 59, 30) });
+  await seedTodayDashboard(session);
+  await session.page.clock.fastForward(61_000);
+  await expect(session.page.getByTestId('today-completed-count')).toHaveText('0');
+  await expect(session.page.getByTestId('today-due-count')).toHaveText('1');
+  await expect(session.page.getByTestId('today-progress').locator('.today-progress-row')).toHaveCount(0);
+  await assertHealthy(session);
+}
+
+async function todayEmptyScenario(session) {
+  await openApp(session);
+  await session.page.evaluate(async () => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    await window.workiq.storeSet('flightdeck.demo.v2', {
+      ...state, actionProposals: [], meetings: [],
+      items: state.items.map(item => ({
+        ...item, lifecycleStatus: 'complete', completedAt: '2020-01-01T12:00:00Z',
+        updateHistory: [], monitorEnabled: false, nextRunAt: null,
+      })),
+    });
+  });
+  await session.page.goto(`${session.baseUrl}/app.html?demo=1`, { waitUntil: 'domcontentloaded' });
+  await session.page.getByRole('button', { name: 'Today', exact: true }).click();
+  await expect(session.page.getByTestId('today-clear')).toBeVisible();
+  await expect(session.page.getByTestId('today-active-count')).toHaveText('0');
+  await expect(session.page.getByTestId('today-status-blocked')).toBeDisabled();
+  await expect(session.page.getByTestId('today-deadline-overdue')).toBeDisabled();
+  await expect(session.page.getByTestId('today-scanner-chart')).toContainText('No active work to group yet');
+  await expect(session.page.getByTestId('today-schedule')).toContainText('No meetings saved for today');
+  await expect(session.page.getByTestId('today-progress')).toContainText('No completions recorded today yet');
+  await expect(session.page.getByRole('button', { name: 'Review drafts (0)', exact: true })).toBeDisabled();
+  await assertHealthy(session);
+}
+
 async function actionQueueSourceFocusScenario(session) {
   await openApp(session);
+  await selectFixtureThread(session.page);
+  await session.page.getByTestId('radar-draft-email').click();
+  await session.page.getByTestId('email-open-actions').click();
+  await session.page.getByTestId('action-queue').getByRole('button', { name: 'Close actions' }).click();
+  await session.page.getByTestId('action-queue').waitFor({ state: 'detached' });
 
   await session.page.getByRole('button', { name: 'Today', exact: true }).click();
-  const todayTrigger = session.page.locator('.today-view').getByRole('button', { name: 'Propose update', exact: true });
+  const todayTrigger = session.page.locator('.today-view').getByRole('button', { name: /^Review drafts \(\d+\)$/ });
+  await expect(todayTrigger).toBeEnabled();
   await todayTrigger.focus();
   await todayTrigger.click();
   const queue = session.page.getByTestId('action-queue');
@@ -1941,11 +2168,11 @@ async function externalRadarNavigationScenario(session) {
   await assertExternalRadarSelection(session.page, { id: FIXTURE_ITEM_ID, title: FIXTURE_ITEM_TITLE });
 
   await session.page.getByRole('button', { name: 'Today', exact: true }).click();
-  const todayTitle = (await session.page.locator('.next-move h2').textContent()).trim();
+  const todayId = await session.page.locator('.next-move').getAttribute('data-item-id');
+  const todayTarget = await session.page.evaluate(async (id) => (await window.workiq.storeGet('flightdeck.demo.v2'))?.items?.find((item) => item.id === id), todayId);
   await session.page.locator('.next-move').getByRole('button', { name: 'Open thread', exact: true }).click();
   await session.page.getByRole('heading', { name: 'Radar', exact: true }).waitFor({ state: 'visible' });
-  await session.page.locator('.radar-thread-detail h2').filter({ hasText: todayTitle }).waitFor({ state: 'visible' });
-  const todayTarget = await session.page.evaluate(async (title) => (await window.workiq.storeGet('flightdeck.demo.v2'))?.items?.find((item) => item.title === title), todayTitle);
+  await session.page.locator('.radar-thread-detail h2').filter({ hasText: todayTarget.title }).waitFor({ state: 'visible' });
   await assertExternalRadarSelection(session.page, todayTarget);
 
   await openApp(session, { reseed: false });
@@ -2008,16 +2235,16 @@ async function searchRadarNavigationScenario(session) {
 async function externalRadarNavigationMobileScenario(session) {
   await openApp(session);
   await session.page.getByRole('button', { name: 'Today', exact: true }).click();
-  const todayTitle = (await session.page.locator('.next-move h2').textContent()).trim();
+  const todayId = await session.page.locator('.next-move').getAttribute('data-item-id');
+  const todayTarget = await session.page.evaluate(async (id) => (await window.workiq.storeGet('flightdeck.demo.v2'))?.items?.find((item) => item.id === id), todayId);
   await session.page.locator('.next-move').getByRole('button', { name: 'Open thread', exact: true }).click();
   await session.page.getByRole('heading', { name: 'Radar', exact: true }).waitFor({ state: 'visible' });
-  await session.page.locator('.radar-thread-detail h2').filter({ hasText: todayTitle }).waitFor({ state: 'visible' });
-  const todayTarget = await session.page.evaluate(async (title) => (await window.workiq.storeGet('flightdeck.demo.v2'))?.items?.find((item) => item.title === title), todayTitle);
+  await session.page.locator('.radar-thread-detail h2').filter({ hasText: todayTarget.title }).waitFor({ state: 'visible' });
   await assertExternalRadarSelection(session.page, todayTarget, { mobile: true });
   await session.page.getByTestId('radar-detail-back').click();
   await session.page.locator('.radar-thread-list-pane.mobile-active').waitFor({ state: 'visible' });
   await session.page.waitForFunction((title) => [...document.querySelectorAll('.radar-thread')]
-    .some((element) => element.textContent.includes(title) && element.getAttribute('aria-current') === 'true'), todayTitle);
+    .some((element) => element.textContent.includes(title) && element.getAttribute('aria-current') === 'true'), todayTarget.title);
   await assertHealthy(session, 'mobile');
 }
 
@@ -2101,14 +2328,14 @@ async function coldExternalNavigationFailureScenario(session) {
   await session.page.getByRole('button', { name: 'Today', exact: true }).click();
   await session.page.evaluate((id) => window.__notificationCallback?.({ taskId: id }), setup.deletedId);
   await session.page.waitForTimeout(100);
-  assert.equal(await session.page.getByRole('heading', { name: 'Your next move', exact: true }).isVisible(), true,
+  assert.equal(await session.page.getByRole('heading', { name: 'Your day at a glance', exact: true }).isVisible(), true,
     'Deleted cold notification changed the active destination');
   assert.equal(await session.page.locator('.radar-thread-detail h2').count(), 0,
     'Deleted cold notification populated a detail pane');
 
   await session.page.evaluate((id) => window.__notificationCallback?.({ taskId: id }), setup.unavailableId);
   await session.page.waitForTimeout(100);
-  assert.equal(await session.page.getByRole('heading', { name: 'Your next move', exact: true }).isVisible(), true,
+  assert.equal(await session.page.getByRole('heading', { name: 'Your day at a glance', exact: true }).isVisible(), true,
     'Unavailable cold notification changed the active destination');
   await assertHealthy(session);
 }
@@ -3203,6 +3430,13 @@ async function doneWhenEditingScenario(session, width) {
         { viewport: { width, height: width === 1440 ? 1000 : 900 } });
     }
     await runScenario('action-queue-source-focus-restoration', browser, rendererServer.baseUrl, actionQueueSourceFocusScenario);
+    for (const width of [1440, 760, 360]) {
+      await runScenario(`today-dashboard-${width}`, browser, rendererServer.baseUrl,
+        session => todayDashboardScenario(session, width),
+        { viewport: { width, height: width === 1440 ? 1000 : 900 } });
+    }
+    await runScenario('today-midnight-rollover', browser, rendererServer.baseUrl, todayRolloverScenario);
+    await runScenario('today-empty-states', browser, rendererServer.baseUrl, todayEmptyScenario);
     await runScenario('proposal-missing-address-edit-state', browser, rendererServer.baseUrl, missingAddressScenario, { proposalMode: 'missing-address' });
     await runScenario('proposal-missing-recipient-retains-draft', browser, rendererServer.baseUrl,
       (session) => missingAddressScenario(session, true), { proposalMode: 'missing-recipient' });

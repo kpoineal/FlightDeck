@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 import { nextRadarSelectionAfterRemoval, reconcileRadarSelection } from '../src/svelte/lib/radar-selection.js';
 import { createThreadComposer } from '../src/svelte/lib/thread-composer.js';
+import { buildTodayDashboard } from '../src/svelte/lib/today.js';
 
 test('reconcileRadarSelection clears stale selected thread and resets detail view without altering filters', () => {
   const state = {
@@ -80,11 +81,11 @@ test('RadarView imports normalizeItem for the mounted Add Item path', () => {
 });
 
 test('Today urgent work uses the canonical blocked lifecycle regardless of severity', () => {
-  const source = fs.readFileSync(new URL('../src/svelte/components/TodayView.svelte', import.meta.url), 'utf8');
-  const urgent = source.match(/let urgent = \$derived\((.*?)\);/s)?.[1] || '';
-
-  assert.match(urgent, /item\.lifecycleStatus === 'blocked'/);
-  assert.doesNotMatch(urgent, /item\.isBlocked/);
+  const dashboard = buildTodayDashboard([
+    { id: 'blocked', severity: 'Observe', lifecycleStatus: 'blocked' },
+    { id: 'legacy-flag', severity: 'Critical', lifecycleStatus: 'in-progress', isBlocked: true },
+  ]);
+  assert.deepEqual(dashboard.blocked.map(item => item.id), ['blocked']);
 });
 
 test('Radar Teams review preserves and displays synthesis rationale, risk, and review note', async () => {
