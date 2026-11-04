@@ -42,3 +42,15 @@
 - Cleared merged inbox payloads after canonicalization to keep decision inbox focused on unmerged entries.
 - Added short session log for Ticket 3 Slice 1 implementation + reviewer approval.
 - Added dedicated orchestration logs for Goose and Merlin to capture implementation handoff and reviewer-gate disposition.
+
+### 2026-11-04 — Consolidated shipped-feature handoff and evidence boundaries
+
+- At Kyle Poineal's request, logged merged Email/Teams repair (#175), visual Today (#176), and shared Radar context menu (#177) through the configured Squad state backend only. Current supplied main is e7c8ef9af1a9b922e94cca7d716880e792e72256, clean and synchronized; no release tag or running-app restart. No pending session code tasks.
+- Read decisions.md and my history first. identity/now.md was absent and was created as a current handoff. Preserved all existing history and decisions; did not inspect/merge/delete unknown inbox entries or create policy.
+- Recorded only known actual agent execution: general-purpose inbox-context-menu, 44edaa12-d6d0-4c89-a1a4-cbd5132cb767, background frontend implementation. Hover flyout/compact opaque-surface refinements and commits/merge belong to coordinator; earlier agent identities are unknown.
+- Preserve validation precision: context-menu npm test 506 passed / 4 skipped, build and three PR checks passed. Browser coverage totals 101 scenarios across separate passing runs, NOT a clean unfiltered full run. Existing Briefings Action Queue focus-restoration assertion intermittently races requestAnimationFrame; isolated case passed, unrelated code/assertions unchanged. npm audit not run. Today had 504 passed / 4 skipped and 95/95 browser scenarios.
+- User prefers charts/visual overviews; existing decision 719cdfae-5504-4e36-9c5c-46017cb8e4f9 already covers it, so do not duplicate. Compact Today cards retain independent expansion; display-only title cleanup must preserve source text/IDs.
+- Snooze/mute remains unresolved: user expected quiet updates while retaining visible threads; shipped Snooze still hides from Inbox into Snoozed. User deferred choosing mute, both mute/Hide, or relabeling. This is not approved behavior or policy; ask before implementation.
+- No live M365 approval remains after the prior once-used approved Teams send; current feature tests mocked data. Further live writes require fresh explicit approval.
+- Useful menu regression detail: pointermove avoids layout-driven pointerenter focus theft; do not reopen an unchanged branch on every move. Both menu levels use opaque --bg-overlay-panel.
+- State keys: log/2026-11-04T22-58-48Z-today-and-inbox-context-menu.md; orchestration-log/2026-11-04T22-58-48Z-inbox-context-menu.md; agents/scribe/history.md; identity/now.md.
