@@ -1,19 +1,20 @@
 <script>
   import { onMount } from 'svelte';
-  import { items } from '../lib/stores.js';
+  import { items, coldItems } from '../lib/stores.js';
   import { severityClass, safeDate, relativeTime, signalRecencyLabel, unseenHistoryCount } from '../lib/utils.js';
   import { useClock } from '../lib/clock.svelte.js';
   import { LIFECYCLE_STATUSES, LIFECYCLE_LABELS } from '../lib/constants.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
   import SeverityPill from './SeverityPill.svelte';
+  import PersistenceBanner from './PersistenceBanner.svelte';
 
   let { itemId, onseveritychange, onmarkseen, ondelete, onschedulechange, onrunnow, onpromptchange } = $props();
 
   const RESIZE_STORAGE_KEY = 'flightdeck_popout_panel_ratio';
   const MIN_PANEL_PX = 250;
 
-  let item = $derived($items.find((entry) => entry.id === itemId) || null);
+  let item = $derived([...$items, ...$coldItems].find((entry) => entry.id === itemId) || null);
 
   const clock = useClock();
   $effect(() => { if (item) document.title = item.title || 'Tracked Item'; });
@@ -116,6 +117,7 @@
 </script>
 
 <div class="popout-container">
+  <PersistenceBanner />
   {#if !item}
     <div class="popout-empty">This tracked item no longer exists.</div>
   {:else}

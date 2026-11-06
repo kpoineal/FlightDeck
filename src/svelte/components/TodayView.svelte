@@ -1,6 +1,7 @@
 <script>
   import { onMount, tick } from 'svelte';
-  import { actionProposals, coldItems, deletedItemIds, expandedBriefingMeetingIds, items, meetings, mode, openActionsQueue, scanners, selectedProposalId } from '../lib/stores.js';
+  import { actionProposals, coldItems, deletedItemIds, expandedBriefingMeetingIds, items, meetings, mode, openActionsQueue, scanners, selectedProposalId, repositoryRevision } from '../lib/stores.js';
+  import { usesRepository } from '../lib/persistence.js';
   import { safeDate } from '../lib/utils.js';
   import { navigateToRadarItem } from '../lib/radar-navigation.js';
   import { buildTodayOverview, formatTodayTitle, todaySelectionItems } from '../lib/today.js';
@@ -15,13 +16,41 @@
   let selectionOrigin = null;
   let showAll = $state(false);
   let showMeetings = $state(false);
-  let dashboard = $derived(buildTodayOverview([...$coldItems, ...$items], {
+  const database = usesRepository();
+  let savedOverview = $state(null);
+  let selectionPage = $state(null);
+  let selectionOffset = $state(0);
+  let queryError = $state('');
+  let dashboard = $derived(savedOverview || buildTodayOverview([...$coldItems, ...$items], {
     now, deletedIds: $deletedItemIds, scanners: $scanners, meetings: $meetings,
   }));
-  let selectedItems = $derived(todaySelectionItems(dashboard, selection));
-  let dueToday = $derived(dashboard.deadlines.find(bucket => bucket.key === 'today').items.length);
-  let maxDeadline = $derived(Math.max(1, ...dashboard.deadlines.map(bucket => bucket.items.length)));
-  let maxGroup = $derived(Math.max(1, ...dashboard.groups.map(bucket => bucket.items.length)));
+  let selectedItems = $derived(database ? selectionPage?.rows || [] : todaySelectionItems(dashboard, selection));
+  const bucketCount = bucket => bucket?.count ?? bucket?.items?.length ?? 0;
+  let activeCount = $derived(dashboard.activeCount ?? dashboard.active.length);
+  let overdueCount = $derived(dashboard.overdueCount ?? dashboard.overdue.length);
+  let completedCount = $derived(dashboard.completedCount ?? dashboard.completed.length);
+  let dueToday = $derived(bucketCount(dashboard.deadlines.find(bucket => bucket.key === 'today')));
+  let maxDeadline = $derived(Math.max(1, ...dashboard.deadlines.map(bucketCount)));
+  let maxGroup = $derived(Math.max(1, ...dashboard.groups.map(bucketCount)));
+  $effect(() => {
+    if (!database) return;
+    const revision = $repositoryRevision;
+    const time = now;
+    let active = true;
+    void window.workiq.stateQuery('today', { now: time }).then(result => {
+      if (active) { savedOverview = result; queryError = ''; }
+    }).catch(() => { if (active) queryError = 'Could not load the saved Today overview.'; });
+    return () => { active = false; };
+  });
+  $effect(() => {
+    if (!database || !selection) return;
+    const revision = $repositoryRevision;
+    const input = { selection: { kind: selection.kind, key: selection.key }, now, offset: selectionOffset, limit: 100 };
+    let active = true;
+    void window.workiq.stateQuery('today', input).then(result => { if (active) selectionPage = result; })
+      .catch(() => { if (active) queryError = 'Could not load this selection.'; });
+    return () => { active = false; };
+  });
   let maxActivity = $derived(Math.max(1, ...dashboard.activity.map(day => eventTotal(day))));
   let activityCount = $derived(dashboard.activity.reduce((total, day) => total + eventTotal(day), 0));
   let schedule = $derived([...dashboard.schedule].sort((left, right) =>
@@ -50,11 +79,12 @@
   }
 
   function segmentOffset(index) {
-    return dashboard.statuses.slice(0, index).reduce((total, bucket) => total + bucket.items.length, 0)
-      / Math.max(1, dashboard.active.length) * -100;
+    return dashboard.statuses.slice(0, index).reduce((total, bucket) => total + bucketCount(bucket), 0)
+      / Math.max(1, activeCount) * -100;
   }
 
   function groupCount(group, key) {
+    if (group.statusCounts) return group.statusCounts[key] || 0;
     return group.items.filter(item => (['in-progress', 'blocked', 'waiting'].includes(item.lifecycleStatus)
       ? item.lifecycleStatus : 'unknown') === key).length;
   }
@@ -75,6 +105,8 @@
     if (selected(kind, bucket.key)) return clearSelection();
     selectionOrigin = origin;
     selection = { kind, key: bucket.key, label: bucket.label };
+    selectionOffset = 0;
+    selectionPage = null;
     showAll = false;
     await tick();
     document.getElementById('today-selection-heading')?.focus();
@@ -110,11 +142,12 @@
 </script>
 
 <section class="command-view today-view" aria-label="Today" data-testid="today-dashboard">
+  {#if queryError}<p role="alert">{queryError}</p>{/if}
   <header class="command-view__heading today-heading">
     <div>
       <span>{new Date(now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}</span>
       <h1>Your day at a glance</h1>
-      <p>{dashboard.active.length} active threads · {dueToday} deadlines remaining today · {dashboard.schedule.length} meetings on your saved calendar.</p>
+      <p>{activeCount} active threads · {dueToday} deadlines remaining today · {dashboard.schedule.length} meetings on your saved calendar.</p>
     </div>
     <div class="command-buttons">
       <button type="button" class="small-btn" disabled={!approvals.length} onclick={event => reviewDrafts(event.currentTarget)}>Review drafts ({approvals.length})</button>
@@ -123,10 +156,10 @@
   </header>
 
   <dl class="today-stats" aria-label="Today's work at a glance">
-    <div><dt>Active threads</dt><dd data-testid="today-active-count">{dashboard.active.length}</dd><dd class="today-stat-caption">Excludes snoozed and finished work</dd></div>
-    <div class:has-attention={dashboard.overdue.length > 0}><dt>Overdue</dt><dd data-testid="today-overdue-count">{dashboard.overdue.length}</dd><dd class="today-stat-caption">Recorded deadlines in the past</dd></div>
+    <div><dt>Active threads</dt><dd data-testid="today-active-count">{activeCount}</dd><dd class="today-stat-caption">Excludes snoozed and finished work</dd></div>
+    <div class:has-attention={overdueCount > 0}><dt>Overdue</dt><dd data-testid="today-overdue-count">{overdueCount}</dd><dd class="today-stat-caption">Recorded deadlines in the past</dd></div>
     <div><dt>Due today</dt><dd data-testid="today-due-count">{dueToday}</dd><dd class="today-stat-caption">Still ahead, not already overdue</dd></div>
-    <div class="today-stat-complete"><dt>Completed today</dt><dd data-testid="today-completed-count">{dashboard.completed.length}</dd><dd class="today-stat-caption">Threads marked complete</dd></div>
+    <div class="today-stat-complete"><dt>Completed today</dt><dd data-testid="today-completed-count">{completedCount}</dd><dd class="today-stat-caption">Threads marked complete</dd></div>
   </dl>
 
   <div class="today-chart-grid">
@@ -136,27 +169,27 @@
         <svg class="today-donut" viewBox="0 0 160 160" role="group" aria-label="Active workload by status">
           <circle class="today-chart-track" cx="80" cy="80" r="58" fill="none" stroke-width="16" />
           {#each dashboard.statuses as bucket, index (bucket.key)}
-            {#if bucket.items.length}
+            {#if bucketCount(bucket)}
               <circle class="today-donut-segment today-color-{bucket.key}" cx="80" cy="80" r="58" fill="none"
                 stroke-width="16" pathLength="100" transform="rotate(-90 80 80)"
-                stroke-dasharray={`${bucket.items.length / dashboard.active.length * 100} ${100 - bucket.items.length / dashboard.active.length * 100}`}
+                stroke-dasharray={`${bucketCount(bucket) / activeCount * 100} ${100 - bucketCount(bucket) / activeCount * 100}`}
                 stroke-dashoffset={segmentOffset(index)} role="button" tabindex="0"
-                aria-label={`${bucket.label}: ${bucket.items.length} threads`} aria-pressed={selected('status', bucket.key)}
+                aria-label={`${bucket.label}: ${bucketCount(bucket)} threads`} aria-pressed={selected('status', bucket.key)}
                 onclick={event => selectBucket('status', bucket, event.currentTarget)}
-                onkeydown={event => activateSegment(event, bucket)}><title>{bucket.label}: {bucket.items.length} threads</title></circle>
+                onkeydown={event => activateSegment(event, bucket)}><title>{bucket.label}: {bucketCount(bucket)} threads</title></circle>
             {/if}
           {/each}
-          <text x="80" y="79" class="today-donut-total" text-anchor="middle" aria-hidden="true">{dashboard.active.length}</text>
+          <text x="80" y="79" class="today-donut-total" text-anchor="middle" aria-hidden="true">{activeCount}</text>
           <text x="80" y="98" class="today-donut-caption" text-anchor="middle" aria-hidden="true">active threads</text>
         </svg>
         <div class="today-chart-legend">
           {#each dashboard.statuses as bucket (bucket.key)}
-            <button type="button" disabled={!bucket.items.length} aria-pressed={selected('status', bucket.key)}
+            <button type="button" disabled={!bucketCount(bucket)} aria-pressed={selected('status', bucket.key)}
               data-testid="today-status-{bucket.key}" onclick={event => selectBucket('status', bucket, event.currentTarget)}>
-              <span class="today-swatch today-color-{bucket.key}"></span><span>{bucket.label}</span><strong>{bucket.items.length}</strong>
+              <span class="today-swatch today-color-{bucket.key}"></span><span>{bucket.label}</span><strong>{bucketCount(bucket)}</strong>
             </button>
           {/each}
-          <p><span data-testid="today-blocked-count">{dashboard.blocked.length}</span> blocked or waiting. Status groups do not overlap.</p>
+          <p><span data-testid="today-blocked-count">{dashboard.blockedCount ?? dashboard.blocked.length}</span> blocked or waiting. Status groups do not overlap.</p>
         </div>
       </div>
     </section>
@@ -165,12 +198,12 @@
       <header><div><h2 id="today-deadlines-heading">The deadline picture</h2><p>Each active thread belongs to one bucket. Today means deadlines still ahead.</p></div></header>
       <div class="today-horizontal-chart">
         {#each dashboard.deadlines as bucket (bucket.key)}
-          <button type="button" class="today-chart-row" disabled={!bucket.items.length} aria-pressed={selected('deadline', bucket.key)}
+          <button type="button" class="today-chart-row" disabled={!bucketCount(bucket)} aria-pressed={selected('deadline', bucket.key)}
             data-testid="today-deadline-{bucket.key}" onclick={event => selectBucket('deadline', bucket, event.currentTarget)}>
-            <span class="today-chart-row-label">{bucket.label}</span><strong>{bucket.items.length}</strong>
+            <span class="today-chart-row-label">{bucket.label}</span><strong>{bucketCount(bucket)}</strong>
             <svg viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
               <rect class="today-chart-track" width="100" height="8" rx="3" />
-              <rect class="today-color-deadline-{bucket.key}" width={bucket.items.length / maxDeadline * 100} height="8" rx="3" />
+              <rect class="today-color-deadline-{bucket.key}" width={bucketCount(bucket) / maxDeadline * 100} height="8" rx="3" />
             </svg>
           </button>
         {/each}
@@ -182,7 +215,7 @@
       <div class="today-activity-chart">
         {#each dashboard.activity as day (day.key)}
           <button type="button" class="today-activity-day" disabled={!eventTotal(day)} aria-pressed={selected('activity', day.key)}
-            aria-label={`${day.label}: ${eventTotal(day)} recorded events across ${day.items.length} threads`}
+            aria-label={`${day.label}: ${eventTotal(day)} recorded events across ${bucketCount(day)} threads`}
             data-testid="today-activity-{day.key}" onclick={event => selectBucket('activity', day, event.currentTarget)}>
             <svg viewBox="0 0 44 120" aria-hidden="true">
               <rect class="today-chart-track" x="8" y="10" width="28" height="100" rx="3" />
@@ -207,7 +240,7 @@
         {#each dashboard.groups as group (group.key)}
           <button type="button" class="today-chart-row" aria-pressed={selected('scanner', group.key)}
             onclick={event => selectBucket('scanner', group, event.currentTarget)}>
-            <span class="today-chart-row-label">{formatTodayTitle(group.label)}</span><strong>{group.items.length}</strong>
+            <span class="today-chart-row-label">{formatTodayTitle(group.label)}</span><strong>{bucketCount(group)}</strong>
             <svg viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
               <rect class="today-chart-track" width="100" height="8" rx="3" />
               {#each dashboard.statuses as bucket, index (bucket.key)}
@@ -222,13 +255,19 @@
 
   {#if selection}
     <section class="today-panel today-selection" data-testid="today-chart-selection" aria-labelledby="today-selection-heading">
-      <header><div><h2 id="today-selection-heading" tabindex="-1">{formatTodayTitle(selection.label)}</h2><p aria-live="polite">{selectedItems.length} matching threads · open a thread to review its work plan.</p></div><button type="button" class="small-btn" onclick={clearSelection}>Clear selection</button></header>
+      <header><div><h2 id="today-selection-heading" tabindex="-1">{formatTodayTitle(selection.label)}</h2><p aria-live="polite">{database ? selectionPage?.total || 0 : selectedItems.length} matching threads · open a thread to review its work plan.</p></div><button type="button" class="small-btn" onclick={clearSelection}>Clear selection</button></header>
       <div class="today-selection-list">
         {#each (showAll ? selectedItems : selectedItems.slice(0, 8)) as item (item.id)}
           <TodayThreadCard {item} {now} scannerName={$scanners.find(scanner => scanner.id === item.scannerId)?.name || ''} />
         {:else}<p class="command-empty">No threads remain in this selection. Clear it to explore the current overview.</p>{/each}
       </div>
       {#if selectedItems.length > 8}<button type="button" class="small-btn today-show-all" aria-expanded={showAll} onclick={() => { showAll = !showAll; }}>{showAll ? 'Show fewer threads' : `Show all ${selectedItems.length} threads`}</button>{/if}
+      {#if database}
+        <nav aria-label="Today selection pages">
+          <button class="small-btn" disabled={selectionOffset === 0} onclick={() => { selectionOffset = Math.max(0, selectionOffset - 100); }}>Previous threads</button>
+          <button class="small-btn" disabled={!selectionPage?.more} onclick={() => { selectionOffset += 100; }}>Next threads</button>
+        </nav>
+      {/if}
     </section>
   {/if}
 

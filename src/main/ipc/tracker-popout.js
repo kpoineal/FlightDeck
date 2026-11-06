@@ -29,7 +29,8 @@ function registerTrackerPopoutIpc(getMainWindow, popoutWindows) {
       popoutWindows.delete(popout);
     });
 
-    popout.loadFile(path.join(DIST_RENDERER, 'popout.html'), { query: { popout: String(itemId) } });
+    const demo = process.argv.includes('--demo') || process.argv.includes('--demo-reseed');
+    popout.loadFile(path.join(DIST_RENDERER, 'popout.html'), { query: { popout: String(itemId), ...(demo ? { demo: '1' } : {}) } });
     return { success: true };
   });
 

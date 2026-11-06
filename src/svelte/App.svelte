@@ -1,14 +1,17 @@
 <script>
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
+  import { stateDiagnostics as diagnostics } from './lib/state-diagnostics.js';
   import { get } from 'svelte/store';
-  import { mode, connected, deletedItemIds, history as historyStore, isDemo, actionProposals } from './lib/stores.js';
+  import { mode, connected, history as historyStore, isDemo, actionProposals } from './lib/stores.js';
+  import { applyConnectionStatus, validateConnection, getConnectionGeneration } from './lib/connection.js';
   import {
     cancelScheduledPersistentStateSave,
     loadPersistentState,
     savePersistentState,
-    schedulePersistentStateSave,
     seedDemoFixture,
     pruneStaleBriefings,
+    subscribePersistentState,
+    flushPersistentState,
   } from './lib/persistence.js';
   import { items, scanners, meetings, meetingsLastFetched, briefingsByMeetingId, briefingSeenAt,
     density, filter, collapsedSections, highlightedItemId } from './lib/stores.js';
@@ -28,6 +31,8 @@
   import RadarView from './components/RadarView.svelte';
   import BriefingsView from './components/BriefingsView.svelte';
   import HistoryView from './components/HistoryView.svelte';
+  import SourceCollisions from './components/SourceCollisions.svelte';
+  import PersistenceBanner from './components/PersistenceBanner.svelte';
   import Toast from './components/Toast.svelte';
   import ConfirmModal from './components/ConfirmModal.svelte';
   import ScannerSettingsModal from './components/ScannerSettingsModal.svelte';
@@ -55,11 +60,8 @@
     }
   }
 
-  function debouncedSave() {
-    schedulePersistentStateSave(get(isDemo), 500);
-  }
-
   async function fetchMeetings(force = false) {
+    if (!get(connected) || get(isDemo)) return;
     if (!window.workiq || typeof window.workiq.ask !== 'function') return;
 
     // Use cached meetings if fetched recently (within 1 hour and same calendar day)
@@ -73,12 +75,14 @@
       }
     }
 
+    const requestGeneration = getConnectionGeneration();
     try {
       const payload = await runWorkiqJson(
         TODAY_MEETINGS_PROMPT,
         (p) => p && Array.isArray(p.meetings),
         'meetings'
       );
+      if (!get(connected) || requestGeneration !== getConnectionGeneration()) return;
 
       const raw = Array.isArray(payload?.meetings) ? payload.meetings : [];
       const now = Date.now();
@@ -136,6 +140,8 @@
   }
 
   onMount(async () => {
+    const endMount = diagnostics.begin('app-mount');
+    diagnostics.record('app-mount');
     initTheme();
 
     // Detect demo mode from query param (set by main process --demo flag)
@@ -148,6 +154,34 @@
     }
 
     await loadPersistentState(demoMode);
+    unsubscribers.push(subscribePersistentState(demoMode));
+    if (window.workiq.onFlushState) {
+      unsubscribers.push(window.workiq.onFlushState(() => flushPersistentState(demoMode)));
+    }
+    if (window.workiq.onConnectionStatus) {
+      unsubscribers.push(window.workiq.onConnectionStatus(applyConnectionStatus));
+    }
+    unsubscribers.push(connected.subscribe(ready => {
+      if (ready && !demoMode) {
+        diagnostics.record('engines-start');
+        startScannerEngine();
+        startMonitoringLoop();
+        void fetchMeetings();
+      } else {
+        stopScannerEngine();
+        stopMonitoringLoop();
+      }
+    }));
+    diagnostics.record('subscriptions-installed');
+    if (diagnostics.enabled) {
+      // Observe asynchronously, without inserting a new await in startup sequencing.
+      const endTick = diagnostics.begin('svelte-tick');
+      void tick().then(() => {
+        endTick();
+        const endFrame = diagnostics.begin('frame-opportunity');
+        requestAnimationFrame(() => endFrame());
+      });
+    }
     const currentItems = get(items);
     const priorityItem = currentItems.find((item) => /meridian/i.test(item.title))
       || currentItems.find((item) => item.severity === 'Critical');
@@ -158,18 +192,24 @@
         { id: `proposal_${priorityItem.id}_seed` }
       )]);
     }
+    void (async () => {
+    const endLog = diagnostics.begin('log-load');
     await loadPersistedLog();
+    endLog();
     logInfo('app', demoMode ? 'FlightDeck demo mode initialized' : 'FlightDeck Svelte app initialized');
 
     // Read version from workiq bridge
     if (window.workiq && typeof window.workiq.getAppVersion === 'function') {
+      const endVersion = diagnostics.begin('version-load');
       try {
         version = await window.workiq.getAppVersion() || '';
       } catch (_) {}
+      endVersion();
     }
 
     // Check for updates
     if (window.workiq && typeof window.workiq.checkForUpdates === 'function') {
+      const endUpdate = diagnostics.begin('update-check');
       try {
         const update = await window.workiq.checkForUpdates();
         if (update && update.available) {
@@ -182,34 +222,17 @@
           }
         }
       } catch (_) {}
+      endUpdate();
     }
 
-    // Start background engines and fetch meetings if connected (skip in demo mode)
-    if (!demoMode && window.workiq && typeof window.workiq.ask === 'function') {
-      const isConnected = $connected;
-      if (isConnected) {
-        startScannerEngine();
-        startMonitoringLoop();
-        fetchMeetings();
-      }
-    }
-
-    // Auto-save on store changes
-    unsubscribers.push(items.subscribe(debouncedSave));
-    unsubscribers.push(scanners.subscribe(debouncedSave));
-    unsubscribers.push(density.subscribe(debouncedSave));
-    unsubscribers.push(filter.subscribe(debouncedSave));
-    unsubscribers.push(collapsedSections.subscribe(debouncedSave));
-    unsubscribers.push(briefingsByMeetingId.subscribe(debouncedSave));
-    unsubscribers.push(briefingSeenAt.subscribe(debouncedSave));
-    unsubscribers.push(actionProposals.subscribe(debouncedSave));
-    unsubscribers.push(deletedItemIds.subscribe(debouncedSave));
+    })();
 
     // Listen for state changes from other windows
     if (window.workiq && typeof window.workiq.onStateChanged === 'function') {
-      window.workiq.onStateChanged(() => {
-        loadPersistentState();
-      });
+      unsubscribers.push(window.workiq.onStateChanged(() => {
+        diagnostics.record('state-sync');
+        void loadPersistentState(demoMode);
+      }));
     }
 
     // Listen for app resume (window focus, system wake) to refresh stale meetings
@@ -236,6 +259,8 @@
       });
       unsubscribers.push(unsubNotification);
     }
+    endMount({ outcome: 'ok' });
+    diagnostics.record('startup-complete');
   });
 
   onDestroy(() => {
@@ -247,17 +272,7 @@
   });
 
   async function handleEnable() {
-    if (window.workiq && typeof window.workiq.acceptEula === 'function') {
-      const result = await window.workiq.acceptEula();
-      if (!result.success) {
-        addHistory('failure', `WorkIQ EULA not accepted: ${result.error || 'unknown error'}`);
-        return;
-      }
-    }
-    connected.set(true);
-    startScannerEngine();
-    startMonitoringLoop();
-    fetchMeetings();
+    await validateConnection(true);
   }
 </script>
 
@@ -270,6 +285,7 @@
 
 <div class="app-shell">
   <main class="main">
+    <PersistenceBanner />
     {#if !$connected}
       <ConnectBanner onenable={handleEnable} />
     {/if}
@@ -292,6 +308,7 @@
       <BriefingsView onrefresh={() => fetchMeetings(true)} />
     {:else if $mode === 'History'}
       <HistoryView history={$historyStore} />
+      <SourceCollisions />
     {/if}
   </main>
 </div>

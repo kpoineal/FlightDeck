@@ -151,3 +151,64 @@ test('does not navigate to a deleted or unavailable cold item', async () => {
   assert.deepEqual(get(coldItems), []);
   assert.equal(await navigateToRadarItem('missing'), false);
 });
+
+test('shares concurrent repository detail reads before a caller marks the thread read', async () => {
+  const partial = { id: 'unread', isNew: true, historyPartial: true, updateHistory: [] };
+  const detail = { id: partial.id, isNew: true, updateHistory: [{ seen: false }] };
+  items.set([partial]);
+  let release;
+  let reads = 0;
+  window.workiq.stateQuery = () => {
+    reads++;
+    return new Promise(resolve => { release = resolve; });
+  };
+  const selection = resolveRadarItem(partial.id);
+  const effect = resolveRadarItem(partial.id);
+  assert.equal(reads, 1);
+  release(detail);
+  assert.deepEqual(await Promise.all([selection, effect]), [detail, detail]);
+  items.update(rows => rows.map(row => ({ ...row, isNew: false, updateHistory: [{ seen: true }] })));
+  assert.equal((await resolveRadarItem(partial.id)).isNew, false);
+  assert.equal(reads, 1, 'No late duplicate fetch may restore the unread snapshot');
+});
+
+test('repository detail hydration preserves edits made while the read is pending', async () => {
+  const partial = { id: 'edited', title: 'Before', historyPartial: true };
+  items.set([partial]);
+  let release;
+  window.workiq.stateQuery = () => new Promise(resolve => { release = resolve; });
+  const pending = resolveRadarItem(partial.id);
+  const edited = { ...partial, title: 'Local edit' };
+  items.set([edited]);
+  release({ id: partial.id, title: 'Server detail', updateHistory: [] });
+  assert.equal(await pending, edited);
+  assert.equal(get(items)[0], edited);
+});
+
+test('repository detail hydration cannot restore a thread deleted while the read is pending', async () => {
+  items.set([{ id: 'deleted', historyPartial: true }]);
+  let release;
+  window.workiq.stateQuery = () => new Promise(resolve => { release = resolve; });
+  const pending = resolveRadarItem('deleted');
+  deletedItemIds.set(['deleted']);
+  items.set([]);
+  release({ id: 'deleted', updateHistory: [] });
+  assert.equal(await pending, null);
+  assert.deepEqual(get(items), []);
+  assert.deepEqual(get(coldItems), []);
+});
+
+test('a failed shared repository detail read is cleared so selecting again retries', async () => {
+  items.set([{ id: 'retry', historyPartial: true }]);
+  let reject;
+  window.workiq.stateQuery = () => new Promise((_resolve, fail) => { reject = fail; });
+  const first = resolveRadarItem('retry');
+  const second = resolveRadarItem('retry');
+  const rejected = assert.rejects(first, /offline/);
+  const alsoRejected = assert.rejects(second, /offline/);
+  reject(new Error('offline'));
+  await Promise.all([rejected, alsoRejected]);
+  const detail = { id: 'retry', updateHistory: [] };
+  window.workiq.stateQuery = async () => detail;
+  assert.equal(await resolveRadarItem('retry'), detail);
+});

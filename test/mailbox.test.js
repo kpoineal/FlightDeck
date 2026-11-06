@@ -353,6 +353,18 @@ describe('mailbox timeline behavior', () => {
     assert.notEqual(result.updateHistory, source.updateHistory);
     assert.deepEqual(getMailboxThreads([result], 'inbox').map((item) => item.id), ['thread-1']);
   });
+
+  it('records explicit read intent for partial history without changing no-op or hydrated reads', () => {
+    const partial = { id: 'partial', historyPartial: true, isNew: false, hasNewUpdate: true,
+      updateHistory: [{ kind: 'update', seen: true }] };
+    const read = markMailboxThreadRead(partial);
+    assert.equal(isMailboxUnread(read), false);
+    assert.equal(typeof read.mailboxReadRequestId, 'string');
+    assert.equal(Object.hasOwn(partial, 'mailboxReadRequestId'), false);
+    assert.equal(markMailboxThreadRead(read), read);
+    assert.notEqual(markMailboxThreadRead({ ...read, hasNewUpdate: true }).mailboxReadRequestId, read.mailboxReadRequestId);
+    assert.equal(Object.hasOwn(markMailboxThreadRead({ ...partial, historyPartial: false }), 'mailboxReadRequestId'), false);
+  });
 });
 
 describe('normalizeItem mailbox history', () => {

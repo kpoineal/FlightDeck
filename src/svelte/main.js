@@ -1,5 +1,11 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
+import { stateDiagnostics } from './lib/state-diagnostics.js';
+
+if (stateDiagnostics.enabled) {
+  stateDiagnostics.record(performance.getEntriesByType('navigation')[0]?.type === 'reload'
+    ? 'renderer-reload' : 'renderer-bootstrap');
+}
 
 // Theme init — runs early to avoid flash
 (function initTheme() {

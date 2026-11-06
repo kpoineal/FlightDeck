@@ -51,7 +51,27 @@ When you open FlightDeck for the first time, here's what happens:
 
 On subsequent launches, if you were previously connected, FlightDeck automatically verifies the connection and runs a full refresh — you'll see your Radar and Meetings update within seconds of opening the app. If the connection check fails (e.g., WorkIQ CLI isn't available), the Connect banner reappears.
 
-> **Tip:** FlightDeck remembers your connection state, tracked items, and monitoring schedules in local storage. Your data persists across sessions.
+> **Tip:** FlightDeck remembers connection intent, tracked items, and monitoring schedules locally. Cached data is available while WorkIQ validates; local edits remain usable, but remote controls stay disabled until ready. If validation fails, use **Retry WorkIQ** without discarding cached data.
+
+Normal background saves do not show a banner or shift the layout.
+Local save failures/conflicts appear in a state banner in the main window and popouts.
+Controlled Ctrl+R/F5, View → Reload, popout close and Quit wait for an acknowledged save.
+Failure cancels that operation rather than silently discarding edits. Retry saving;
+for a conflict, **Export local edits** before explicitly choosing **Discard edits and
+refresh**. Exports contain private local content. OS/process termination cannot save
+edits that have not yet reached disk. See [state recovery limitations](state-storage.md).
+
+Local domain state now resides in a profile-specific SQLite database. On first
+use, FlightDeck validates and backs up legacy JSON before importing it. Import or
+integrity refusals show a recovery banner instead of an empty replacement profile.
+After repairing the underlying problem, use **Retry reading profile**; keep the
+original files and backups until recovery succeeds.
+
+History → **Review source collisions** inspects exact retained source identities
+across threads, scanners and archive tiers. It does not merge or delete threads.
+Some cross-scanner duplicates are intentional when that scanner's dedup setting is off.
+Reports page at most 100 collision groups and show scanner/tier evidence; very
+large owner groups explicitly indicate truncation.
 
 > **EULA re-acceptance:** If the WorkIQ EULA needs to be re-accepted (e.g., after a WorkIQ reinstall or update), FlightDeck will automatically detect it. The "Enable WorkIQ" banner will reappear so you can click it to re-accept — no manual terminal commands needed.
 
@@ -86,7 +106,7 @@ Selecting a chart opens a single matching-thread list rather than duplicating th
 
 Chart results (including **In progress**) and **Worth your attention** use the same compact thread cards. The default view shows badges, a title and next move of up to two lines each, owner, and a short deadline. **Show details** reveals the full title/next move, available summary, full deadline, scanner, and last recorded activity; **Hide details** collapses that card again. Expanding one card does not expand adjacent cards. Completed/archived threads do not suggest another next move. Use the title or **Open thread** to open the existing Radar work plan. Em dashes are removed from Today's displayed titles, without modifying saved source titles or navigation targets.
 
-Counts describe FlightDeck's locally available tracked records, not all activity in Microsoft 365. Snoozed, completed, archived, and deleted threads are excluded from active-work charts; retained activity can still include completed threads. Older events outside retained history are not reconstructed. The view refreshes its clock every minute and when the window regains focus, including across midnight. Opening Today or selecting charts does not issue Microsoft 365 reads or writes.
+Counts describe all FlightDeck retained local records, including archive pages not currently loaded, not all activity in Microsoft 365. Snoozed, completed, archived, and deleted threads are excluded from active-work charts; retained activity can still include completed threads. Older events outside retained history are not reconstructed. Chart selections load 100 rows per page. The view refreshes its clock every minute and when the window regains focus, including across midnight. Opening Today or selecting charts does not issue Microsoft 365 reads or writes.
 
 ### WorkIQ activity and waiting
 
@@ -173,6 +193,13 @@ Next to the counters:
 ---
 
 ## Radar View
+
+Opening an unread Inbox thread marks it read without resetting the current page
+or scrolling the thread list. Arrow-key navigation previews threads without
+marking them read; Enter or Space opens them. Read-state filters preserve their
+matching threads when opened rather than immediately removing the selection.
+Changing search, filters or sorting starts again at page one; background saves
+and clock refreshes keep the current page.
 
 **Experimental thread menu:** Right-click a thread in Inbox, Priority, Monitored, Snoozed, Completed, or Archive, or focus its row and press **Context Menu** / **Shift+F10**. Opening or dismissing the menu does not select or mark the thread read, or discard another thread's draft. Actions always apply to the named thread. The existing toolbar and left-click behavior remain available.
 

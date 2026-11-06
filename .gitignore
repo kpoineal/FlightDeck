@@ -62,6 +62,7 @@ mailmap.txt
 .squad-workstream
 test-results.json
 test-results-full.txt
+test-results/
 # Squad: state owned by squad-state branch (two-layer/orphan backend)
 .squad/decisions.md
 .squad/agents/*/history.md

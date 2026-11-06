@@ -90,6 +90,7 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
     window.__resolveColdHydration = null;
     window.__coldGetCalls = 0;
     window.workiq = {
+      acceptEula: async () => ({ success: true }),
       storeGet: async (key) => read(key),
       storeSet: async (key, value) => {
         if (window.__failDeletionForProposalId

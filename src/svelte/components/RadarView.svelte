@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
   import { get } from 'svelte/store';
   import {
     actionProposals,
@@ -12,6 +12,7 @@
     items,
     scanners,
     selectedProposalId,
+    repositoryRevision,
   } from '../lib/stores.js';
   import {
     compareInboxThreads,
@@ -44,7 +45,7 @@
   import { LIFECYCLE_LABELS, LIFECYCLE_STATUSES } from '../lib/constants.js';
   import { collectItemEvidenceLinks, filterDeletedItems, normalizeItem } from '../lib/models/item.js';
   import { computeScannerNextRunAt, normalizeScannerDefinition } from '../lib/models/scanner.js';
-  import { savePersistentState } from '../lib/persistence.js';
+  import { savePersistentState, usesRepository, cacheRepositoryRows } from '../lib/persistence.js';
   import { executeScannerDeletion, previewScannerDeletion } from '../lib/scanner-actions.js';
   import { runScanner } from '../lib/scanner-engine.js';
   import { runItemCheck } from '../lib/monitor-engine.js';
@@ -76,6 +77,12 @@
   let smartView = $state('inbox');
   let scannerId = $state('all');
   let query = $state('');
+  const database = usesRepository();
+  let repositoryPage = $state(null);
+  let pageOffset = $state(0);
+  let pageError = $state('');
+  let pageRequest = 0;
+  let pageFilter = '';
   let sort = $state('recent');
   let quickFilter = $state('');
   let refineFilters = $state({});
@@ -127,6 +134,10 @@
   });
 
   let projected = $derived.by(() => {
+    if (database && repositoryPage) {
+      const local = new Map([...$coldItems, ...$items].map(item => [item.id, item]));
+      return repositoryPage.rows.filter(item => !$deletedItemIds.includes(item.id)).map(item => local.get(item.id) || item);
+    }
     const hotItemIds = new Set($items.map((item) => item.id));
     return filterDeletedItems([
       ...$items,
@@ -153,6 +164,7 @@
     return { viewCounts, scannerCounts, titleGroups };
   });
   let threads = $derived.by(() => {
+    if (database && repositoryPage) return projected;
     const view = VIEWS.find((entry) => entry.id === smartView) || VIEWS[0];
     const needle = query.trim().toLowerCase();
     const inboxFilters = {
@@ -182,7 +194,28 @@
     }
     return filters;
   });
-  let selected = $derived(threads.find((item) => item.id === selectedId) || null);
+  let selected = $derived(threads.find((item) => item.id === selectedId)
+    || (database ? [...$items, ...$coldItems].find(item => item.id === selectedId) : null) || null);
+  $effect(() => {
+    if (!database) return;
+    const request = ++pageRequest;
+    const filters = JSON.stringify({ view: smartView, scannerId, query, sort, quickFilter, refineFilters });
+    const revision = $repositoryRevision;
+    if (pageFilter !== filters) { pageFilter = filters; pageOffset = 0; }
+    const offset = pageOffset;
+    void window.workiq.stateQuery('radarPage', { ...JSON.parse(filters), now, offset, limit: 100 }).then(result => {
+      if (request !== pageRequest || result.revision < revision) return;
+      const lastOffset = Math.max(0, Math.ceil(result.total / 100) - 1) * 100;
+      if (offset > lastOffset) { pageOffset = lastOffset; return; }
+      repositoryPage = result;
+      cacheRepositoryRows(result.rows);
+      pageError = '';
+    }).catch(() => { if (request === pageRequest) pageError = 'Could not load this page. Your saved data has not been replaced.'; });
+  });
+  $effect(() => {
+    const id = selectedId;
+    if (database && id) untrack(() => { void resolveRadarItem(id).catch(() => { pageError = 'Could not load thread details.'; }); });
+  });
   let nextMoves = $derived(selected?.suggestedNextSteps?.slice(0, 2) || []);
   let availableNextMoves = $derived(nextMoves.filter((step) => !isWorkPlanStepCompleted(selected, step)));
   let selectedNextMove = $derived(availableNextMoves.includes(synthesisState.selectedNextStep)
@@ -215,6 +248,8 @@
   }
 
   $effect(() => {
+    if (database && selectedId && !threads.some(item => item.id === selectedId)
+      && [...$items, ...$coldItems].some(item => item.id === selectedId)) return;
     const preserveId = pendingNavigationId && projected.some((item) => item.id === pendingNavigationId)
       ? pendingNavigationId
       : null;
@@ -232,7 +267,7 @@
 
   $effect(() => {
     const requestedId = $highlightedItemId;
-    const highlighted = projected.find((item) => item.id === requestedId);
+    const highlighted = (database ? [...$items, ...$coldItems] : projected).find((item) => item.id === requestedId);
     if (requestedId && !highlighted) {
       resolveRadarItem(requestedId).then((resolved) => {
         if (!resolved && $highlightedItemId === requestedId) highlightedItemId.set(null);
@@ -273,14 +308,29 @@
     void hydrateRadarColdItems();
   });
 
-  function selectThread(item, origin, { markRead = false } = {}) {
+  async function selectThread(item, origin, { markRead = false } = {}) {
     setSelectedThreadId(item.id);
     originatingThread = origin;
     mobileStep = 'detail';
-    requestAnimationFrame(() => viewRoot?.querySelector('.radar-thread-detail h2')?.focus());
+    requestAnimationFrame(() => {
+      const detail = viewRoot?.querySelector('.radar-thread-detail');
+      if (detail) detail.scrollTop = 0;
+      detail?.querySelector('h2')?.focus({ preventScroll: true });
+    });
     const readStateDefinesProjection = ['unread', 'new', 'updated'].includes(quickFilter)
       || Boolean(refineFilters.read?.length);
     markRead = markRead && !readStateDefinesProjection;
+    if (database) {
+      try {
+        // Finish the shared detail read before changing read state so it cannot restore an unread snapshot.
+        const resolved = await resolveRadarItem(item.id);
+        if (!resolved || !mounted) return;
+      } catch (error) {
+        logError('radar', 'Could not load thread details', { code: error?.code || 'DETAIL_READ_FAILED' });
+        pageError = 'Could not load thread details. Try selecting the thread again.';
+        return;
+      }
+    }
     if (markRead && isMailboxUnread(item)) markItemRead(item.id);
   }
 
@@ -394,6 +444,7 @@
   }
 
   async function draftMessage(requestedChannel, initiator = null, requestedNextStep = selectedNextMove, sourceItem = selected) {
+    if (!$connected) return;
     if (!sourceItem || creatingEmailItemIds.has(sourceItem.id)
       || (sourceItem.suggestedNextSteps?.slice(0, 2).length > 0
         && sourceItem.suggestedNextSteps.slice(0, 2).every((step) => isWorkPlanStepCompleted(sourceItem, step)))
@@ -495,6 +546,7 @@
   }
 
   async function sendTeamsDraft() {
+    if (!$connected) return;
     const draft = teamsDraft;
     if (!draft || draft.sourceItemId !== selected?.id || creatingEmailItemIds.has(selected.id)
       || isWorkPlanStepCompleted(selected, draft.nextStep) || ['sending', 'sent', 'unconfirmed'].includes(teamsSendState.status)) return;
@@ -837,10 +889,12 @@
   }
 
   function viewCount(view) {
+    if (database && repositoryPage) return repositoryPage.counts[view.id] || 0;
     return projectionIndex.viewCounts.get(view.id) || 0;
   }
 
   function scannerThreadCount(requestedScannerId) {
+    if (database && repositoryPage) return repositoryPage.scannerCounts.find(row => row.scanner_id === requestedScannerId)?.n || 0;
     return projectionIndex.scannerCounts.get(requestedScannerId) || 0;
   }
 
@@ -1197,8 +1251,16 @@
     <section class="radar-thread-list-pane" class:mobile-active={mobileStep === 'list'} aria-label="Radar threads">
       <header>
         <strong>{VIEWS.find((entry) => entry.id === smartView)?.label}</strong>
-        <span>{threads.length} {threads.length === 1 ? 'thread' : 'threads'}</span>
+        <span>{database ? repositoryPage?.total || 0 : threads.length} threads</span>
       </header>
+      {#if database}
+        <nav aria-label="Thread pages">
+          <button class="small-btn" disabled={pageOffset === 0} on:click={() => { pageOffset = Math.max(0, pageOffset - 100); }}>Previous threads</button>
+          <button class="small-btn" disabled={!repositoryPage?.more} on:click={() => { pageOffset += 100; }}>Next threads</button>
+          <span>Page {Math.floor(pageOffset / 100) + 1}</span>
+        </nav>
+        {#if pageError}<p role="alert">{pageError}</p>{/if}
+      {/if}
       <div class="inbox-filter-bar" aria-label="Inbox filters">
         <div class="inbox-quick-filters" role="group" aria-label="Quick filters">
           <button type="button" data-testid="inbox-quick-unread" aria-pressed={quickFilter === 'unread'} on:click={() => toggleQuickFilter('unread')}>Unread</button>
@@ -1405,7 +1467,7 @@
                     <label class="radar-next-move">
                       <input type="radio" name={`next-move-${selected.id}`} value={step}
                         checked={selectedNextMove === step} data-testid={`radar-next-move-${index}`}
-                        disabled={isWorkPlanStepCompleted(selected, step) || synthesisState.status === 'generating' || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selected.id)}
+                        disabled={!$connected || isWorkPlanStepCompleted(selected, step) || synthesisState.status === 'generating' || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selected.id)}
                         on:change={() => threadComposer.update(selected.id, { selectedNextStep: step })} />
                       <span><span data-next-move-text>{step}</span>
                         {#if isWorkPlanStepCompleted(selected, step)}<small class="radar-next-move-completed">Completed</small>{/if}
@@ -1424,7 +1486,7 @@
                 <button type="button" class="small-btn radar-action-button radar-action-button--compose" data-testid="radar-draft-email"
                   title="Draft an email for the selected next move"
                   class:is-loading={synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'email' && synthesisState.status === 'generating'}
-                  disabled={workPlanCompleted || synthesisState.status === 'generating' || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selected.id)}
+                  disabled={!$connected || workPlanCompleted || synthesisState.status === 'generating' || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selected.id)}
                   on:click={(event) => draftMessage('email', event.currentTarget)}>
                   {synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'email' && synthesisState.status === 'generating'
                     ? 'Drafting…'
@@ -1433,7 +1495,7 @@
                 <button type="button" class="small-btn radar-action-button radar-action-button--compose" data-testid="radar-draft-teams"
                   title="Draft a Teams message for the selected next move"
                   class:is-loading={synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'teams' && synthesisState.status === 'generating'}
-                  disabled={workPlanCompleted || synthesisState.status === 'generating' || ['sending', 'unconfirmed'].includes(teamsSendState.status) || creatingEmailItemIds.has(selected.id)}
+                  disabled={!$connected || workPlanCompleted || synthesisState.status === 'generating' || ['sending', 'unconfirmed'].includes(teamsSendState.status) || creatingEmailItemIds.has(selected.id)}
                   on:click={(event) => draftMessage('teams', event.currentTarget)}>
                   {synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'teams' && synthesisState.status === 'generating'
                     ? 'Drafting…'
@@ -1543,7 +1605,7 @@
               <p class="radar-teams-draft__note">Review the recipient and message before sending. FlightDeck will ask for confirmation.</p>
               <div class="command-buttons radar-teams-draft__actions">
                 <button type="button" class="small-btn primary" data-testid="teams-draft-send"
-                  disabled={!canAddressTeamsDraft(teamsDraft) || creatingEmailItemIds.has(selected.id) || ['sending', 'sent', 'unconfirmed'].includes(teamsSendState.status)}
+                  disabled={!$connected || !canAddressTeamsDraft(teamsDraft) || creatingEmailItemIds.has(selected.id) || ['sending', 'sent', 'unconfirmed'].includes(teamsSendState.status)}
                   on:click={sendTeamsDraft}>
                   {teamsSendState.status === 'sending' ? 'Sending…' : teamsSendState.status === 'sent' ? 'Sent' : 'Send message'}
                 </button>

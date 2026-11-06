@@ -17,6 +17,10 @@ it('real entry keeps queue broadcasts across close-to-tray/reopen and unsubscrib
   let unsubscribes = 0;
   let shutdowns = 0;
   let quits = 0;
+  let flushAccepted = true;
+  let reloads = 0;
+  let failures = 0;
+  let applicationMenu;
   let resolveShutdown;
   const shutdownGate = new Promise((resolve) => { resolveShutdown = resolve; });
   const app = Object.assign(new EventEmitter(), {
@@ -31,8 +35,11 @@ it('real entry keeps queue broadcasts across close-to-tray/reopen and unsubscrib
       super();
       this.visible = true;
       this.sent = [];
-      this.webContents = { isDestroyed: () => false, send: (...args) => this.sent.push(args) };
+      this.webContents = Object.assign(new EventEmitter(), {
+        isDestroyed: () => false, send: (...args) => this.sent.push(args), reload: () => { reloads++; },
+      });
       windows.push(this);
+      app.emit('browser-window-created', {}, this);
     }
     loadFile() {}
     isDestroyed() { return false; }
@@ -48,7 +55,8 @@ it('real entry keeps queue broadcasts across close-to-tray/reopen and unsubscrib
   }
   Object.assign(electronMock, {
     app, BrowserWindow: Window, Tray,
-    Menu: { buildFromTemplate: (template) => template },
+    Menu: { buildFromTemplate: (template) => template, setApplicationMenu(menu) { applicationMenu = menu; } },
+    dialog: { showMessageBox: async () => { failures++; return { response: 0 }; } },
     powerMonitor: new EventEmitter(),
   });
   const { registerIpcHandlers } = require('../src/main/ipc-handlers');
@@ -64,6 +72,7 @@ it('real entry keeps queue broadcasts across close-to-tray/reopen and unsubscrib
   const stubs = {
     electron: electronMock,
     './ipc-handlers': { registerIpcHandlers },
+    './state-flush': { createStateFlush: () => ({ flush: async () => flushAccepted, close() {} }) },
     './workiq-mcp-client': { createWorkiqMcpClient: () => client },
     './window-state': { loadWindowState: () => null, saveWindowState() {}, debouncedSaveWindowState() {} },
     './utils': {
@@ -95,8 +104,35 @@ it('real entry keeps queue broadcasts across close-to-tray/reopen and unsubscrib
   publish(3);
   assert.deepEqual(win.sent.filter(([channel]) => channel === IPC_CHANNELS.WORKIQ_QUEUE_STATUS_CHANGED)
     .map(([, status]) => status.active), [1, 2, 3]);
+  flushAccepted = false;
+  let reloadPrevented = false;
+  win.webContents.emit('before-input-event', { preventDefault() { reloadPrevented = true; } },
+    { type: 'keyDown', key: 'r', control: true });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reloadPrevented, true);
+  assert.equal(reloads, 0);
+  assert.equal(failures, 1);
+  applicationMenu.find(item => item.label === 'View').submenu[0].click({}, win);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reloads, 0);
+  assert.equal(failures, 2);
+  app.emit('before-quit', { preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(shutdowns, 0, 'failed quit must retain IPC and the running client');
+  assert.equal(unsubscribes, 0);
+  assert.equal(quits, 0);
+  assert.equal(failures, 3);
+  flushAccepted = true;
+  win.webContents.emit('before-input-event', { preventDefault() {} }, { type: 'keyDown', key: 'F5' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reloads, 1);
+  applicationMenu.find(item => item.label === 'View').submenu[0].click({}, win);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reloads, 1, 'a duplicate shortcut during navigation must not reload the new renderer');
+  win.webContents.emit('did-stop-loading');
   let quitPrevented = false;
   app.emit('before-quit', { preventDefault() { quitPrevented = true; } });
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(quitPrevented, true);
   assert.equal(unsubscribes, 1);
   assert.equal(listeners.size, 0);

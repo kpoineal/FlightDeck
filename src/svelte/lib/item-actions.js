@@ -6,6 +6,7 @@ import {
   savePersistentState,
 } from './persistence.js';
 import { markMailboxThreadRead } from './mailbox.js';
+import { usesRepository } from './repository-context.js';
 import { LIFECYCLE_LABELS } from './constants.js';
 import { normalizeItemId, prependItemUpdateHistory } from './models/item.js';
 import {
@@ -55,13 +56,14 @@ function updateItem(itemId, updater) {
   const cold = !get(items).some((item) => item.id === itemId)
     && !get(deletedItemIds).includes(itemId)
     ? get(coldItems).find((item) => item.id === itemId) : null;
-  items.update(($items) => $items.map((item) => {
+  const updatedItems = get(items).map((item) => {
     if (item.id !== itemId) return item;
     const updated = updater(item);
     changed = updated !== item;
     if (changed) changedItem = updated;
     return updated;
-  }));
+  });
+  if (changed) items.set(updatedItems);
   if (cold) {
     const updated = updater(cold);
     if (updated !== cold) {
@@ -265,6 +267,10 @@ export function createActionEventId({ proposalId, event, timestamp, attempt = 0 
 export async function recordActionEvent(input) {
   const event = normalizeActionEvent(input);
   if (!event) return false;
+  if (usesRepository() && !get(items).some(item => item.id === event.itemId)) {
+    const source = get(coldItems).find(item => item.id === event.itemId);
+    if (source && !get(deletedItemIds).includes(source.id)) items.update(rows => [source, ...rows]);
+  }
 
   let sourceItemFound = false;
   let threadChanged = false;

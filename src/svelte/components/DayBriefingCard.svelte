@@ -1,5 +1,6 @@
 <script>
   import { safeDate, sanitizeBriefingText } from '../lib/utils.js';
+  import { connected } from '../lib/stores.js';
 
   let { briefing = null, unseen = false, generating = false, ongenerate } = $props();
 
@@ -26,7 +27,7 @@
     <div class="card-body">
       <div class="empty">No day briefing generated yet. Synthesize your meetings, tracked items, and radar signals into one summary.</div>
       <div class="action-row">
-        <button class="small-btn primary" class:is-loading={generating} disabled={generating} on:click={handleGenerate}>{generating ? 'Generating...' : 'Generate My Day'}</button>
+        <button class="small-btn primary" class:is-loading={generating} disabled={generating || !$connected} on:click={handleGenerate}>{generating ? 'Generating...' : 'Generate My Day'}</button>
       </div>
       {#if generating}
         <div class="generating-status">Generating your day briefing…</div>
@@ -44,7 +45,7 @@
     </summary>
     <div class="card-body">
       <div class="action-row">
-        <button class="small-btn primary" class:is-loading={generating} disabled={generating} on:click={handleGenerate}>{generating ? 'Generating...' : 'Regenerate My Day'}</button>
+        <button class="small-btn primary" class:is-loading={generating} disabled={generating || !$connected} on:click={handleGenerate}>{generating ? 'Generating...' : 'Regenerate My Day'}</button>
       </div>
       {#if generating}
         <div class="generating-status">Generating your day briefing…</div>

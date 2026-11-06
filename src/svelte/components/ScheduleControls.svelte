@@ -7,7 +7,7 @@
     ALL_SIGNAL_TYPES,
     SIGNAL_TYPE_OPTIONS,
   } from '../lib/constants.js';
-  import { activeOperations } from '../lib/stores.js';
+  import { activeOperations, connected, isDemo } from '../lib/stores.js';
 
   let { item, onchange, onrunnow } = $props();
 
@@ -68,7 +68,7 @@
       on:change={(e) => emitChange('oneTimeAt', e.target.value)} />
   {/if}
 
-  <button class="small-btn" class:is-loading={isChecking} disabled={isChecking}
+  <button class="small-btn" class:is-loading={isChecking} disabled={isChecking || !$connected || $isDemo}
     on:click={() => onrunnow?.({ itemId: item.id })}>{isChecking ? 'Checking…' : 'Run check now'}</button>
 </div>
 

@@ -133,7 +133,7 @@ test.beforeEach(() => {
   globalThis.__scannerTriggerHistory = [];
   globalThis.__scannerTriggerTransport = null;
   activeOperations.set(new Map());
-  connected.set(false);
+  connected.set(true);
   deletedItemIds.set([]);
   items.set([]);
   scanners.set([]);
@@ -185,7 +185,7 @@ test('restart is idempotent, connected state gates scans, and pending cycles can
   fireIntervals();
   await waitForPromptCount(1);
   assert.equal(globalThis.__scannerTriggerPrompts.length, 0);
-  assert.equal(timers.size, 1);
+  assert.equal(timers.size, 0);
 
   connected.set(true);
   let release;

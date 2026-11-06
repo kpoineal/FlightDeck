@@ -1,6 +1,19 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const IPC_CHANNELS = {
+  STATE_QUERY: 'state-query',
+  STATE_COMMAND: 'state-command',
+  STATE_ENGINE_ACQUIRE: 'state-engine-acquire',
+  STATE_ENGINE_RELEASE: 'state-engine-release',
+  CONNECTION_STATUS: 'connection-status',
+  CONNECTION_DISCONNECT: 'connection-disconnect',
+  CONNECTION_STATUS_CHANGED: 'connection-status-changed',
+  STATE_READ: 'state-read',
+  STATE_ACQUIRE: 'state-acquire',
+  STATE_RELEASE: 'state-release',
+  STATE_FLUSH_REQUEST: 'state-flush-request',
+  STATE_FLUSH_ACK: 'state-flush-ack',
+  GET_STATE_DIAGNOSTICS: 'get-state-diagnostics',
   GET_APP_VERSION: 'get-app-version',
   ASK_WORKIQ: 'ask-workiq',
   GET_WORKIQ_QUEUE_STATUS: 'get-workiq-queue-status',
@@ -31,6 +44,12 @@ const IPC_CHANNELS = {
 };
 
 contextBridge.exposeInMainWorld('workiq', {
+  stateQuery: (method, input = {}) => ipcRenderer.invoke(IPC_CHANNELS.STATE_QUERY, method, input),
+  stateCommand: (input) => ipcRenderer.invoke(IPC_CHANNELS.STATE_COMMAND, input),
+  acquireEngine: (key) => ipcRenderer.invoke(IPC_CHANNELS.STATE_ENGINE_ACQUIRE, key),
+  releaseEngine: (key) => ipcRenderer.invoke(IPC_CHANNELS.STATE_ENGINE_RELEASE, key),
+  stateDiagnosticsEnabled: process.env.FLIGHTDECK_STATE_DIAGNOSTICS === '1',
+  getStateDiagnostics: () => ipcRenderer.invoke(IPC_CHANNELS.GET_STATE_DIAGNOSTICS),
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
   checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES),
   ask: (question, options) => options === undefined
@@ -43,7 +62,28 @@ contextBridge.exposeInMainWorld('workiq', {
     ipcRenderer.on(IPC_CHANNELS.WORKIQ_QUEUE_STATUS_CHANGED, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.WORKIQ_QUEUE_STATUS_CHANGED, listener);
   },
-  acceptEula: () => ipcRenderer.invoke(IPC_CHANNELS.ACCEPT_WORKIQ_EULA),
+  acceptEula: (options) => options === undefined
+    ? ipcRenderer.invoke(IPC_CHANNELS.ACCEPT_WORKIQ_EULA)
+    : ipcRenderer.invoke(IPC_CHANNELS.ACCEPT_WORKIQ_EULA, options),
+  getConnectionStatus: () => ipcRenderer.invoke(IPC_CHANNELS.CONNECTION_STATUS),
+  readState: (key) => ipcRenderer.invoke(IPC_CHANNELS.STATE_READ, key),
+  acquireStateLease: (revision) => ipcRenderer.invoke(IPC_CHANNELS.STATE_ACQUIRE, revision),
+  releaseStateLease: (recovered = true, committed = false) => ipcRenderer.invoke(IPC_CHANNELS.STATE_RELEASE, recovered, committed),
+  onFlushState: (flush) => {
+    const listener = async (_event, token) => {
+      let accepted = false;
+      try { accepted = await flush() === true; } catch (_) { /* A failed flush must block navigation. */ }
+      ipcRenderer.send(IPC_CHANNELS.STATE_FLUSH_ACK, token, accepted);
+    };
+    ipcRenderer.on(IPC_CHANNELS.STATE_FLUSH_REQUEST, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.STATE_FLUSH_REQUEST, listener);
+  },
+  disconnect: () => ipcRenderer.invoke(IPC_CHANNELS.CONNECTION_DISCONNECT),
+  onConnectionStatus: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on(IPC_CHANNELS.CONNECTION_STATUS_CHANGED, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CONNECTION_STATUS_CHANGED, listener);
+  },
   probeMcp: () => ipcRenderer.invoke(IPC_CHANNELS.PROBE_WORKIQ_MCP),
   proposeThreadActions: (context) => ipcRenderer.invoke(IPC_CHANNELS.PROPOSE_THREAD_ACTIONS, context),
   createOutlookDraft: (draft) => ipcRenderer.invoke(IPC_CHANNELS.CREATE_OUTLOOK_DRAFT, draft),
@@ -64,7 +104,7 @@ contextBridge.exposeInMainWorld('workiq', {
   broadcastStateChanged: () => ipcRenderer.send(IPC_CHANNELS.TRACKER_STATE_CHANGED),
   onStateChanged: (callback) => {
     if (typeof callback !== 'function') return () => {};
-    const listener = (_event) => callback();
+    const listener = (_event, delta) => callback(delta);
     ipcRenderer.on(IPC_CHANNELS.TRACKER_STATE_SYNC, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.TRACKER_STATE_SYNC, listener);
   },

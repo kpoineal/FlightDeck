@@ -32,6 +32,11 @@ registerHooks({
   },
 });
 
+test.before(async () => {
+  const { connected } = await import('../src/svelte/lib/stores.js');
+  connected.set(true);
+});
+
 test('an in-flight result from another scanner cannot restore a globally deleted stable item id', async () => {
   const { get } = await import('svelte/store');
   const { activeOperations, deletedItemIds, items, scanners } = await import('../src/svelte/lib/stores.js');

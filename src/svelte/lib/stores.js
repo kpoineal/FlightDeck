@@ -1,5 +1,6 @@
 // ── Svelte reactive stores ───────────────────────────────────────────
 import { writable, derived } from 'svelte/store';
+export const repositoryRevision = writable(0);
 import { threadComposer } from './thread-composer.js';
 
 // ── Core state stores ────────────────────────────────────────────────
@@ -21,6 +22,10 @@ export const isDemo = writable(false);
 
 // ── UI state stores ──────────────────────────────────────────────────
 export const connected = writable(false);
+export const connectionIntent = writable(false);
+export const connectionStatus = writable('disconnected');
+export const persistenceStatus = writable('saved');
+export const persistenceError = writable('');
 
 /** Map of active WorkIQ operations, keyed by type:id (e.g., 'scanner:abc123', 'item:xyz789') */
 export const activeOperations = writable(new Map());

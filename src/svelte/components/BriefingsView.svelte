@@ -1,5 +1,5 @@
 <script>
-  import { meetings, briefingsByMeetingId, briefingSeenAt, expandedBriefingMeetingIds, items, kpis, actionProposals, openActionsQueue, selectedProposalId } from '../lib/stores.js';
+  import { connected, meetings, briefingsByMeetingId, briefingSeenAt, expandedBriefingMeetingIds, items, kpis, actionProposals, openActionsQueue, selectedProposalId } from '../lib/stores.js';
   import { DAY_BRIEFING_KEY } from '../lib/constants.js';
   import { addHistory } from '../lib/actions.js';
   import { savePersistentState } from '../lib/persistence.js';
@@ -17,7 +17,7 @@
   let refreshing = $state(false);
 
   async function handleRefresh() {
-    if (refreshing) return;
+    if (refreshing || !$connected) return;
     refreshing = true;
     try {
       await onrefresh?.();
@@ -78,6 +78,7 @@
   }
 
   async function handleDayGenerate() {
+    if (!$connected) return;
     if (dayGenerating) return;
     if (!window.workiq || typeof window.workiq.ask !== 'function') return;
 
@@ -143,6 +144,7 @@
   }
 
   async function handleMeetingGenerate(data) {
+    if (!$connected) return;
     const { meetingId } = data;
     const meeting = $meetings.find((m) => m.id === meetingId);
     if (!meeting) return;
@@ -266,7 +268,7 @@
       <h1>Now / Next / Later</h1>
       <p>Meeting readiness, generated briefs, and linked evidence</p>
     </div>
-    <button class="small-btn" class:is-loading={refreshing} disabled={refreshing} on:click={handleRefresh}>
+    <button class="small-btn" class:is-loading={refreshing} disabled={refreshing || !$connected} on:click={handleRefresh}>
       {refreshing ? 'Refreshing...' : '↻ Refresh Meetings'}
     </button>
   </div>

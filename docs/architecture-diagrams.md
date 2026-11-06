@@ -4,6 +4,32 @@ Visual architecture documentation for FlightDeck — a personal work-intelligenc
 
 ---
 
+## Current state ownership and reload path
+
+This diagram supersedes the older vanilla-renderer/PTY-only flows below.
+See [architecture.md](architecture.md) and [state-storage.md](state-storage.md)
+for current ownership, failure and release-gate details.
+
+```mermaid
+flowchart LR
+  JSON["Legacy JSON · backed-up import only"] --> Worker["Main-owned SQLite worker"]
+  Worker --> Cache["Bounded Svelte cached publication"]
+  Cache --> Local["Today / Radar / popout local interactions"]
+  Cache --> Validate["Independent main-coalesced validation"]
+  Validate --> Gate["Runtime ready gate (main + UI)"]
+  Gate --> Remote["MCP read queue / confirmed remote writes"]
+  Local --> Dirty["Domain mutation generations"]
+  Dirty --> Flush["Acknowledged controlled reload / close / quit"]
+  Flush --> CAS["Atomic incremental commands / revision CAS"]
+  CAS --> Worker
+  Local --> Query["Archive pages / lazy details / global Today"]
+  Query --> Worker
+```
+
+The remaining numbered diagrams predate the Svelte migration and are historical;
+in particular they do not establish current localStorage ownership, schedulers,
+MCP transport or SQLite activation.
+
 ## 1. System Architecture
 
 How FlightDeck's Electron app, WorkIQ CLI, Microsoft Copilot, and Microsoft 365 connect end-to-end.
