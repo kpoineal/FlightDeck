@@ -18,7 +18,9 @@ import {
   restoreRecordsAtStablePositions,
   stableRecordId,
 } from './item-actions.js';
-import { runPersistentStateTransaction } from './persistence.js';
+import * as persistence from './persistence.js';
+import { usesRepository } from './repository-context.js';
+const { runPersistentStateTransaction } = persistence;
 import {
   itemOperationKey,
   releaseOperationGuards,
@@ -28,6 +30,10 @@ import {
 import { hydrateRadarColdItems } from './radar-navigation.js';
 
 export async function previewScannerDeletion(scannerId) {
+  if (usesRepository()) {
+    if (!await persistence.flushPersistentState(get(isDemo))) return { ok: false, code: 'PERSISTENCE_FAILED' };
+    return window.workiq.stateQuery('previewScannerDeletion', { id: scannerId });
+  }
   await hydrateRadarColdItems();
   const snapshot = collectScannerDeletionSnapshot(scannerId);
   return snapshot ? toDeletionPreview(snapshot) : { ok: false, code: 'NOT_FOUND' };
@@ -39,6 +45,18 @@ export async function executeScannerDeletion({
   targetScannerId = null,
   previewToken,
 } = {}) {
+  if (usesRepository()) {
+    if (!await persistence.flushPersistentState(get(isDemo))) return { ok: false, code: 'PERSISTENCE_FAILED' };
+    const at = new Date().toISOString();
+    const result = await persistence.executeRepositoryCommand('deleteScanner', {
+      id: scannerId, disposition, targetScannerId,
+      audit: { id: `scanner_deleted_${crypto.randomUUID()}`, at, kind: 'action',
+        summary: 'Deleted scanner', payload: { event: 'scanner-deleted', scannerId, disposition, targetScannerId } },
+    }, Number(previewToken));
+    if (!result.ok) return result;
+    await persistence.loadPersistentState(get(isDemo));
+    return { ...result, affectedItemIds: [...result.changedIds, ...result.deletedIds], removedProposalCount: 0, recoveryRequired: false };
+  }
   await hydrateRadarColdItems();
   const snapshot = collectScannerDeletionSnapshot(scannerId);
   if (!snapshot) return { ok: false, code: 'NOT_FOUND' };

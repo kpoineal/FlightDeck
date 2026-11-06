@@ -1,5 +1,6 @@
 <script>
   import { showToast } from './Toast.svelte';
+  import { connected } from '../lib/stores.js';
 
   let { open = false, oncancel, oncreated } = $props();
 
@@ -111,6 +112,7 @@
   }
 
   async function createDraft() {
+    if (!$connected) { error = 'WorkIQ must be ready before creating a draft.'; return; }
     if (submitting || !window.workiq || typeof window.workiq.createOutlookDraft !== 'function') {
       error = 'Outlook draft creation is unavailable.';
       return;
@@ -216,7 +218,7 @@
           <button type="button" class="small-btn" disabled={submitting}
             on:click={() => { error = ''; step = 'compose'; }}>Edit</button>
           <button type="button" class="small-btn primary" class:is-loading={submitting}
-            disabled={submitting} on:click={createDraft}>
+            disabled={submitting || !$connected} on:click={createDraft}>
             {submitting ? 'Creating...' : 'Create Outlook draft'}
           </button>
         </div>

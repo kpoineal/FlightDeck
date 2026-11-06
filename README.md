@@ -152,7 +152,9 @@ FlightDeck/
 │   │   ├── index.js               # App lifecycle, window & tray creation
 │   │   ├── ipc-handlers.js        # IPC channel handlers (ask-workiq, store, popout, …)
 │   │   ├── pty-bridge.js          # node-pty bridge to WorkIQ CLI
-│   │   ├── store.js               # electron-store persistence (flightdeck-data, flightdeck-cold)
+│   │   ├── store.js               # small settings / legacy import inputs
+│   │   ├── state-service.js       # production SQLite ownership and engine leases
+│   │   ├── state-worker.js        # indexed queries and atomic incremental commands
 │   │   ├── utils.js               # Logging, URL safety, HTML/markdown helpers
 │   │   ├── window-state.js        # Persist & restore window bounds
 │   │   └── ipc/
@@ -236,16 +238,26 @@ FlightDeck is an Electron app with a **Svelte 5** renderer built by **Vite**.
 
 ## Data Persistence
 
-All application state is persisted via **electron-store** (JSON files in the OS user-data directory), accessed from the renderer through IPC calls to the main process.
+Application domain state uses **SQLite**, owned by one main-process service and worker per profile. Renderers use revisioned incremental commands, bounded projections, archive pages and lazy details over IPC.
 
 | What | Store | Key / Location |
 |---|---|---|
-| Radar items, scanners, briefings, history, preferences | `flightdeck-data` | Per-field keys via `storeGet` / `storeSet` |
-| Archived / completed items (cold storage) | `flightdeck-cold` | `items` |
+| Threads, scanners, proposals, history, preferences | SQLite worker | `<userData>/state-normal/`; revisioned atomic commands |
+| Archived / completed items | Same SQLite database | Indexed cold tier, paginated queries and lazy detail |
+| Demo state | Separate SQLite database | `<userData>/state-demo/`; never shared with normal state |
+| Legacy domain JSON | Import/recovery input only | Validated one-time import with pre-import backups; no dual writes |
 | Window bounds & maximized state | File | `<userData>/window-state.json` |
 | Theme preference | `localStorage` | `fd-theme` (only theme uses localStorage) |
 
 History is auto-pruned to **200 entries / 30 days**. Stale briefings (for past meetings) are pruned on load.
+
+Opt-in, bounded reload/persistence diagnostics and an **isolated offline Electron baseline**
+are described in [docs/state-diagnostics.md](docs/state-diagnostics.md). Diagnostics are off
+by default. Cached data now publishes before WorkIQ validation, while remote operations
+remain gated. Writes omit duplicate legacy item arrays and controlled reload/quit
+requires an acknowledged flush. See [state ownership and recovery](docs/state-storage.md).
+The SQLite worker/importer is active in production. Invalid profiles fail visibly
+without silently falling back to stale JSON or empty state.
 
 ---
 
@@ -260,6 +272,14 @@ History is auto-pruned to **200 entries / 30 days**. Stale briefings (for past m
 | **demo:reseed** | `npm run demo:reseed` | Regenerate demo fixtures, then launch |
 | **screenshots** | `npm run screenshots` | Capture screenshots via Playwright |
 | **test** | `npm test` | Run all tests (Node.js built-in test runner) |
+| **test:state** | `npm run test:state` | Offline persistence, IPC, diagnostics and startup regression tests |
+| **test:state:reload** | `npm run test:state:reload` | Build and measure isolated generated profiles in Electron (30 warm reloads per scenario) |
+| **test:state:durability** | `npm run test:state:durability` | Isolated production-renderer reload, failure, popout and source-review smoke |
+| **test:state:sqlite** | `npm run test:state:sqlite` | Active worker repository/import/recovery tests |
+| **test:state:production** | `npm run test:state:production` | Large generated-profile production-entry migration/reload/edit/delete/multiwindow acceptance |
+| **test:state:runtime** | `npm run test:state:runtime` | Real Electron main/worker/production-renderer SQLite capability probe |
+| **bench:state:sqlite** | `npm run bench:state:sqlite` | Generated Node worker bounded queries and incremental edits, 30 samples |
+| **bench:state:node** | `npm run bench:state:node` | Isolated Conf storage microbenchmark; not Electron end-to-end |
 | **dist** | `npm run dist` | Build renderer + Windows MSI installer |
 | **dist:mac** | `npm run dist:mac` | Build renderer + macOS DMG |
 | **dist:linux** | `npm run dist:linux` | Build renderer + Linux AppImage/deb |

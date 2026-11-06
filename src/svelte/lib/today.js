@@ -5,6 +5,22 @@ const SEVERITY = { Critical: 0, Elevated: 1, Observe: 2 };
 const timestamp = value => typeof value === 'string' ? Date.parse(value) : NaN;
 const severityOrder = (left, right) => (SEVERITY[left.severity] ?? 3) - (SEVERITY[right.severity] ?? 3);
 
+export function todayActivityKind(entry) {
+  if (entry.kind === 'action') {
+    return entry.event === 'succeeded' && entry.proposalId && isConfirmedCommunication({
+      state: 'Succeeded', channel: entry.channel, executionCode: entry.code, executionVerification: entry.verification,
+    }) ? 'communication' : null;
+  }
+  if (entry.kind === 'lifecycle') return 'lifecycle';
+  if (entry.kind === 'discovery' || entry.changes?.includes('Discovered')) return 'discovery';
+  return entry.kind === 'reply' || entry.summary || entry.changes?.length ? 'update' : null;
+}
+
+export function todayActivityKey(item, entry, kind) {
+  return kind === 'communication' ? `action:${entry.proposalId}`
+    : `${item.id}:${entry.eventId || `${kind}:${entry.timestamp}:${entry.summary || (entry.changes || []).join('|')}`}`;
+}
+
 export function formatTodayTitle(title = '') {
   return title.replace(/\s*\u2014\s*/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -74,7 +90,7 @@ export function nextUnfinishedMove(item) {
   return (item.suggestedNextSteps || []).find(step => !isWorkPlanStepCompleted(item, step)) || '';
 }
 
-export function buildTodayOverview(sourceItems, { now = Date.now(), deletedIds = [], scanners = [], meetings = [] } = {}) {
+export function buildTodayOverview(sourceItems, { now = Date.now(), deletedIds = [], scanners = [], meetings = [], projectedActivity = null } = {}) {
   const dashboard = buildTodayDashboard(sourceItems, now, deletedIds);
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
@@ -122,7 +138,7 @@ export function buildTodayOverview(sourceItems, { now = Date.now(), deletedIds =
     { key: 'other', label: 'Other scanners', items: sortedGroups.slice(5).flatMap(group => group.items) },
   ];
 
-  const activity = Array.from({ length: 7 }, (_, index) => {
+  const activity = projectedActivity || Array.from({ length: 7 }, (_, index) => {
     const from = new Date(start);
     from.setDate(from.getDate() - 6 + index);
     const to = new Date(from);
@@ -135,24 +151,15 @@ export function buildTodayOverview(sourceItems, { now = Date.now(), deletedIds =
     };
   });
   const seenEvents = new Set();
-  for (const item of dashboard.records) {
+  for (const item of projectedActivity ? [] : dashboard.records) {
     for (const entry of item.updateHistory || []) {
       const time = timestamp(entry.timestamp);
       if (!Number.isFinite(time) || time > now) continue;
       const bucket = activity.find(day => time >= day.from && time < day.to);
       if (!bucket) continue;
-      let kind;
-      if (entry.kind === 'action') {
-        if (entry.event !== 'succeeded' || !entry.proposalId || !isConfirmedCommunication({
-          state: 'Succeeded', channel: entry.channel, executionCode: entry.code, executionVerification: entry.verification,
-        })) continue;
-        kind = 'communication';
-      } else if (entry.kind === 'lifecycle') kind = 'lifecycle';
-      else if (entry.kind === 'discovery' || entry.changes?.includes('Discovered')) kind = 'discovery';
-      else if (entry.kind === 'reply' || entry.summary || entry.changes?.length) kind = 'update';
-      else continue;
-      const key = kind === 'communication' ? `action:${entry.proposalId}`
-        : `${item.id}:${entry.eventId || `${kind}:${entry.timestamp}:${entry.summary || (entry.changes || []).join('|')}`}`;
+      const kind = todayActivityKind(entry);
+      if (!kind) continue;
+      const key = todayActivityKey(item, entry, kind);
       if (seenEvents.has(key)) continue;
       seenEvents.add(key);
       bucket.counts[kind] += 1;

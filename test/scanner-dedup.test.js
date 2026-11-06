@@ -45,6 +45,7 @@ let coldItems;
 let items;
 let scanners;
 let deletedItemIds;
+let connected;
 let normalizeItem;
 let deriveStableItemId;
 let collectItemSourceIdentities;
@@ -76,12 +77,13 @@ const sharedEvidence = {
 
 test.before(async () => {
   ({ get } = await import('svelte/store'));
-  ({ coldItems, deletedItemIds, items, scanners } = await import('../src/svelte/lib/stores.js'));
+  ({ coldItems, deletedItemIds, items, scanners, connected } = await import('../src/svelte/lib/stores.js'));
   engine = await import('../src/svelte/lib/scanner-engine.js');
   ({ collectItemSourceIdentities, deriveStableItemId, normalizeItem } = await import('../src/svelte/lib/models/item.js'));
 });
 
 test.beforeEach(() => {
+  connected.set(true);
   globalThis.window = { workiq: { showDesktopNotification: async () => {} } };
   globalThis.__scannerDedupTransport = null;
   coldItems.set([]);

@@ -294,7 +294,7 @@ beforeEach(() => {
   coldItems.set([]);
   history.set([]);
   activeOperations.set(new Map());
-  connected.set(false);
+  connected.set(true);
   isDemo.set(false);
   globalThis.__mailboxTestSaveCalls = 0;
   globalThis.__mailboxTestSaveModes = [];

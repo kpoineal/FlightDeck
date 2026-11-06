@@ -2,7 +2,10 @@
 import { get } from 'svelte/store';
 import { items, connected } from './stores.js';
 import { addHistory } from './actions.js';
-import { savePersistentState } from './persistence.js';
+import * as persistence from './persistence.js';
+import { usesRepository } from './repository-context.js';
+const { savePersistentState } = persistence;
+import { resolveRadarItem } from './radar-navigation.js';
 import {
   itemOperationKey,
   releaseOperationGuards,
@@ -19,8 +22,10 @@ const TICK_MS = 30_000; // 30s
 const MAX_CONCURRENT_MONITOR_CHECKS = 5;
 let intervalHandle = null;
 let cycleInProgress = false;
+let engineGeneration = 0;
 
 export function startMonitoringLoop() {
+  if (!get(connected)) return;
   if (intervalHandle) return;
   logInfo('monitor', 'Monitoring loop started');
   intervalHandle = setInterval(checkDueItems, TICK_MS);
@@ -28,34 +33,38 @@ export function startMonitoringLoop() {
 }
 
 export function stopMonitoringLoop() {
+  engineGeneration++;
   if (intervalHandle) {
     clearInterval(intervalHandle);
     intervalHandle = null;
   }
 }
 
-async function checkDueItems() {
-  if (!get(connected) || cycleInProgress) return;
-
-  const currentItems = get(items);
-  const isDue = (i) =>
+function isDue(i) {
+  return (
     i.monitorEnabled &&
     (!i.snoozeUntil || !Number.isFinite(new Date(i.snoozeUntil).getTime()) || new Date(i.snoozeUntil).getTime() <= Date.now()) &&
     i.nextRunAt &&
     new Date(i.nextRunAt).getTime() <= Date.now() &&
     i.lifecycleStatus !== 'complete' &&
-    i.lifecycleStatus !== 'archived';
-  const due = currentItems.filter(isDue);
-  if (!due.length) return;
+    i.lifecycleStatus !== 'archived'
+  );
+}
 
+async function checkDueItems() {
+  if (!get(connected) || cycleInProgress) return;
   cycleInProgress = true;
   try {
+    const due = usesRepository()
+      ? (await window.workiq.stateQuery('dueMonitors', { now: Date.now(), limit: 100 })).rows
+      : get(items).filter(isDue);
+    if (!due.length) return;
     let nextDueIndex = 0;
     const workerCount = Math.min(MAX_CONCURRENT_MONITOR_CHECKS, due.length);
     await Promise.all(Array.from({ length: workerCount }, async () => {
       while (nextDueIndex < due.length && get(connected)) {
         const candidate = due[nextDueIndex++];
-        const item = get(items).find((i) => i.id === candidate.id);
+        const item = get(items).find((i) => i.id === candidate.id) || (usesRepository() ? candidate : null);
         if (!item || !isDue(item)) continue;
         try {
           logInfo('monitor', `Checking "${item.title}"`, { itemId: item.id });
@@ -75,6 +84,8 @@ async function checkDueItems() {
         }
       }
     }));
+  } catch (error) {
+    logError('monitor', `Monitor cycle failed: ${error.message}`);
   } finally {
     cycleInProgress = false;
     savePersistentState();
@@ -84,6 +95,8 @@ async function checkDueItems() {
 
 
 export async function runItemCheck(item, { priority = 'interactive' } = {}) {
+  if (!get(connected)) return { ok: false, code: 'CONNECTION_NOT_READY' };
+  const generation = engineGeneration;
   const lease = tryAcquireOperationGuards(itemOperationKey(item?.id), {
     type: 'monitor',
     id: item?.id,
@@ -91,7 +104,18 @@ export async function runItemCheck(item, { priority = 'interactive' } = {}) {
     startedAt: Date.now(),
   });
   if (!lease) return { ok: false, code: 'BUSY' };
+  const engineKey = `item:${item.id}`;
+  let mainLease = false;
   try {
+  if (usesRepository()) {
+    mainLease = await window.workiq.acquireEngine({ key: engineKey, scheduled: priority === 'background' });
+    if (!mainLease) return { ok: false, code: 'BUSY' };
+    if (!await persistence.flushPersistentState()) return { ok: false, code: 'PERSISTENCE_FAILED' };
+    item = await resolveRadarItem(item.id);
+    if (!item) return { ok: false, code: 'NOT_FOUND' };
+    if (priority === 'background' && !isDue(item)) return { ok: false, code: 'SUPERSEDED' };
+    if (!get(items).some(row => row.id === item.id)) items.update(rows => [item, ...rows]);
+  }
   const prompt = buildMonitorPrompt(item);
   const payload = await runWorkiqJson(
     prompt,
@@ -99,6 +123,9 @@ export async function runItemCheck(item, { priority = 'interactive' } = {}) {
     'task-monitor',
     { priority, key: `item:${item.id}` }
   );
+  if (!get(connected) || generation !== engineGeneration || !get(items).some(entry => entry.id === item.id)) {
+    return { ok: false, code: 'SUPERSEDED' };
+  }
 
   if (!payload || typeof payload.summary !== 'string') return;
 
@@ -253,6 +280,9 @@ export async function runItemCheck(item, { priority = 'interactive' } = {}) {
     })
   );
   } finally {
+    if (mainLease) {
+      try { await savePersistentState(); } finally { await window.workiq.releaseEngine(engineKey); }
+    }
     releaseOperationGuards(lease);
   }
 }

@@ -10,8 +10,10 @@ import {
   scanners,
 } from './stores.js';
 import { filterDeletedItems, normalizeItemId, reconcileHydratedItems } from './models/item.js';
+import { rememberRepositoryThread, usesRepository } from './repository-context.js';
 
 let coldHydrationPromise = null;
+const detailHydrations = new Map();
 let navigationGeneration = 0;
 
 function findItem(itemId) {
@@ -24,6 +26,7 @@ function findItem(itemId) {
 }
 
 export function hydrateRadarColdItems() {
+  if (usesRepository()) return Promise.resolve(get(coldItems));
   const getColdItems = window.workiq?.getColdItems;
   if (typeof getColdItems !== 'function') return Promise.resolve([]);
   if (coldHydrationPromise) return coldHydrationPromise;
@@ -47,7 +50,24 @@ export async function resolveRadarItem(itemId) {
   if (!normalizedId) return null;
 
   const immediate = findItem(normalizedId);
-  if (immediate) return immediate;
+  if (immediate && (!usesRepository() || !immediate.historyPartial)) return immediate;
+  if (usesRepository()) {
+    if (detailHydrations.has(normalizedId)) return detailHydrations.get(normalizedId);
+    const pending = (async () => {
+      const before = immediate ? structuredClone(immediate) : null;
+      const item = await window.workiq.stateQuery('getThread', { id: normalizedId });
+      if (!item || get(deletedItemIds).includes(normalizedId)) return null;
+      const live = findItem(normalizedId);
+      if (live && before && JSON.stringify(live) !== JSON.stringify(before)) return live;
+      rememberRepositoryThread(item);
+      if (get(items).some(row => row.id === item.id)) items.update(rows => rows.map(row => row.id === item.id ? item : row));
+      else coldItems.update(rows => [...rows.filter(row => row.id !== item.id), item]);
+      return item;
+    })();
+    detailHydrations.set(normalizedId, pending);
+    try { return await pending; }
+    finally { detailHydrations.delete(normalizedId); }
+  }
 
   await hydrateRadarColdItems();
   return findItem(normalizedId);

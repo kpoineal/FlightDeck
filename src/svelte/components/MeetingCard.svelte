@@ -1,5 +1,6 @@
 <script>
   import { safeDate, shortTime } from '../lib/utils.js';
+  import { connected } from '../lib/stores.js';
   import BriefingContent from './BriefingContent.svelte';
 
   let { meeting, briefing = null, unseen = false, expanded = false, generating = false, ontoggle, ongenerate, onpropose } = $props();
@@ -87,7 +88,7 @@
         <span>When: {when}</span>
       </div>
       <div class="meeting-card__actions">
-        <button class="small-btn primary" class:is-loading={generating} disabled={generating} on:click={handleGenerate}>
+        <button class="small-btn primary" class:is-loading={generating} disabled={generating || !$connected} on:click={handleGenerate}>
           {generating ? 'Generating...' : buttonLabel}
         </button>
         <button class="small-btn" on:click={(event) => onpropose?.({ meetingId: meeting.id, initiator: event.currentTarget })}>Review follow-up</button>

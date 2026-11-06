@@ -46,6 +46,7 @@ describe('preload IPC contract', () => {
     assert.ok(exposedApi, 'preload workiq API should be exposed');
 
     await exposedApi.getAppVersion();
+    await exposedApi.getStateDiagnostics();
     await exposedApi.ask('status?');
     await exposedApi.acceptEula();
     await exposedApi.probeMcp();
@@ -67,6 +68,7 @@ describe('preload IPC contract', () => {
 
     assert.deepEqual(invokeCalls, [
       [IPC_CHANNELS.GET_APP_VERSION],
+      [IPC_CHANNELS.GET_STATE_DIAGNOSTICS],
       [IPC_CHANNELS.ASK_WORKIQ, 'status?'],
       [IPC_CHANNELS.ACCEPT_WORKIQ_EULA],
       [IPC_CHANNELS.PROBE_WORKIQ_MCP],
@@ -157,7 +159,7 @@ describe('registerIpcHandlers()', () => {
   let queueUnsubscribed;
   let popouts;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     handlers = new Map();
     eventHandlers = new Map();
     lastLoadedUrl = '';
@@ -245,6 +247,7 @@ describe('registerIpcHandlers()', () => {
     delete require.cache[handlersPath];
     const { registerIpcHandlers } = require(handlersPath);
     cleanup = registerIpcHandlers(() => currentMainWindow, popouts, {
+      validateConnection: async () => ({ success: true }),
       workiqMcpClient: {
         ask: async (...args) => {
           workiqAskCalls.push(args);
@@ -273,9 +276,42 @@ describe('registerIpcHandlers()', () => {
         },
       },
     });
+    await handlers.get(IPC_CHANNELS.ACCEPT_WORKIQ_EULA)();
+  });
+
+  it('blocks every remote entry point after disconnect without dispatch or confirmation', async () => {
+    handlers.get('connection-disconnect')();
+    for (const channel of [IPC_CHANNELS.ASK_WORKIQ, IPC_CHANNELS.PROBE_WORKIQ_MCP,
+      IPC_CHANNELS.PROPOSE_THREAD_ACTIONS, IPC_CHANNELS.CREATE_OUTLOOK_DRAFT, IPC_CHANNELS.SEND_TEAMS_MESSAGE]) {
+      assert.equal((await handlers.get(channel)(null, {})).code, 'CONNECTION_NOT_READY');
+    }
+    assert.equal(dialogCalls.length, 0);
+    assert.deepEqual(workiqAskCalls, []);
+    assert.deepEqual(workiqDraftCalls, []);
+    assert.deepEqual(workiqTeamsCalls, []);
+    assert.deepEqual(workiqProposalCalls, []);
+  });
+
+  it('enforces repository-issued revision leases on hot and cold writes before touching storage', () => {
+    const { EventEmitter } = require('node:events');
+    const first = { sender: new EventEmitter() }, second = { sender: new EventEmitter() };
+    const key = 'flightdeck.persisted.v2';
+    const read = handlers.get(IPC_CHANNELS.STATE_READ)(first, key);
+    assert.equal(read.revision, 0);
+    assert.throws(() => handlers.get(IPC_CHANNELS.STORE_SET)(first, key, { items: [] }), /LEASE_REQUIRED/);
+    assert.equal(handlers.get(IPC_CHANNELS.STATE_ACQUIRE)(first, read.revision).ok, true);
+    assert.throws(() => handlers.get(IPC_CHANNELS.STORE_SET_COLD_ITEMS)(second, []), /LEASE_REQUIRED/);
+    assert.deepEqual(handlers.get(IPC_CHANNELS.STORE_SET)(first, key, { items: [] }), { success: true });
+    assert.equal(handlers.get(IPC_CHANNELS.STATE_RELEASE)(first, true, true).revision, 1);
+    assert.equal(handlers.get(IPC_CHANNELS.STATE_ACQUIRE)(second, 0).code, 'CONFLICT');
+    assert.throws(() => handlers.get(IPC_CHANNELS.STORE_SET)(second, key, { items: [{ id: 'resurrect' }] }), /LEASE_REQUIRED/);
+    assert.deepEqual(handlers.get(IPC_CHANNELS.STATE_READ)(second, key).value, { items: [] });
   });
 
   it('registers IPC handlers using canonical channel constants', () => {
+    const diagnosticExport = handlers.get(IPC_CHANNELS.GET_STATE_DIAGNOSTICS)();
+    assert.equal(diagnosticExport.schemaVersion, 1);
+    assert.deepEqual(diagnosticExport.entries, []);
     assert.equal(typeof handlers.get(IPC_CHANNELS.GET_APP_VERSION), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.ASK_WORKIQ), 'function');
     assert.equal(typeof handlers.get(IPC_CHANNELS.GET_WORKIQ_QUEUE_STATUS), 'function');

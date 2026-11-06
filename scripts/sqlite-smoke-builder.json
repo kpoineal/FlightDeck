@@ -1,0 +1,16 @@
+{
+  "extends": null,
+  "appId": "com.flightdeck.sqlite-runtime-smoke",
+  "productName": "FlightDeck SQLite Runtime Smoke",
+  "electronVersion": "41.0.3",
+  "directories": { "output": "test-results/sqlite-package" },
+  "extraMetadata": { "main": "scripts/state-sqlite-electron.cjs" },
+  "files": [
+    "src/**/*",
+    "dist-renderer/**/*",
+    "scripts/state-sqlite-electron.cjs",
+    "test/fixtures/state-profile.js"
+  ],
+  "npmRebuild": false,
+  "win": { "target": "dir", "signAndEditExecutable": false }
+}

@@ -45,6 +45,7 @@ let loadPersistentState;
 let savePersistentState;
 let scanners;
 let scannerEngine;
+let connected;
 
 function makeScanner(overrides = {}) {
   return {
@@ -68,6 +69,7 @@ function evidence(url, label = 'Source signal') {
 }
 
 async function scan(scannerId, payload) {
+  connected.set(true);
   globalThis.__scannerDedupPayloads.push(payload);
   const scanner = get(scanners).find((entry) => entry.id === scannerId);
   assert.ok(scanner, `scanner ${scannerId} must exist`);
@@ -105,7 +107,7 @@ function validPersistedDraft(overrides = {}) {
 
 test.before(async () => {
   ({ get } = await import('svelte/store'));
-  ({ actionProposals, items, scanners } = await import('../src/svelte/lib/stores.js'));
+  ({ actionProposals, items, scanners, connected } = await import('../src/svelte/lib/stores.js'));
   scannerEngine = await import('../src/svelte/lib/scanner-engine.js');
   ({ loadPersistentState, savePersistentState } = await import('../src/svelte/lib/persistence.js'));
 });

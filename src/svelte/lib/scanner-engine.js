@@ -2,7 +2,9 @@
 import { get } from 'svelte/store';
 import { items, coldItems, scanners, connected, deletedItemIds } from './stores.js';
 import { addHistory } from './actions.js';
-import { savePersistentState } from './persistence.js';
+import * as persistence from './persistence.js';
+import { usesRepository, rememberRepositoryThread } from './repository-context.js';
+const { savePersistentState } = persistence;
 import {
   releaseOperationGuards,
   scannerOperationKey,
@@ -23,13 +25,16 @@ import { showToast } from '../components/Toast.svelte';
 import { buildScannerPrompt } from './prompts.js';
 import { runWorkiqJson } from './json-parser.js';
 import { hydrateRadarColdItems } from './radar-navigation.js';
+import { disconnectWorkiq } from './connection.js';
 
 const TICK_MS = 60_000; // 60s
 const MAX_CONCURRENT_SCANS = 5;
 let intervalHandle = null;
 let cycleInProgress = false;
+let engineGeneration = 0;
 
 export function startScannerEngine() {
+  if (!get(connected)) return;
   if (intervalHandle) return;
   logInfo('scanner', 'Engine started');
   rescheduleOverdueScanners();
@@ -47,6 +52,7 @@ export function resumeScannerEngine() {
 }
 
 export function stopScannerEngine() {
+  engineGeneration++;
   if (intervalHandle) {
     clearInterval(intervalHandle);
     intervalHandle = null;
@@ -57,8 +63,8 @@ function rescheduleOverdueScanners() {
   const nowMs = Date.now();
   let changed = false;
 
-  scanners.update(($scanners) =>
-    $scanners.map((scanner) => {
+  const current = get(scanners);
+  const updated = current.map((scanner) => {
       if (!scanner.enabled || !scanner.nextRunAt) return scanner;
       const dueAt = new Date(scanner.nextRunAt).getTime();
       if (!Number.isFinite(dueAt) || dueAt > nowMs) return scanner;
@@ -70,10 +76,9 @@ function rescheduleOverdueScanners() {
       }
       // run-once / catch-up: set nextRunAt to now so it fires on next tick
       return { ...scanner, nextRunAt: new Date(nowMs).toISOString() };
-    })
-  );
+    });
 
-  if (changed) savePersistentState();
+  if (changed) { scanners.set(updated); void savePersistentState(); }
 }
 
 async function checkDue() {
@@ -103,7 +108,7 @@ async function checkDue() {
           // If EULA is not accepted or launcher missing, disconnect so the banner reappears
           const msg = err.message || '';
           if (msg.includes('EULA not accepted') || msg.includes('launcher not found')) {
-            connected.set(false);
+            void disconnectWorkiq();
             stopScannerEngine();
             addHistory('failure', `Scanner ${scanner.name}: ${msg}`, { scannerId: scanner.id });
             savePersistentState();
@@ -131,6 +136,8 @@ async function checkDue() {
 
 
 export async function runScanner(scanner, { priority = 'interactive' } = {}) {
+  if (!get(connected)) return { ok: false, code: 'CONNECTION_NOT_READY' };
+  const generation = engineGeneration;
   const lease = tryAcquireOperationGuards(scannerOperationKey(scanner?.id), {
     type: 'scan',
     id: scanner?.id,
@@ -138,7 +145,14 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     startedAt: Date.now(),
   });
   if (!lease) return { ok: false, code: 'BUSY' };
+  const engineKey = `scanner:${scanner.id}`;
+  let mainLease = false;
   try {
+  if (usesRepository()) {
+    mainLease = await window.workiq.acquireEngine({ key: engineKey, scheduled: priority === 'background' });
+    if (!mainLease) return { ok: false, code: 'BUSY' };
+    if (!await persistence.flushPersistentState()) return { ok: false, code: 'PERSISTENCE_FAILED' };
+  }
   const prompt = buildScannerPrompt(scanner, get(items), get(scanners));
   const payload = await runWorkiqJson(
     prompt,
@@ -146,6 +160,9 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     'scanner',
     { priority, key: `scanner:${scanner.id}` }
   );
+  if (!get(connected) || generation !== engineGeneration || !get(scanners).some(entry => entry.id === scanner.id)) {
+    return { ok: false, code: 'SUPERSEDED' };
+  }
 
   if (!payload || !Array.isArray(payload.radarItems)) return;
   if (!payload || !Array.isArray(payload.radarItems)) {
@@ -153,7 +170,7 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
   }
 
   // Identity checks must include the authoritative cold store, even when Inbox has not hydrated it yet.
-  await hydrateRadarColdItems();
+  if (!usesRepository()) await hydrateRadarColdItems();
 
   const newItems = payload.radarItems.map((item) => {
     const candidateId = normalizeItemId(item?.id) || deriveStableItemId(item, scanner.id);
@@ -179,7 +196,8 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
       })
     : capped;
 
-  const currentScanner = get(scanners).find((entry) => entry.id === scanner.id) || scanner;
+  const currentScanner = get(scanners).find((entry) => entry.id === scanner.id);
+  if (!currentScanner || !get(connected) || generation !== engineGeneration) return { ok: false, code: 'SUPERSEDED' };
   const excludedItemIds = new Set(currentScanner.excludedItemIds || []);
   const globallyDeletedItemIds = new Set(get(deletedItemIds));
   const eligible = filtered.filter((item) => !excludedItemIds.has(item.id) && !globallyDeletedItemIds.has(item.id));
@@ -206,6 +224,17 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     if (!item?.id || globallyDeletedItemIds.has(item.id)) continue;
     existingIds.add(item.id);
     addSourceIdentities(item, item.scannerId || null);
+  }
+  if (usesRepository()) {
+    const retained = await window.workiq.stateQuery('sourceOwners', {
+      identities: [...new Set(eligible.flatMap(collectItemSourceIdentities))].slice(0, 500),
+      ids: eligible.map(item => item.id),
+    });
+    for (const id of retained.ids) existingIds.add(id);
+    for (const owner of retained.rows) {
+      if (!sourceIdentityOwners.has(owner.identity)) sourceIdentityOwners.set(owner.identity, new Set());
+      sourceIdentityOwners.get(owner.identity).add(owner.scannerId);
+    }
   }
 
   const allowCrossScannerDedup = currentScanner.crossScannerDedup !== false;
@@ -256,6 +285,16 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     }
   }
 
+  if (usesRepository() && unique.length) {
+    if (!await persistence.flushPersistentState()) return { ok: false, code: 'PERSISTENCE_FAILED' };
+    const result = await persistence.executeRepositoryCommand('acceptScannerResults', { scannerId: scanner.id, items: unique });
+    if (!result.ok) return result;
+    const accepted = new Set(result.changedIds);
+    for (let index = unique.length - 1; index >= 0; index--) {
+      if (!accepted.has(unique[index].id)) unique.splice(index, 1);
+      else rememberRepositoryThread(unique[index]);
+    }
+  }
   if (unique.length) {
     items.update(($i) => [...unique, ...$i]);
   }
@@ -309,6 +348,9 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
   }
   return { ok: true, code: 'COMPLETED', newItemCount: unique.length, completedAt };
   } finally {
+    if (mainLease) {
+      try { await savePersistentState(); } finally { await window.workiq.releaseEngine(engineKey); }
+    }
     releaseOperationGuards(lease);
   }
 }

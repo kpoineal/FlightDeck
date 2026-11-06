@@ -121,18 +121,22 @@ The PTY bridge remains available for explicit EULA acceptance/recovery. Ordinary
 - Debounced (500 ms) on resize/move events to avoid excessive writes.
 - On startup, restores position only if saved bounds are visible on a connected display.
 
-### Persistent Store (`src/main/store.js`)
+### Persistent State (`src/main/state-service.js`, `state-worker.js`)
 
-- Wraps `electron-store` to provide key/value persistence backed by a JSON file on disk.
-- **Data store** (`flightdeck-data`) — primary state: tracking items, scanners, briefings, history, user preferences, custom prompts.
-- **Cold store** (`flightdeck-cold`) — archived/completed items moved out of the active data store to keep it lean.
-- Exposed to the renderer through IPC channels (`store-get`, `store-set`, etc.).
+- Main owns a single SQLite worker repository per active normal/demo profile. WAL and FULL synchronization protect atomic domain commands.
+- Threads, sources, scanners, exclusions, proposals, events, tombstones and preferences live in indexed tables, not whole JSON snapshots.
+- Startup publishes bounded hot projections; archive navigation, history, selected detail and source identity review use repository queries.
+- Global compare-and-swap revisions and local retry receipts prevent stale-window resurrection; committed commands invalidate peers.
+- A main-owned engine election/resource lease prevents duplicate scheduled scans across windows.
+- Legacy `flightdeck-data` / cold JSON files are validated import/recovery inputs only. Pre-import backups and an atomic activation marker prevent stale JSON resurrection.
+- Small non-domain settings may still use `store.js` / electron-store. Production legacy snapshot IPC refuses domain access.
+- See [state-storage.md](state-storage.md) for import refusal/recovery, query boundaries and release limitations.
 
 ### Shared IPC Contract (`src/shared/ipc-contract.js`)
 
 - Single source of truth for all IPC channel name strings.
-- Imported by both `src/main/ipc-handlers.js` and `src/preload.js` to eliminate string duplication and typo bugs.
-- Defines the `IPC_CHANNELS` object with 20 named constants.
+- Imported by main modules; the sandbox-compatible preload mirrors the channel constants, with contract tests guarding parity.
+- Includes connection readiness, state revision/lease and acknowledged-flush channels alongside application IPC.
 
 ---
 
@@ -245,21 +249,26 @@ sequenceDiagram
   participant M as main/store.js
 
   Note over S,M: Load on startup
-  P->>IPC: storeGet("flightdeck.v4")
-  IPC->>M: ipcRenderer.invoke("store-get")
+  P->>IPC: readState("flightdeck.persisted.v2")
+  IPC->>M: ipcRenderer.invoke("state-read")
   M-->>IPC: persisted JSON
   IPC-->>P: parsed object
   P->>S: items.set(), scanners.set(), ...
 
   Note over S,M: Save (debounced 500ms)
   P->>S: get(items), get(scanners), ...
-  P->>IPC: storeSet("flightdeck.v4", snapshot)
+  P->>IPC: acquireStateLease(expectedRevision)
+  P->>IPC: storeSet("flightdeck.persisted.v2", canonicalSnapshot)
   IPC->>M: ipcRenderer.invoke("store-set")
+  P->>IPC: releaseStateLease(recovered, committed)
 ```
 
 Key responsibilities:
-- **`loadPersistentState()`** — Reads from electron-store, runs migrations (legacy keys, unified item model), normalizes items and scanners, prunes stale briefings and history, populates all Svelte stores.
+- **`loadPersistentState()`** — Reads canonical/fallback state with a main revision, normalizes/prunes and publishes cache before independent connection validation. Dirty local changes prevent stale hydration. Malformed/read failures block writes rather than authorize empty fallback.
 - **`savePersistentState()`** — Snapshots all store values via `get()`, writes to electron-store. Called by engines after mutations and debounced (500 ms) on UI changes.
+- **`subscribePersistentState()`** — Covers all persisted domains, skips initial subscription calls and records mutations immediately; `items` is the only newly written thread array.
+- **Connection** — Durable `connectionIntent` is separate from runtime `connected`/`connectionStatus`. Main coalesces validation, gates all remote IPC and invalidates readiness on disconnect/auth errors. Engines follow readiness; log/version/update checks no longer block startup setup.
+- **`flushPersistentState()`** — Drains dirty generations/transactions through acknowledged writes. Main coordinates Ctrl+R/F5/menu reload, popout close and quit while IPC remains available; failures retain windows with visible retry/conflict/export controls. Unmount removes all listeners.
 - **`seedDemoFixture()`** — Seeds demo data from `src/demo/fixture.json` with date-shifted timestamps into a separate `flightdeck.demo.v2` key.
 - **Housekeeping** — `pruneHistory()` (max 200 entries / 30 days), `pruneStaleBriefings()` (past meetings), `autoArchiveCompletedItems()`, `evictToColdStorage()`.
 
@@ -273,7 +282,7 @@ Background scheduling loop for user-defined AI scanners.
 | Renderer dispatch workers | 5 (global main-process limits still apply) |
 | Schedule types | interval, weekly, one-time |
 | Missed-run policies | `skip`, `run-once`, `catch-up` (max 3) |
-| Dedup | By item ID + title per scanner |
+| Dedup | Canonical item ID and exact qualified source identities; candidate scanner controls cross-scanner dedup, never title similarity |
 | Auto-monitor | Configurable severity threshold |
 
 **Flow per tick:**
@@ -421,7 +430,7 @@ sequenceDiagram
 
 ```mermaid
 graph LR
-  subgraph Active["flightdeck-data (electron-store)"]
+  subgraph Active["SQLite worker · state-normal or state-demo"]
     ITEMS["items[]"]
     SCANNERS["scanners[]"]
     MEETINGS["meetings[]"]
@@ -429,19 +438,15 @@ graph LR
     HISTORY["history[]"]
     PREFS["User preferences"]
     PROMPTS["Custom prompts"]
+    ARCHIVED["Cold-tier threads · indexed rows"]
   end
-
-  subgraph Cold["flightdeck-cold (electron-store)"]
-    ARCHIVED["Archived items[]"]
-  end
-
-  ITEMS -->|"evictToColdStorage() · items archived >24 hrs"| ARCHIVED
-  ARCHIVED -->|"getColdItems() · on-demand for archive view"| ITEMS
+  ITEMS -->|"Transactional retention · archived >24 hrs"| ARCHIVED
+  ARCHIVED -->|"Bounded page / detail by ID"| ITEMS
 ```
 
-- **Active store** (`flightdeck-data`): All live state. Read on startup, written on every debounced save.
-- **Cold store** (`flightdeck-cold`): Items with `lifecycleStatus === 'archived'` that were archived more than 24 hours ago are evicted here to keep the active store lean.
-- Cold items are fetched on-demand when the user selects the "archived" filter and merged (deduped by ID) with any still-hot archived items.
+- **Active projection**: Up to 500 hot threads with compact history; only changed rows/fields are saved.
+- **Cold tier**: Archived threads older than 24 hours move tiers transactionally within the same database.
+- Radar pages include all matching hot/cold rows without loading the complete archive. Selected IDs can load outside the current page; Today aggregates cover all retained threads.
 - Auto-archive: items in `complete` status for more than the configured `AUTO_ARCHIVE_DAYS` are automatically transitioned to `archived`.
 
 ### Housekeeping (runs on load and periodically)
@@ -450,9 +455,25 @@ graph LR
 |---|---|
 | History pruning | Max 200 entries, max 30 days |
 | Stale briefing pruning | Briefings for past meetings removed |
-| Item history cap | Max 20 `updateHistory` entries per item |
+| Item history cap | Max 20 action + 20 other `updateHistory` entries per item |
 | Evidence link cap | Max N `evidenceLinks` per item |
-| Cold eviction | Archived items older than 24 hrs moved to cold store |
+| Cold eviction | Archived items older than 24 hrs moved to the indexed cold tier |
+
+### Reload measurement boundaries
+
+The [state diagnostics guide](state-diagnostics.md) describes the opt-in bounded
+main/renderer buffers and isolated generated-profile harness. Historical JSON
+baseline spans measured synchronous electron-store operations, not separate parse
+and serialization phases. IPC-handler duration excludes transport/queue time;
+renderer request spans include their round trip. File sizes are file-stat bytes,
+not contextBridge wire bytes. No timing event writes to the engine log or state file.
+
+Current production publishes cached projections before independently coalesced
+connection validation. Historical JSON baselines had the opposite ordering.
+`remote-ready` means successful existing EULA validation, not proof of subsequent
+network access. Svelte tick/frame markers are opportunities, not verified usable
+UI. The harness independently checks counts and completes a local interaction.
+Cold application launch and warm same-main renderer reload are reported separately.
 
 ---
 

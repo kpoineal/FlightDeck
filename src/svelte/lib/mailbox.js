@@ -118,6 +118,7 @@ export function markMailboxThreadRead(item) {
     ...item,
     isNew: false,
     hasNewUpdate: false,
+    ...(item.historyPartial === true ? { mailboxReadRequestId: crypto.randomUUID() } : {}),
     updateHistory: timeline(item).map((entry) => ({ ...entry, seen: true })),
   };
 }

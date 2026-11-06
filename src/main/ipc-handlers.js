@@ -16,6 +16,9 @@ const { registerTrackerPopoutIpc } = require('./ipc/tracker-popout');
 const { IPC_CHANNELS } = require('../shared/ipc-contract');
 const { normalizeTeamsMessage } = require('../shared/recipient-validation.mjs');
 const { storeGet, storeSet, storeDelete, storeGetAll, storeGetSize, coldStoreGet, coldStoreSet } = require('./store');
+const { diagnostics } = require('./state-diagnostics');
+const { createConnectionState } = require('./connection-state');
+const { createStateSessions } = require('./state-sessions');
 
 const APP_ROOT = path.join(__dirname, '..');
 
@@ -72,6 +75,76 @@ function fetchLatestRelease() {
 }
 
 function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
+  const database = dependencies.stateService;
+  if (database) {
+    ipcMain.handle(IPC_CHANNELS.STATE_QUERY, (_event, method, input) => database.query(method, input));
+    ipcMain.handle(IPC_CHANNELS.STATE_COMMAND, async (event, input) => {
+      try {
+        const result = await database.command(input);
+        for (const win of new Set([getMainWindow(), ...popoutWindows])) {
+          if (win && !win.isDestroyed() && win.webContents !== event.sender) {
+            win.webContents.send(IPC_CHANNELS.TRACKER_STATE_SYNC, result);
+          }
+        }
+        return result;
+      } catch (error) { return { ok: false, code: error.code || 'REPOSITORY_FAILED' }; }
+    });
+    ipcMain.handle(IPC_CHANNELS.STATE_ENGINE_ACQUIRE, (event, key) => database.acquireEngine(event.sender, key));
+    ipcMain.handle(IPC_CHANNELS.STATE_ENGINE_RELEASE, (event, key) => database.releaseEngine(event.sender, key));
+  }
+  const stateSessions = createStateSessions();
+  const stateKeys = ['flightdeck.persisted.v2', 'flightdeck.persisted.v1', 'flightdeck.demo.v2'];
+  const stateKey = key => typeof key === 'string' && stateKeys.some(root => key === root || key.startsWith(`${root}.`) || root.startsWith(`${key}.`));
+  ipcMain.handle(IPC_CHANNELS.STATE_READ, (_event, key) => {
+    if (database) throw new Error('SNAPSHOT_BACKEND_RETIRED');
+    if (!stateKeys.includes(key)) throw new Error('INVALID_STATE_KEY');
+    stateSessions.assertReadable(_event?.sender);
+    return { value: storeGet(key), revision: stateSessions.revision() };
+  });
+  ipcMain.handle(IPC_CHANNELS.STATE_ACQUIRE, (event, expected) => stateSessions.acquire(event.sender, expected));
+  ipcMain.handle(IPC_CHANNELS.STATE_RELEASE, (event, recovered, committed) => {
+    const result = stateSessions.release(event.sender, recovered);
+    if (result.ok && committed === true) {
+      for (const win of new Set([getMainWindow(), ...popoutWindows])) {
+        if (win && !win.isDestroyed() && win.webContents !== event.sender) {
+          win.webContents.send(IPC_CHANNELS.TRACKER_STATE_SYNC);
+        }
+      }
+    }
+    return result;
+  });
+  const connection = createConnectionState(dependencies.validateConnection || runWorkiqAcceptEula, (state) => {
+    for (const win of new Set([getMainWindow(), ...popoutWindows])) {
+      try {
+        if (win && !win.isDestroyed()) win.webContents.send(IPC_CHANNELS.CONNECTION_STATUS_CHANGED, state);
+      } catch (_) { logError('[main] Connection status delivery failed'); }
+    }
+  });
+  ipcMain.handle(IPC_CHANNELS.CONNECTION_STATUS, () => connection.getStatus());
+  ipcMain.handle(IPC_CHANNELS.CONNECTION_DISCONNECT, () => connection.disconnect());
+  const blockedRemote = () => ({ success: false, ok: false, code: 'CONNECTION_NOT_READY', dispatched: false });
+  const checkRemoteResult = result => {
+    if (['AUTH_REQUIRED', 'AUTH_FAILED', 'EULA_NOT_ACCEPTED', 'CONNECTION_FAILED'].includes(result?.code)) connection.invalidate();
+    return result;
+  };
+  ipcMain.handle(IPC_CHANNELS.GET_STATE_DIAGNOSTICS, () => diagnostics.snapshot());
+  const measuredHandle = (channel, operation, handler) => {
+    if (!diagnostics.enabled) {
+      ipcMain.handle(channel, handler);
+      return;
+    }
+    ipcMain.handle(channel, (...args) => {
+      const end = diagnostics.begin(operation);
+      try {
+        const result = handler(...args);
+        end({ outcome: 'ok' });
+        return result;
+      } catch (error) {
+        end({ outcome: 'failed' });
+        throw error;
+      }
+    });
+  };
   const workiqMcpClient = dependencies.workiqMcpClient;
   const unsubscribeQueue = workiqMcpClient?.onQueueStatus?.((status) => {
     const windows = new Set([getMainWindow(), ...popoutWindows]);
@@ -100,21 +173,32 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
   });
 
   ipcMain.handle(IPC_CHANNELS.ASK_WORKIQ, async (_event, question, options) => {
+    if (!connection.isReady()) return blockedRemote();
     try {
       if (typeof workiqMcpClient?.ask !== 'function') {
         return { success: false, error: 'WorkIQ is unavailable.', code: 'START_FAILED', attempts: 0 };
       }
-      return await workiqMcpClient.ask(question, options);
+      return checkRemoteResult(await workiqMcpClient.ask(question, options));
     } catch (_) {
       return { success: false, error: 'WorkIQ request failed.', code: 'REQUEST_FAILED', attempts: 0 };
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.ACCEPT_WORKIQ_EULA, async () => {
-    return runWorkiqAcceptEula();
+  ipcMain.handle(IPC_CHANNELS.ACCEPT_WORKIQ_EULA, async (_event, options) => {
+    if (!diagnostics.enabled) return connection.validate(options || {});
+    const end = diagnostics.begin('ipc-validate');
+    try {
+      const result = await connection.validate(options || {});
+      end({ outcome: result?.success === true ? 'ok' : 'failed' });
+      return result;
+    } catch (error) {
+      end({ outcome: 'failed' });
+      throw error;
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.PROBE_WORKIQ_MCP, async () => {
+    if (!connection.isReady()) return blockedRemote();
     if (!workiqMcpClient || typeof workiqMcpClient.probe !== 'function') {
       logError('[main] WorkIQ MCP client is unavailable');
       return {
@@ -126,10 +210,11 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
       };
     }
 
-    return workiqMcpClient.probe();
+    return checkRemoteResult(await workiqMcpClient.probe());
   });
 
   ipcMain.handle(IPC_CHANNELS.PROPOSE_THREAD_ACTIONS, async (_event, context) => {
+    if (!connection.isReady()) return blockedRemote();
     if (!workiqMcpClient || typeof workiqMcpClient.proposeThreadActions !== 'function') {
       logError('[main] WorkIQ MCP synthesis client is unavailable');
       return {
@@ -139,10 +224,11 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
       };
     }
 
-    return workiqMcpClient.proposeThreadActions(context);
+    return checkRemoteResult(await workiqMcpClient.proposeThreadActions(context));
   });
 
   ipcMain.handle(IPC_CHANNELS.CREATE_OUTLOOK_DRAFT, async (_event, draft) => {
+    if (!connection.isReady()) return blockedRemote();
     if (!workiqMcpClient || typeof workiqMcpClient.createOutlookDraft !== 'function') {
       logError('[main] WorkIQ MCP draft client is unavailable');
       return {
@@ -189,10 +275,12 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
       };
     }
 
-    return workiqMcpClient.createOutlookDraft(draft);
+    if (!connection.isReady()) return blockedRemote();
+    return checkRemoteResult(await workiqMcpClient.createOutlookDraft(draft));
   });
 
   ipcMain.handle(IPC_CHANNELS.SEND_TEAMS_MESSAGE, async (_event, payload) => {
+    if (!connection.isReady()) return blockedRemote();
     if (!workiqMcpClient || typeof workiqMcpClient.sendTeamsMessage !== 'function') {
       logError('[main] WorkIQ MCP Teams client is unavailable');
       return { ok: false, action: 'teams-message-send', code: 'START_FAILED' };
@@ -236,7 +324,8 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
       return { ok: false, action: 'teams-message-send', code: 'CANCELLED' };
     }
 
-    return workiqMcpClient.sendTeamsMessage(normalizedPayload);
+    if (!connection.isReady()) return blockedRemote();
+    return checkRemoteResult(await workiqMcpClient.sendTeamsMessage(normalizedPayload));
   });
 
   ipcMain.handle(IPC_CHANNELS.READ_PROMPT_FILE, async (_event, filename) => {
@@ -489,21 +578,27 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
     return { success: true };
   });
 
-  ipcMain.handle(IPC_CHANNELS.STORE_GET, (_event, key) => {
+  measuredHandle(IPC_CHANNELS.STORE_GET, 'ipc-get', (_event, key) => {
+    if (database && stateKey(key)) throw new Error('SNAPSHOT_BACKEND_RETIRED');
     return storeGet(key);
   });
 
-  ipcMain.handle(IPC_CHANNELS.STORE_SET, (_event, key, value) => {
+  measuredHandle(IPC_CHANNELS.STORE_SET, 'ipc-set', (_event, key, value) => {
+    if (database && stateKey(key)) throw new Error('SNAPSHOT_BACKEND_RETIRED');
+    if (stateKey(key)) stateSessions.assertOwner(_event?.sender);
     storeSet(key, value);
     return { success: true };
   });
 
-  ipcMain.handle(IPC_CHANNELS.STORE_DELETE, (_event, key) => {
+  measuredHandle(IPC_CHANNELS.STORE_DELETE, 'ipc-delete', (_event, key) => {
+    if (database && stateKey(key)) throw new Error('SNAPSHOT_BACKEND_RETIRED');
+    if (stateKey(key)) stateSessions.assertOwner(_event?.sender);
     storeDelete(key);
     return { success: true };
   });
 
-  ipcMain.handle(IPC_CHANNELS.STORE_GET_ALL, () => {
+  measuredHandle(IPC_CHANNELS.STORE_GET_ALL, 'ipc-get-all', () => {
+    if (database) throw new Error('SNAPSHOT_BACKEND_RETIRED');
     return storeGetAll();
   });
 
@@ -517,6 +612,7 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
         return { success: false, error: 'Invalid migration data: expected an object.' };
       }
       for (const [key, value] of Object.entries(data)) {
+        if (stateKey(key)) return { success: false, error: 'Use the canonical state migration path.' };
         storeSet(key, value);
       }
       log('[store] Migration from localStorage complete.', Object.keys(data).length, 'keys imported.');
@@ -527,11 +623,15 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.STORE_GET_COLD_ITEMS, () => {
+  measuredHandle(IPC_CHANNELS.STORE_GET_COLD_ITEMS, 'ipc-cold-get', (_event) => {
+    if (database) throw new Error('SNAPSHOT_BACKEND_RETIRED');
+    stateSessions.assertReadable(_event?.sender);
     return coldStoreGet('items') || [];
   });
 
-  ipcMain.handle(IPC_CHANNELS.STORE_SET_COLD_ITEMS, (_event, items) => {
+  measuredHandle(IPC_CHANNELS.STORE_SET_COLD_ITEMS, 'ipc-cold-set', (_event, items) => {
+    if (database) throw new Error('SNAPSHOT_BACKEND_RETIRED');
+    stateSessions.assertOwner(_event?.sender);
     coldStoreSet('items', items);
     return { success: true };
   });
