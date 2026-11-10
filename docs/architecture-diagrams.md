@@ -17,7 +17,7 @@ flowchart LR
   Cache --> Local["Today / Radar / popout local interactions"]
   Cache --> Validate["Independent main-coalesced validation"]
   Validate --> Gate["Runtime ready gate (main + UI)"]
-  Gate --> Remote["MCP read queue / confirmed remote writes"]
+  Gate --> Remote["Buffered CLI read queue / confirmed remote writes"]
   Local --> Dirty["Domain mutation generations"]
   Dirty --> Flush["Acknowledged controlled reload / close / quit"]
   Flush --> CAS["Atomic incremental commands / revision CAS"]
@@ -28,7 +28,7 @@ flowchart LR
 
 The remaining numbered diagrams predate the Svelte migration and are historical;
 in particular they do not establish current localStorage ownership, schedulers,
-MCP transport or SQLite activation.
+CLI transport or SQLite activation.
 
 ## 1. System Architecture
 

@@ -758,7 +758,10 @@ describe('monitor mailbox behavior', () => {
 
       assert.equal(startedCount, dueItems.length);
       assert.equal(maxActiveCount, 5);
-      assert.ok(get(items).every((item) => item.lastRunAt));
+      const failed = get(items).find(item => item.id === dueItems[0].id);
+      assert.equal(failed.lastRunAt, dueItems[0].lastRunAt, 'A failed check must not advance the successful watermark');
+      assert.ok(new Date(failed.nextRunAt).getTime() > Date.now());
+      assert.ok(get(items).filter(item => item.id !== failed.id).every(item => item.lastRunAt));
       assert.equal(globalThis.__mailboxTestSaveCalls, 1);
     } finally {
       for (const check of initialChecks) check?.resolve();
@@ -833,6 +836,35 @@ describe('monitor mailbox behavior', () => {
       releases.forEach((release) => release());
       stopMonitoringLoop();
     }
+  });
+
+  it('failed monitoring preserves the successful watermark and includes the missed interval on retry', { timeout: 5000 }, async () => {
+    const item = monitoredItem({
+      nextRunAt: '2000-01-01T00:00:00.000Z',
+      lastRunAt: '2026-11-05T12:00:00.000Z',
+    });
+    items.set([item]);
+    const cycleDone = new Promise(resolve => { globalThis.__mailboxTestOnMonitorCycleSaved = resolve; });
+    globalThis.__mailboxTestRunWorkiqJson = () => { throw new Error('Unusable response'); };
+    try {
+      startMonitoringLoop();
+      await cycleDone;
+      stopMonitoringLoop();
+      const failed = get(items)[0];
+      assert.equal(failed.lastRunAt, item.lastRunAt);
+      assert.ok(new Date(failed.nextRunAt).getTime() > Date.now());
+      assert.deepEqual(failed.updateHistory, item.updateHistory);
+      assert.equal(failed.summary, item.summary);
+      assert.ok(get(history).some(entry => entry.kind === 'failure'));
+      let retryPrompt;
+      globalThis.__mailboxTestRunWorkiqJson = prompt => {
+        retryPrompt = prompt;
+        return matchingPayload({ hasNewInfo: false });
+      };
+      await runItemCheck(failed);
+      assert.ok(retryPrompt.includes(`Last checked: ${item.lastRunAt}`));
+      assert.notEqual(get(items)[0].lastRunAt, item.lastRunAt);
+    } finally { stopMonitoringLoop(); }
   });
 
   it('QUEUE_FULL leaves automatic monitor due without lastRunAt or failure history', { timeout: 5000 }, async () => {

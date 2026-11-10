@@ -92,16 +92,32 @@ export function cacheRepositoryRows(rows) {
   });
 }
 export async function executeRepositoryCommand(type, payload, expectedRevision = _revision) {
-  const result = await window.workiq.stateCommand({
-    commandId: crypto.randomUUID(), expectedRevision, type, payload,
-  });
+  let result;
+  try {
+    result = await window.workiq.stateCommand({
+      commandId: crypto.randomUUID(), expectedRevision, type, payload,
+    });
+  } catch (error) {
+    reportRepositoryFailure(error);
+    persistenceStatus.set('failed');
+    throw error;
+  }
   if (!result.ok) {
+    reportRepositoryFailure(result);
     persistenceStatus.set(['CONFLICT','RECORD_CONFLICT'].includes(result.code) ? 'conflict' : 'failed');
     return result;
   }
   _revision = result.revision;
   repositoryRevision.set(_revision);
+  persistenceError.set('');
   return result;
+}
+
+function reportRepositoryFailure(failure) {
+  const code = typeof failure?.code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(failure.code)
+    ? failure.code : 'STATE_WRITE_FAILED';
+  persistenceError.set(code);
+  console.warn('[flightdeck] repository write failed:', code);
 }
 
 async function acquireLease() {
@@ -908,13 +924,14 @@ async function writeRepositoryState() {
   try {
     if (!_pendingCommand) {
       const { changes, included } = captureStateDelta(_databaseBase, current);
-      if (!changes.length) { _dirty = false; persistenceStatus.set('saved'); return true; }
+      if (!changes.length) { _dirty = false; persistenceStatus.set('saved'); persistenceError.set(''); return true; }
       _pendingCommand = { input: { commandId: crypto.randomUUID(), expectedRevision: _revision,
         type: 'applyChanges', payload: { changes } }, included };
     }
     const result = await window.workiq.stateCommand(_pendingCommand.input);
     if (!result.ok) {
       _dirty = true;
+      reportRepositoryFailure(result);
       persistenceStatus.set(['CONFLICT','RECORD_CONFLICT','DELETED','NOT_FOUND'].includes(result.code) ? 'conflict' : 'failed');
       return false;
     }
@@ -923,10 +940,12 @@ async function writeRepositoryState() {
     _revision = result.revision;
     repositoryRevision.set(_revision);
     _dirty = epoch !== _mutationEpoch;
+    persistenceError.set('');
     persistenceStatus.set(_dirty ? 'unsaved' : 'saved');
     return true;
   } catch (error) {
     _dirty = true;
+    reportRepositoryFailure(error);
     persistenceStatus.set('failed');
     return false;
   } finally { _writesInFlight--; }

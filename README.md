@@ -83,7 +83,7 @@ Generate AI-powered briefings for your upcoming meetings. Each briefing surfaces
 
 | Requirement | Details |
 |---|---|
-| **Node.js** | v18 or later ([download](https://nodejs.org/)) |
+| **Node.js** | Required when building from source ([download](https://nodejs.org/)); installers include their runtime |
 | **WorkIQ CLI** | Windows bundles **1.0.1**; macOS/Linux require `npm i -g @microsoft/workiq@1.0.1` |
 | **Microsoft Copilot license** | Required by WorkIQ for M365 data access |
 | **Tenant admin consent** | Your organization must [grant WorkIQ access](https://github.com/microsoft/work-iq/blob/main/ADMIN-INSTRUCTIONS.md) to M365 signals |
@@ -111,12 +111,10 @@ npm install
 npm start          # builds the renderer then launches Electron
 ```
 
-On first launch, click **Enable WorkIQ** in the connect banner — FlightDeck auto-accepts the EULA and connects. Once connected, a Radar scan and calendar refresh run immediately.
+On first launch, click **Enable WorkIQ** in the connect banner. FlightDeck accepts the local WorkIQ EULA, then uses buffered CLI commands. WorkIQ owns Microsoft sign-in and credentials; complete its sign-in if prompted. Once connected, a Radar scan and calendar refresh run immediately.
 
 > [!NOTE]
-> On macOS, FlightDeck looks for `workiq` and `node` in `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin`. If you installed Node or WorkIQ to a non-standard location, ensure they are in your PATH.
-
-> On Windows, FlightDeck prefers its bundled WorkIQ executable over a global installation. After upgrading the dependency from source, fully quit FlightDeck from the tray and relaunch with `npm start` to load the new CLI and renderer.
+> WorkIQ answers use buffered `workiq ask --json --no-streaming` commands; structured reads and confirmed writes use CLI entity commands. FlightDeck does not start an MCP server or manage OAuth tokens. On macOS/Linux, ensure `workiq` and `node` are in your PATH. Windows prefers the bundled executable. Fully quit FlightDeck from the tray and relaunch with `npm start` after a main-process or dependency update.
 
 ### Build installers
 
@@ -218,18 +216,18 @@ FlightDeck is an Electron app with a **Svelte 5** renderer built by **Vite**.
 │  preload.js  (contextBridge → window.workiq)         │
 ├──────────────────────────────────────────────────────┤
 │  Main Process  (Node.js)                             │
-│  ipc-handlers.js → pty-bridge.js → node-pty          │
+│  ipc-handlers.js → workiq-cli-client.js → CLI        │
 │  store.js (electron-store)                           │
 └──────────────┬───────────────────────────────────────┘
-               │ workiq ask -q "prompt"
+               │ ask --json --no-streaming / fetch / create
                ▼
         WorkIQ CLI → Microsoft Copilot → Microsoft Graph (M365)
 ```
 
 1. The renderer loads a **prompt template** and sends it via IPC to the main process
-2. The main process spawns a `node-pty` pseudo-terminal running the WorkIQ CLI
+2. The main process queues requests through local CLI subprocesses; generated answers use `workiq ask --json --no-streaming`, while structured operations use `fetch` and `create`
 3. WorkIQ forwards the prompt to **Microsoft Copilot**, which queries **Microsoft Graph**
-4. The JSON response flows back through the PTY, gets ANSI-stripped and parsed
+4. The complete CLI JSON envelope is validated before its answer is parsed; an empty answer with a conversation ID can resume within the two-attempt read budget
 5. The renderer normalizes the payload, updates Svelte stores, and persists state to **electron-store** via IPC
 
 > See [docs/architecture.md](docs/architecture.md) and [docs/architecture-diagrams.md](docs/architecture-diagrams.md) for detailed Mermaid diagrams.
@@ -323,7 +321,7 @@ npm test
 | UI framework | [Svelte](https://svelte.dev/) 5 |
 | Build tool | [Vite](https://vite.dev/) 8 |
 | Terminal bridge | [node-pty](https://github.com/microsoft/node-pty) |
-| AI backend | [WorkIQ CLI](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/workiq-overview) (Microsoft Copilot) |
+| AI backend | [Local WorkIQ CLI](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/workiq-overview) (Microsoft Copilot) |
 | Persistence | [electron-store](https://github.com/sindresorhus/electron-store) |
 | Tests | Node.js built-in `node:test` |
 | Screenshots | [Playwright](https://playwright.dev/) |

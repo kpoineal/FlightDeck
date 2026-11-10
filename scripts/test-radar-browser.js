@@ -273,8 +273,18 @@ async function openMailbox(session, options) {
   await session.page.locator('.mailbox-thread-row').first().waitFor({ state: 'visible' });
 }
 
+async function selectRadarView(page, view) {
+  const button = page.getByTestId(`radar-view-${view}`);
+  if (!await button.isVisible()) {
+    const threadsStep = page.getByRole('button', { name: 'Threads', exact: true });
+    if (await threadsStep.isVisible()) await threadsStep.click();
+    if (!await button.isVisible()) await page.getByTestId('radar-more-views').click();
+  }
+  await button.click();
+}
+
 async function selectFixtureThread(page, view = 'inbox') {
-  await page.getByTestId(`radar-view-${view}`).click();
+  await selectRadarView(page, view);
   const thread = page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`);
   await thread.waitFor({ state: 'visible' });
   await thread.click();
@@ -290,7 +300,7 @@ async function assertNoArbitrarySelection(page) {
 
 async function assertHealthy(session, kind = 'desktop') {
   const { dimensions, paneOverlaps } = await session.page.evaluate(() => {
-    const visiblePaneRects = [...document.querySelectorAll('.radar-smart-views, .radar-thread-list-pane, .radar-thread-detail')]
+    const visiblePaneRects = [...document.querySelectorAll('.radar-thread-list-pane, .radar-thread-detail')]
       .filter((element) => {
         const style = getComputedStyle(element);
         return style.display !== 'none' && style.visibility !== 'hidden';
@@ -544,10 +554,11 @@ async function seedScannerDeletionFixture(session, suffix, { withProposal = fals
 async function openScannerDeletionDialog(session, fixture, { openArchive = true } = {}) {
   await openApp(session, { reseed: false });
   if (openArchive) {
-    await session.page.getByTestId('radar-view-archived').click();
+    await selectRadarView(session.page, 'archived');
     await session.page.locator(`[data-thread-id="${fixture.coldItemId}"]`).waitFor({ state: 'visible' });
   }
   await session.page.locator('#radar-scanner').selectOption(fixture.scannerId);
+  await session.page.getByTestId('radar-scanner-tools').click();
   await session.page.getByTestId('radar-edit-scanner').click();
   const settings = session.page.getByRole('dialog').filter({ hasText: fixture.scannerName });
   await settings.getByRole('button', { name: 'Delete this scanner', exact: true }).click();
@@ -835,10 +846,10 @@ async function contextMenuPersistenceScenario(session) {
   await expect(row).toContainText('Waiting');
   await openThreadContext(page, FIXTURE_ITEM_ID, 'Snooze for 24 hours');
   await expect(row).toHaveCount(0);
-  await page.getByTestId('radar-view-snoozed').click();
+  await selectRadarView(page, 'snoozed');
   await expect(row).toBeVisible();
   await openApp(session, { reseed: false });
-  await page.getByTestId('radar-view-snoozed').click();
+  await selectRadarView(page, 'snoozed');
   await expect(row).toBeVisible();
   await openThreadContext(page, FIXTURE_ITEM_ID, 'Unsnooze');
   await expect(row).toHaveCount(0);
@@ -846,7 +857,7 @@ async function contextMenuPersistenceScenario(session) {
   await openThreadContext(page, FIXTURE_ITEM_ID, 'Archive');
   await expect(row).toHaveCount(0);
   await openApp(session, { reseed: false });
-  await page.getByTestId('radar-view-archived').click();
+  await selectRadarView(page, 'archived');
   await openThreadContext(page, FIXTURE_ITEM_ID, 'Restore to In Progress');
   await expect(row).toHaveCount(0);
   await page.getByTestId('radar-view-inbox').click();
@@ -865,7 +876,7 @@ async function contextMenuPersistenceScenario(session) {
       await window.workiq.storeSet('flightdeck.demo.v2', state);
     }, { id: FIXTURE_ITEM_ID, view });
     await openApp(session, { reseed: false });
-    await page.getByTestId(`radar-view-${view}`).click();
+    await selectRadarView(page, view);
     menu = await openThreadContext(page);
     await expect(menu).toContainText(FIXTURE_ITEM_TITLE);
     if (view === 'completed') await expect(menu.getByRole('menuitem', { name: 'Draft email', exact: false })).toBeDisabled();
@@ -982,7 +993,7 @@ async function contextMenuColdScenario(session) {
     await window.workiq.storeSet('flightdeck.demo.v2', { ...state, items: state.items.filter((item) => item.id !== id) });
   }, FIXTURE_ITEM_ID);
   await openApp(session, { reseed: false });
-  await page.getByTestId('radar-view-archived').click();
+  await selectRadarView(page, 'archived');
   await openThreadContext(page, FIXTURE_ITEM_ID, 'Mark unread');
   const row = page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`);
   await expect(row).toHaveClass(/unread/);
@@ -1015,7 +1026,7 @@ async function completedRestoreScenario(session) {
   await selectFixtureThread(session.page);
   await session.page.getByLabel('Work state').selectOption('complete');
   await assertNoArbitrarySelection(session.page);
-  await session.page.getByTestId('radar-view-completed').click();
+  await selectRadarView(session.page, 'completed');
   const completedThread = session.page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`);
   await completedThread.waitFor({ state: 'visible' });
   await completedThread.click();
@@ -2022,8 +2033,8 @@ async function actionQueueSourceFocusScenario(session) {
   await queue.waitFor({ state: 'visible' });
   await queue.getByRole('button', { name: 'Close actions' }).click();
   await queue.waitFor({ state: 'detached' });
-  assert.equal(await todayTrigger.evaluate((element) => element === document.activeElement), true,
-    'Action Queue did not restore focus to the Today opener');
+  await expect.poll(() => todayTrigger.evaluate(element => element === document.activeElement),
+    { message: 'Action Queue did not restore focus to the Today opener' }).toBe(true);
 
   await session.page.getByRole('button', { name: 'Briefings', exact: true }).click();
   const meeting = session.page.locator('.meeting-card').first();
@@ -2034,8 +2045,8 @@ async function actionQueueSourceFocusScenario(session) {
   await queue.waitFor({ state: 'visible' });
   await queue.press('Escape');
   await queue.waitFor({ state: 'detached' });
-  assert.equal(await briefingTrigger.evaluate((element) => element === document.activeElement), true,
-    'Action Queue did not restore focus to the Briefings opener');
+  await expect.poll(() => briefingTrigger.evaluate(element => element === document.activeElement),
+    { message: 'Action Queue did not restore focus to the Briefings opener' }).toBe(true);
   await assertHealthy(session);
 }
 
@@ -2731,7 +2742,7 @@ async function selectionRegressionScenario(session) {
   for (const testId of ['radar-snooze', 'radar-complete', 'radar-archive']) {
     await openApp(session);
     await selectFixtureThread(session.page);
-    if (testId === 'radar-archive') await session.page.getByTestId('radar-more').click();
+    if (testId !== 'radar-complete') await session.page.getByTestId('radar-more').click();
     await session.page.getByTestId(testId).click();
     await assertNoArbitrarySelection(session.page);
   }
@@ -2745,7 +2756,7 @@ async function inboxReadActivationScenario(session) {
     { activation: 'Space', view: 'monitored' },
   ]) {
     await openApp(session);
-    const viewButtons = session.page.locator('.radar-smart-views section').first().locator('[data-testid^="radar-view-"]');
+    const viewButtons = session.page.locator('.radar-view-nav [data-testid^="radar-view-"]');
     assert.deepEqual(await viewButtons.evaluateAll((buttons) => buttons.map((button) => button.dataset.testid)), [
       'radar-view-inbox',
       'radar-view-priority',
@@ -2759,7 +2770,7 @@ async function inboxReadActivationScenario(session) {
     assert.equal(await session.page.getByTestId('radar-view-all').count(), 0, 'Legacy All active smart view is still present');
 
     const activeViewButton = session.page.getByTestId(`radar-view-${view}`);
-    if (view !== 'inbox') await activeViewButton.click();
+    if (view !== 'inbox') await selectRadarView(session.page, view);
     const viewCountBefore = await activeViewButton.locator('strong').textContent();
     const thread = session.page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`);
     await thread.waitFor({ state: 'visible' });
@@ -2843,7 +2854,9 @@ async function recentFilterEditScenario(session) {
   assert.equal(await session.page.locator('#radar-sort').inputValue(), 'recent', 'Recent was not the default sort');
   assert.equal(await session.page.locator('.radar-thread').first().getAttribute('data-thread-id'), fixture.newerId,
     'Recent did not put the newest deterministic fixture first');
+  await session.page.getByTestId('inbox-filters').click();
   await session.page.getByTestId('inbox-quick-updated').click();
+  await session.page.getByRole('button', { name: 'Close filters', exact: true }).click();
   await session.page.locator(`[data-thread-id="${fixture.newerId}"]`).waitFor({ state: 'visible' });
   assert.equal(await session.page.locator(`[data-thread-id="${fixture.olderId}"]`).count(), 0,
     'UPDATED quick filter retained a non-updated thread');
@@ -2891,6 +2904,154 @@ async function mobileScenario(session) {
   await assertHealthy(session, 'mobile');
 }
 
+async function panelCornerCoverage(panel) {
+  return panel.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return [
+      [box.left + 20, box.top + 20], [box.right - 20, box.top + 20],
+      [box.left + 20, box.bottom - 20], [box.right - 20, box.bottom - 20],
+    ].map(([x, y]) => element.contains(document.elementFromPoint(x, y)));
+  });
+}
+
+async function radarCleanWorkspaceScenario(session, width, captureSuffix = '') {
+  const { page } = session;
+  await openApp(session);
+  assert.equal(await page.locator('.summary-strip, .ticker-bar').count(), 0, 'Radar retained the overview strip or ticker');
+  assert.equal(await page.locator('.radar-smart-views').count(), 0, 'Radar retained the empty sidebar');
+  assert.equal(await page.locator('.radar-thread-list-pane .radar-view-nav').isVisible(), true,
+    'View navigation was not mounted above the threads');
+  assert.equal(await page.getByRole('button', { name: 'Views', exact: true }).count(), 0,
+    'Mobile retained a separate Views step');
+  assert.equal(await page.locator('.radar-view-nav > button').count(), 2, 'Inbox and Priority were not directly accessible');
+  if (width > 960) {
+    const layout = await page.locator('.radar-triage').evaluate(element => {
+      const panes = [...element.children].map(pane => pane.getBoundingClientRect());
+      return { panes: panes.length, left: element.getBoundingClientRect().left,
+        listLeft: panes[0].left, listWidth: panes[0].width, listRight: panes[0].right, detailLeft: panes[1].left };
+    });
+    assert.equal(layout.panes, 2, 'Radar did not use two panes');
+    assert.ok(Math.abs(layout.listLeft - layout.left) < 1, 'Unused space remained before the thread list');
+    assert.ok(layout.listWidth >= 420, `The thread list did not gain most of the sidebar width: ${layout.listWidth}px`);
+    assert.ok(Math.abs(layout.detailLeft - layout.listRight) < 1, 'Unused space remained between the panes');
+  }
+  assert.equal(await page.getByTestId('radar-view-completed').isVisible(), false, 'Secondary views were not collapsed');
+  const viewsTrigger = page.getByTestId('radar-more-views');
+  const viewsPanel = page.locator('.radar-secondary-views__panel');
+  await expect(viewsTrigger).toHaveText('Monitored');
+  await expect(page.getByTestId('radar-view-inbox')).toHaveAttribute('aria-pressed', 'true');
+  await viewsTrigger.click();
+  await expect(viewsPanel).toBeVisible();
+  await page.getByRole('heading', { name: 'Radar', exact: true }).click();
+  await expect(viewsPanel).toBeHidden();
+  await expect(page.getByTestId('radar-view-inbox')).toHaveAttribute('aria-pressed', 'true');
+  await viewsTrigger.click();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('radar-view-monitored')).toBeFocused();
+  await expect(viewsPanel).toBeVisible();
+  await page.getByTestId('radar-view-archived').focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('inbox-quick-unread')).toBeFocused();
+  await expect(viewsPanel).toBeHidden();
+  await viewsTrigger.click();
+  await page.getByTestId('radar-view-priority').click();
+  await expect(viewsPanel).toBeHidden();
+  await expect(page.getByTestId('radar-view-priority')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('radar-view-inbox').click();
+  await viewsTrigger.click();
+  await viewsTrigger.click();
+  await expect(viewsPanel).toBeHidden();
+  await page.getByTestId('radar-more-views').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.getByTestId('radar-view-completed').isVisible(), true, 'More views did not expose secondary navigation');
+  await expect.poll(() => panelCornerCoverage(page.locator('.radar-secondary-views__panel'))).toEqual([true, true, true, true]);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByTestId('radar-view-completed').isVisible(), false, 'Escape did not collapse More views');
+  for (const [view, label] of [['monitored', 'Monitored'], ['snoozed', 'Snoozed'], ['completed', 'Completed'], ['archived', 'Archive']]) {
+    await selectRadarView(page, view);
+    await expect(page.getByTestId(`radar-view-${view}`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('radar-more-views')).toHaveText(label);
+    assert.equal(await page.getByTestId(`radar-view-${view}`).isVisible(), false, 'Choosing a view did not close its menu');
+    assert.equal(await page.getByTestId('radar-more-views').evaluate(element => element === document.activeElement), true,
+      'Choosing a view did not return focus to its summary');
+  }
+  await selectFixtureThread(page);
+  if (width <= 960) await page.getByTestId('radar-detail-back').click();
+  await expect(page.getByTestId('radar-more-views')).toHaveText('Monitored');
+  await expect(page.getByTestId('radar-view-inbox')).toHaveAttribute('aria-pressed', 'true');
+  assert.equal(await page.getByTestId('inbox-quick-updated').isVisible(), false, 'Additional quick filters were not tucked away');
+  assert.equal(await page.getByTestId('radar-snooze').isVisible(), false, 'Snooze was not tucked into More');
+
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  const screenshotPath = path.join(SCREENSHOT_DIR, `radar-clean-workspace-${width}${captureSuffix}.png`);
+  await page.screenshot({ path: screenshotPath, fullPage: width <= 960, animations: 'disabled' });
+  screenshotPaths.push(screenshotPath);
+  process.stdout.write(`SCREENSHOT view=radar-clean-workspace width=${width} path=${screenshotPath}\n`);
+
+  const threadsStep = page.getByRole('button', { name: 'Threads', exact: true });
+  if (await threadsStep.isVisible()) await threadsStep.click();
+  await page.getByTestId('inbox-filters').click();
+  const panel = page.locator('.inbox-refine__panel');
+  const box = await panel.boundingBox();
+  assert.ok(box.x >= 0 && box.x + box.width <= width + 1, 'Filters escaped the viewport');
+  const coverage = () => panelCornerCoverage(panel);
+  await expect.poll(coverage, { message: 'Part of the Filters panel was clipped or covered' }).toEqual([true, true, true, true]);
+  const filtersScreenshot = path.join(SCREENSHOT_DIR, `radar-filters-${width}${captureSuffix}.png`);
+  await page.screenshot({ path: filtersScreenshot, fullPage: false, animations: 'disabled' });
+  screenshotPaths.push(filtersScreenshot);
+  const viewport = page.viewportSize();
+  if (width > 960 && viewport.height > 600) {
+    await page.setViewportSize({ width, height: 600 });
+    await expect.poll(coverage, { message: 'Resizing clipped the open Filters panel' }).toEqual([true, true, true, true]);
+    await page.setViewportSize(viewport);
+    await expect.poll(coverage).toEqual([true, true, true, true]);
+  }
+  const lastFilter = panel.locator('fieldset').last().locator('input').last();
+  await lastFilter.check();
+  await lastFilter.uncheck();
+  assert.equal(await page.locator('.radar-thread-list-pane').evaluate(element => element.scrollLeft), 0,
+    'Reaching a filter scrolled the thread pane horizontally');
+  await page.getByRole('checkbox', { name: 'Read', exact: true }).check();
+  assert.match(await page.getByTestId('inbox-filters').textContent(), /Filters \(1\)/);
+  await expect(panel).toBeVisible();
+  await page.getByRole('heading', { name: 'Radar', exact: true }).click();
+  await expect(panel).toBeHidden();
+  await expect(page.getByTestId('inbox-filters')).toHaveText('Filters (1)');
+  await page.getByTestId('inbox-filters').click();
+  await expect(page.getByRole('checkbox', { name: 'Read', exact: true })).toBeChecked();
+  await page.locator('#radar-search').focus();
+  await expect(panel).toBeHidden();
+  await expect(page.locator('#radar-search')).toBeFocused();
+  await page.getByTestId('inbox-filters').click();
+  await expect(page.getByRole('checkbox', { name: 'Read', exact: true })).toBeChecked();
+  await page.keyboard.press('Escape');
+  assert.equal(await panel.isVisible(), false, 'Escape did not close Filters');
+  assert.equal(await page.getByTestId('inbox-filters').evaluate(element => element === document.activeElement), true,
+    'Filters did not restore keyboard focus');
+  await page.getByTestId('inbox-active-filter').click();
+  assert.equal(await page.getByTestId('inbox-filters').textContent(), 'Filters');
+
+  const scannerId = await page.locator('#radar-scanner option').nth(1).getAttribute('value');
+  await page.locator('#radar-scanner').selectOption(scannerId);
+  await page.getByTestId('radar-scanner-tools').click();
+  const toolsBox = await page.locator('.radar-scanner-menu__panel').boundingBox();
+  assert.ok(toolsBox.x >= 0 && toolsBox.x + toolsBox.width <= width + 1, 'Scanner tools escaped the viewport');
+  assert.equal(await page.getByTestId('radar-edit-scanner').isVisible(), true, 'Scanner settings became unreachable');
+  assert.equal(await page.getByTestId('radar-toggle-scanner').isVisible(), true, 'Scanner pause/resume became unreachable');
+  assert.equal(await page.getByRole('button', { name: 'Run scanner', exact: true }).isDisabled(), true,
+    'Demo scanner controls lost their remote-operation gate');
+  await page.getByRole('heading', { name: 'Radar', exact: true }).click();
+  await expect(page.locator('.radar-scanner-menu__panel')).toBeHidden();
+  await page.getByTestId('radar-scanner-tools').click();
+  await page.locator('#radar-search').focus();
+  await expect(page.locator('.radar-scanner-menu__panel')).toBeHidden();
+  await expect(page.locator('#radar-search')).toBeFocused();
+  await page.getByTestId('radar-scanner-tools').click();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByTestId('radar-edit-scanner').isVisible(), false, 'Scanner tools did not close');
+  await assertHealthy(session, width > 960 ? 'desktop' : 'mobile');
+}
+
 async function actionHierarchyScenario(session, viewportWidth, captureScreenshot = false) {
   await openApp(session);
   const threadsStep = session.page.getByRole('button', { name: 'Threads', exact: true });
@@ -2914,14 +3075,22 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   assert.equal(await disposition.locator('button').count(), 4, 'Disposition actions were not grouped together');
   assert.equal(await compose.getAttribute('aria-busy'), 'false', 'Idle compose group was marked busy');
   assert.deepEqual(await compose.locator('button').allTextContents(), ['Email', 'Teams']);
-  assert.deepEqual(await disposition.locator(':scope > button').allTextContents(), ['Complete', 'Snooze']);
+  assert.deepEqual(await disposition.locator(':scope > button').allTextContents(), ['Complete']);
   assert.equal(await more.textContent(), 'More');
   assert.equal(await archive.isVisible(), false, 'Archive was visible before opening More actions');
+  assert.equal(await snooze.isVisible(), false, 'Snooze was visible before opening More actions');
   assert.equal(await deleteCard.isVisible(), false, 'Delete was visible before opening More actions');
   await more.click();
   assert.equal(await archive.isVisible(), true, 'Archive was not disclosed by More actions');
   assert.equal(await deleteCard.isVisible(), true, 'Delete was not disclosed by More actions');
-  assert.deepEqual(await session.page.getByRole('menu', { name: 'More item actions' }).locator('button').allTextContents(), ['Archive', 'Delete from FlightDeck…']);
+  assert.deepEqual(await session.page.getByRole('menu', { name: 'More item actions' }).locator('button').allTextContents(), ['Snooze', 'Archive', 'Delete from FlightDeck…']);
+  await session.page.getByRole('heading', { name: 'Radar', exact: true }).click();
+  await expect(archive).toBeHidden();
+  await more.click();
+  await session.page.locator('.radar-thread-detail h2').focus();
+  await expect(archive).toBeHidden();
+  await expect(session.page.locator('.radar-thread-detail h2')).toBeFocused();
+  await more.click();
   await more.click();
 
   const semanticStyles = await session.page.evaluate(() => {
@@ -2970,7 +3139,7 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   assert.ok(semanticStyles.snooze.classes.includes('radar-action-button--snooze'));
   assert.ok(semanticStyles.archive.classes.includes('radar-more-menu__item'));
   assert.ok(semanticStyles.deleteCard.classes.includes('radar-more-menu__item--delete'));
-  assert.equal(semanticStyles.snooze.fontWeight, semanticStyles.email.fontWeight, 'Snooze received primary emphasis');
+  assert.ok(Number(semanticStyles.snooze.fontWeight) <= Number(semanticStyles.complete.fontWeight), 'Snooze received primary emphasis');
   assert.equal(semanticStyles.complete.color, semanticStyles.tokens.success, 'Complete did not use the success token');
   assert.notEqual(semanticStyles.complete.backgroundColor, semanticStyles.snooze.backgroundColor, 'Complete and Snooze lacked a non-color semantic distinction');
   assert.equal(semanticStyles.archive.classes.some((className) => className === 'warn' || className === 'primary'), false, 'Archive received high-emphasis styling');
@@ -3019,7 +3188,7 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   }
   assert.equal(geometry.scrollWidth > geometry.documentWidth + 1, false, `Action hierarchy overflowed at ${viewportWidth}px`);
   assert.equal(geometry.buttons.some((button) => button.clipped), false, `Action label clipped at ${viewportWidth}px: ${JSON.stringify(geometry.buttons)}`);
-  assert.equal(geometry.buttons.length, 5, `Expected four commands and one More disclosure at ${viewportWidth}px`);
+  assert.equal(geometry.buttons.length, 4, `Expected three commands and one More disclosure at ${viewportWidth}px`);
   assert.ok(geometry.toolbar.x >= geometry.header.x - 1
     && geometry.toolbar.x + geometry.toolbar.width <= geometry.header.x + geometry.header.width + 1,
   `Thread toolbar escaped the header at ${viewportWidth}px`);
@@ -3844,6 +4013,14 @@ async function doneWhenEditingScenario(session, width) {
     await runScenario('inbox-explicit-activation-marks-read', browser, rendererServer.baseUrl, inboxReadActivationScenario);
     await runScenario('blocked-elevated-item-remains-priority', browser, rendererServer.baseUrl, blockedPriorityScenario);
     await runScenario('inbox-recent-filter-edit-workflow', browser, rendererServer.baseUrl, recentFilterEditScenario);
+    for (const width of [1440, 1154, 360]) {
+      await runScenario(`radar-clean-workspace-${width}`, browser, rendererServer.baseUrl,
+        (session) => radarCleanWorkspaceScenario(session, width),
+        { viewport: { width, height: width === 1154 ? 768 : width === 1440 ? 1000 : 900 } });
+    }
+    await runScenario('radar-filters-short-window', browser, rendererServer.baseUrl,
+      session => radarCleanWorkspaceScenario(session, 1154, '-short'),
+      { viewport: { width: 1154, height: 600 } });
     for (const width of [1440, 360]) {
       await runScenario(`radar-consolidated-details-${width}`, browser, rendererServer.baseUrl,
         (session) => consolidatedDetailsScenario(session, width),

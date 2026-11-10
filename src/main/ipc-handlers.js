@@ -87,7 +87,12 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
           }
         }
         return result;
-      } catch (error) { return { ok: false, code: error.code || 'REPOSITORY_FAILED' }; }
+      } catch (error) {
+        const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(error.code)
+          ? error.code : 'REPOSITORY_FAILED';
+        logError('[state] Repository command failed:', code);
+        return { ok: false, code };
+      }
     });
     ipcMain.handle(IPC_CHANNELS.STATE_ENGINE_ACQUIRE, (event, key) => database.acquireEngine(event.sender, key));
     ipcMain.handle(IPC_CHANNELS.STATE_ENGINE_RELEASE, (event, key) => database.releaseEngine(event.sender, key));
@@ -200,7 +205,7 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
   ipcMain.handle(IPC_CHANNELS.PROBE_WORKIQ_MCP, async () => {
     if (!connection.isReady()) return blockedRemote();
     if (!workiqMcpClient || typeof workiqMcpClient.probe !== 'function') {
-      logError('[main] WorkIQ MCP client is unavailable');
+      logError('[main] WorkIQ client is unavailable');
       return {
         ok: false,
         readOnly: true,
@@ -216,7 +221,7 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
   ipcMain.handle(IPC_CHANNELS.PROPOSE_THREAD_ACTIONS, async (_event, context) => {
     if (!connection.isReady()) return blockedRemote();
     if (!workiqMcpClient || typeof workiqMcpClient.proposeThreadActions !== 'function') {
-      logError('[main] WorkIQ MCP synthesis client is unavailable');
+      logError('[main] WorkIQ synthesis client is unavailable');
       return {
         ok: false,
         readOnly: true,
@@ -230,7 +235,7 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
   ipcMain.handle(IPC_CHANNELS.CREATE_OUTLOOK_DRAFT, async (_event, draft) => {
     if (!connection.isReady()) return blockedRemote();
     if (!workiqMcpClient || typeof workiqMcpClient.createOutlookDraft !== 'function') {
-      logError('[main] WorkIQ MCP draft client is unavailable');
+      logError('[main] WorkIQ draft client is unavailable');
       return {
         ok: false,
         action: 'outlook-draft-create',
@@ -282,7 +287,7 @@ function registerIpcHandlers(getMainWindow, popoutWindows, dependencies = {}) {
   ipcMain.handle(IPC_CHANNELS.SEND_TEAMS_MESSAGE, async (_event, payload) => {
     if (!connection.isReady()) return blockedRemote();
     if (!workiqMcpClient || typeof workiqMcpClient.sendTeamsMessage !== 'function') {
-      logError('[main] WorkIQ MCP Teams client is unavailable');
+      logError('[main] WorkIQ Teams client is unavailable');
       return { ok: false, action: 'teams-message-send', code: 'START_FAILED' };
     }
 

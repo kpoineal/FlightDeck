@@ -14,7 +14,7 @@ const {
 } = require('./utils');
 const { loadWindowState, saveWindowState, debouncedSaveWindowState, isStateOnScreen } = require('./window-state');
 const { registerIpcHandlers } = require('./ipc-handlers');
-const { createWorkiqMcpClient } = require('./workiq-mcp-client');
+const { createWorkiqCliClient } = require('./workiq-cli-client');
 const { createStateFlush } = require('./state-flush');
 const { createStateService } = require('./state-service');
 const { ipcMain, dialog } = require('electron');
@@ -38,7 +38,7 @@ let isQuitting = false;
 let shutdownComplete = false;
 let shutdownStarted = false;
 const popoutWindows = new Set();
-const workiqMcpClient = createWorkiqMcpClient();
+const workiqMcpClient = createWorkiqCliClient();
 const stateService = createStateService(app.getPath('userData'), { demo: IS_DEMO || IS_DEMO_RESEED });
 
 // Register IPC handlers — pass getter for mainWindow since it's set after createWindow()

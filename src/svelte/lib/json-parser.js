@@ -57,6 +57,53 @@ function extractBalancedJsonCandidates(text) {
   return candidates;
 }
 
+function extractCompleteJsonFromEnd(text) {
+  const candidates = [];
+  let end = -1;
+  let stack = [];
+  let inString = false;
+
+  // A truncated streaming fragment can leave quotes open before a complete snapshot.
+  // Reading from the end keeps that prefix from hiding the intact JSON.
+  for (let index = text.length - 1; index >= 0; index -= 1) {
+    const char = text[index];
+    if (end < 0) {
+      if (char === '}' || char === ']') {
+        end = index + 1;
+        stack = [char];
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      let backslashes = 0;
+      for (let before = index - 1; before >= 0 && text[before] === '\\'; before -= 1) backslashes += 1;
+      if (backslashes % 2 === 0) inString = !inString;
+    }
+    if (inString) continue;
+
+    if (char === '}' || char === ']') stack.push(char);
+    if (char !== '{' && char !== '[') continue;
+    const closing = stack.pop();
+    if ((char === '{' && closing !== '}') || (char === '[' && closing !== ']')) {
+      end = -1;
+      stack = [];
+      continue;
+    }
+    if (stack.length) continue;
+
+    const candidate = text.slice(index, end);
+    try {
+      JSON.parse(candidate);
+      candidates.push(candidate);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+    }
+    end = -1;
+  }
+  return candidates;
+}
+
 /**
  * Extract JSON candidate strings from a text response using multiple strategies.
  */
@@ -85,6 +132,7 @@ export function extractJsonFromText(text) {
   }
 
   candidates.push(...extractBalancedJsonCandidates(trimmed));
+  candidates.push(...extractCompleteJsonFromEnd(trimmed));
 
   return [...new Set(candidates.filter(Boolean))];
 }

@@ -1,6 +1,6 @@
 # FlightDeck User Guide
 
-FlightDeck is a personal work-intelligence dashboard that connects to Microsoft 365 via the WorkIQ CLI. It scans your email, Teams chats, meetings, and documents, then surfaces the items that need your attention — ranked by urgency.
+FlightDeck is a personal work-intelligence dashboard that connects to Microsoft 365 via the local WorkIQ CLI. It scans your email, Teams chats, meetings, and documents, then surfaces the items that need your attention — ranked by urgency.
 
 ---
 
@@ -35,21 +35,22 @@ FlightDeck is a personal work-intelligence dashboard that connects to Microsoft 
 
 When you open FlightDeck for the first time, here's what happens:
 
-> **No manual EULA step needed.** FlightDeck automatically accepts the WorkIQ EULA when you click "Enable WorkIQ". You do **not** need to run `workiq accept-eula` in a terminal first — the app handles it for you.
+> **Local WorkIQ setup:** Windows includes the WorkIQ CLI; macOS/Linux require `npm i -g @microsoft/workiq@1.0.1`. FlightDeck uses its buffered CLI commands, not its MCP server. WorkIQ manages Microsoft sign-in and credentials; FlightDeck does not maintain a separate authorization.
 
 1. **You land on the Radar tab** — This is the default view every time you open the app.
-2. **The Connect banner appears** — At the top of the main area, you'll see a banner that says *"Connect: Requires Node.js, Copilot license, and tenant admin consent for WorkIQ data access."* with an **Enable WorkIQ** button.
+2. **The Connect banner appears** — At the top of the main area, you'll see a banner with an **Enable WorkIQ** button. WorkIQ requires a Microsoft account, Copilot license, and tenant admin consent.
 3. **Click "Enable WorkIQ"** — This is the key step! FlightDeck will:
-   - **Auto-accept the WorkIQ EULA** (handles Y/N prompts automatically)
-   - **Run a health check** to verify your WorkIQ connection (status shows "Checking WorkIQ...")
-   - If the EULA acceptance or health check fails, you'll see an error message with guidance
+   - **Accept the local WorkIQ EULA**
+   - Enable remote controls and use local **WorkIQ CLI commands** for requests
+   - Let WorkIQ handle Microsoft sign-in if required
+   - If sign-in or the connection check fails, retain your cached data and show **Retry WorkIQ**
 4. **Automatic first refresh** — Once connected, FlightDeck immediately runs a full refresh in parallel:
    - **Radar scan** — The AI scans your M365 signals (email, Teams, meetings, documents) and populates the Radar with prioritized items.
    - **Meetings refresh** — FlightDeck pulls your upcoming meetings for today and populates the Briefings view.
 5. **Briefings are ready** — Switch to the Briefings tab and you'll see your meetings listed. Expand any meeting to generate a briefing, or click **Regenerate My Day** for your daily overview.
 6. **Start tracking** — As you review Radar items, click **Track Item** on anything that needs ongoing monitoring. FlightDeck will watch it on a schedule and notify you of changes.
 
-On subsequent launches, if you were previously connected, FlightDeck automatically verifies the connection and runs a full refresh — you'll see your Radar and Meetings update within seconds of opening the app. If the connection check fails (e.g., WorkIQ CLI isn't available), the Connect banner reappears.
+On subsequent launches, if you were previously connected, FlightDeck repeats local WorkIQ setup and runs a refresh. WorkIQ reuses and renews its own credentials. If WorkIQ requires sign-in or cannot connect, use **Retry WorkIQ** and complete WorkIQ's prompts; FlightDeck does not run its own OAuth flow.
 
 > **Tip:** FlightDeck remembers connection intent, tracked items, and monitoring schedules locally. Cached data is available while WorkIQ validates; local edits remain usable, but remote controls stay disabled until ready. If validation fails, use **Retry WorkIQ** without discarding cached data.
 
@@ -73,7 +74,7 @@ Some cross-scanner duplicates are intentional when that scanner's dedup setting 
 Reports page at most 100 collision groups and show scanner/tier evidence; very
 large owner groups explicitly indicate truncation.
 
-> **EULA re-acceptance:** If the WorkIQ EULA needs to be re-accepted (e.g., after a WorkIQ reinstall or update), FlightDeck will automatically detect it. The "Enable WorkIQ" banner will reappear so you can click it to re-accept — no manual terminal commands needed.
+> **Reconnecting:** Use **Retry WorkIQ** to repeat local WorkIQ setup. Complete WorkIQ's Microsoft sign-in or consent if prompted. Cached FlightDeck data remains available.
 
 ---
 
@@ -114,17 +115,24 @@ The top-bar status shows actual shared WorkIQ activity, for example **4 running 
 
 Scheduled scanners and monitors can each dispatch up to five jobs, but all windows and features share application limits: **5 active requests total**, **at most 4 background requests**, with starts paced **250 ms** apart. Manual **Run Now / Check Now** uses interactive priority; background work leaves a slot available for clicks. Pending work is bounded to 50 requests (40 background). If that queue is full, automatic work stays due for a later tick rather than being marked failed or skipped.
 
-Safe reads have at most **two total attempts**, including network retries and JSON-response recovery. Throttling may delay work; these limits are not a guarantee of remote quotas or a proven sustained safe rate. Authentication and EULA problems require reconnecting. Writes still require their existing confirmations, and ambiguous write results are not automatically replayed.
+Safe reads have at most **two total attempts**, including network retries, completed empty-answer recovery and JSON-response recovery. Throttling may delay work; these limits are not a guarantee of remote quotas or a proven sustained safe rate. Authentication and EULA problems require reconnecting. Writes still require their existing confirmations, and ambiguous write results are not automatically replayed.
 
-Scanner/monitor reads keep a **five-minute** caller timeout; proposal synthesis uses a separate **one-minute** timeout. A caller timeout does **not** release the remote slot or automatically retry an unresolved request. It stays counted as running until a terminal response or confirmed WorkIQ process exit; unrelated requests are not killed to free capacity. If every slot hangs and no responses arrive, **choose Quit in the FlightDeck tray menu, then relaunch FlightDeck**. Automatic recovery is not guaranteed. Closing to the tray and reopening preserves status updates but does not clear stuck slots.
+Scanner/monitor reads and proposal synthesis each have a **five-minute** caller timeout. A timed-out CLI command is terminated, but keeps its slot until process closure is confirmed; unrelated commands are not cancelled. A timeout does **not** automatically retry an unresolved request. If activity remains stuck, **choose Quit in the FlightDeck tray menu, then relaunch FlightDeck**. Closing to the tray and reopening does not restart the main process.
 
-Reads reuse one persistent **local** WorkIQ MCP process instead of launching a new terminal per query; there is no read fallback to PTY. EULA acceptance may still use a terminal internally. Reusing the local process does not guarantee anything about backend conversation/thread creation. Windows bundles WorkIQ **1.0.1**; macOS/Linux should install that version globally. Updating a global Windows installation does not replace FlightDeck's bundled CLI. Fully quit and relaunch FlightDeck after a dependency upgrade.
+All remote operations use the **local WorkIQ CLI**, without opening a terminal window for each request. Scans, monitoring, briefings and proposal generation use `workiq ask --json --no-streaming`; directory lookups and confirmed writes use `fetch` and `create`. FlightDeck waits for command completion and validates the JSON envelope before parsing its answer. Numeric answer text without citations remains valid. If WorkIQ finishes grounding without an answer but returns a conversation ID, the allowed read retry continues that same conversation rather than starting over; unrelated requests never share that conversation. Empty or malformed CLI envelopes are reported explicitly, never treated as successful answers. Confirmed writes still require verified receipts and are never automatically replayed. Fully quit and relaunch FlightDeck after this transport change.
+
+The former MCP path sometimes returned an unfinished streaming fragment before a complete final JSON response, or only an incomplete answer. Production now uses buffered CLI answers instead. Existing JSON extraction and schema validation remain in place; scanner, monitoring and briefing reads may retry within their two-attempt budget, but a missing valid response is reported as a failure rather than invented.
+
+A failed task-monitor check no longer advances its successful-check timestamp.
+The next attempt still searches from the last successful check, so a failed
+interval is not silently treated as already reviewed. Existing failure history
+is retained; these changes do not rewrite previously recorded check timestamps.
 
 ### Email and Teams drafts
 
 In the Inbox thread's **Work plan**, select a **Recommended next move**, then choose **Email** or **Teams** to draft a message focused on that step. The first move is selected initially; your selection stays with the thread while navigating. If no moves are recommended, either channel can still draft a follow-up from the thread's context. Generation uses a read-only WorkIQ request and does not create or send a Microsoft 365 message until you review and explicitly approve the separate action.
 
-**Complete**, **Snooze**, and **More** live in the thread's top toolbar alongside criticality and work state, rather than beneath the draft editor. **More** contains Archive and Delete from FlightDeck. Completed actions continue to appear in the thread's activity history.
+**Complete** and **More** sit beside the thread title. **More** contains Snooze, Archive and Delete from FlightDeck. Criticality and work state remain editable beneath the title. Completed actions continue to appear in the thread's activity history.
 
 You can start a draft on thread A, move to thread B, and start another. Each thread retains its own **Drafting…** state, result, or retryable error. Returning to a thread restores its state; switching to Today or another tab does not discard pending work. Background completion does not open a review pane over a different thread or tab.
 
@@ -176,7 +184,9 @@ Click any tab to switch views. The active tab is highlighted with a colored back
 
 ![KPI summary bar showing severity counts, distribution bar, and upcoming meetings](screenshots/02-summary-strip-dark.png)
 
-The KPI summary bar appears at the top of the main content area with at-a-glance metrics.
+The KPI summary bar appears in Briefings and History. Radar omits the summary and
+scrolling ticker so its threads and work plan have more room; Today provides the
+workload overview.
 
 The bar shows three severity counters:
 
@@ -193,6 +203,30 @@ Next to the counters:
 ---
 
 ## Radar View
+
+Radar uses two panes: a wider thread list and the selected thread's detail.
+**Inbox** and **Priority**, with their counts, sit above the thread list instead
+of in a separate sidebar. The **Monitored** dropdown
+contains Monitored, Snoozed, Completed and Archive, with the selected secondary
+view still identified in the navigation. Inbox remains the initial active view.
+The dropdown closes when you select a view, click outside it, move keyboard
+focus outside it, or press Escape. Select a scanner using the header
+dropdown; **Scanner tools** provides Settings, Pause/Resume, Run scanner and
+last/next run information. There is no duplicate scanner list.
+
+On narrow screens, Radar opens directly to **Threads**, including its view
+navigation and filters. Select a thread to open **Detail**; use **Back to threads**
+to return to the same thread in the list.
+
+**Unread** stays directly accessible. **Filters** contains the other quick
+filters and all advanced facets; its count and removable chips show active
+filters. Use **Done**, Escape, an outside click, or move keyboard focus outside
+to close it without clearing your choices. Scanner tools and the thread's
+**More** menu also close on an outside click or when focus moves outside.
+The filter panel can extend over the detail pane without being cut off; in short
+windows its contents scroll inside the panel.
+Thread paging appears at the bottom only when more than 100 matching threads
+exist, with the displayed range and total instead of an otherwise-empty paging row.
 
 Opening an unread Inbox thread marks it read without resetting the current page
 or scrolling the thread list. Arrow-key navigation previews threads without

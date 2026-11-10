@@ -131,6 +131,176 @@ function createTeamsHarness(onCreate, options = {}) {
 }
 
 describe('createWorkiqMcpClient()', () => {
+  for (const fragment of ['', '{"previous":[{"summary":"unfinished ']) {
+    it(`delivers a local MCP briefing through the renderer parser${fragment ? ' after a fragmented streaming prefix' : ''}`, async () => {
+      const payload = {
+        headline: 'A complete grounded day briefing \u{1f680}',
+        topPriorities: Array.from({ length: 120 }, (_, index) => `Priority ${index}: ${'context '.repeat(24)}`),
+      };
+      const answer = fragment + JSON.stringify(payload);
+      assert.ok(answer.length > 14000);
+      const { client, children, spawnCalls } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method === 'tools/call') {
+          const result = {
+            content: [{ type: 'text', text: answer }], structuredContent: { answer },
+          };
+          queueMicrotask(() => {
+            if (!fragment) { child.respond(message.id, result); return; }
+            const frame = Buffer.from(`${JSON.stringify({ jsonrpc: '2.0', id: message.id, result })}\n`);
+            const split = frame.indexOf(Buffer.from('\u{1f680}')) + 2;
+            child.stdout.emit('data', frame.subarray(0, split));
+            child.stdout.emit('data', frame.subarray(split));
+          });
+        }
+      });
+      const { runWorkiqJson } = await import('../src/svelte/lib/json-parser.js');
+      globalThis.window = { workiq: { ask: client.ask } };
+      try {
+        assert.deepEqual(await runWorkiqJson('full day briefing', p => typeof p?.headline === 'string', 'local-day'), payload);
+        assert.equal((await client.ask('another read')).success, true);
+        assert.equal(spawnCalls.length, 1);
+        assert.deepEqual(spawnCalls[0].args, ['--log-level', 'Error', 'mcp']);
+        assert.equal(children[0].messages.filter(message => message.method === 'tools/list').length, 1);
+        assert.equal(children.length, 1);
+        assert.equal(client.getQueueStatus().active, 0);
+      } finally { delete globalThis.window; await client.shutdown(); }
+    });
+  }
+
+  it('uses the injected CLI semantic provider without dispatching the broken MCP ask tool', async () => {
+    const calls = [];
+    const { client, children } = createHarness(successfulServer, {
+      semanticQuery: async (question, options) => {
+        calls.push({ question, options });
+        options.onExit();
+        return { success: true, answer: '13' };
+      },
+    });
+    try {
+      assert.deepEqual(await client.ask('calendar count', { priority: 'background', key: 'scanner:one' }),
+        { success: true, answer: '13', attempts: 1 });
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].question, 'calendar count');
+      assert.equal(calls[0].options.timeoutMs, 300000);
+      assert.equal(calls[0].options.signal.aborted, false);
+      assert.equal(children.length, 0);
+      assert.equal(client.getQueueStatus().active, 0);
+    } finally { await client.shutdown(); }
+  });
+
+  it('coalesces CLI reads without coalescing changed prompts or retry budgets', { timeout: 5000 }, async () => {
+    const calls = [];
+    const { client } = createHarness(successfulServer, {
+      semanticQuery: (question, options) => new Promise(resolve => {
+        calls.push({ question, finish() { options.onExit(); resolve({ success: true, answer: question }); } });
+      }),
+    });
+    const jobs = [
+      client.ask('same', { priority: 'background', key: 'one' }),
+      client.ask('same', { key: 'one' }),
+      client.ask('changed', { key: 'one' }),
+      client.ask('same', { key: 'one', maxAttempts: 1 }),
+    ];
+    while (calls.length < 3) await new Promise(resolve => setImmediate(resolve));
+    calls.forEach(call => call.finish());
+    assert.deepEqual((await Promise.all(jobs)).map(result => result.answer), ['same', 'same', 'changed', 'same']);
+    assert.equal(calls.length, 3);
+    await client.shutdown();
+  });
+
+  it('retains timed-out CLI processes in the shared limit until confirmed exit', async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const calls = [];
+    const { client } = createHarness(successfulServer, {
+      semanticQuery: (_question, options) => new Promise(resolve => {
+        calls.push(options);
+        if (calls.length <= 5) setTimeout(() => resolve({ success: false, code: 'TIMEOUT' }), 40);
+        else { options.onExit(); resolve({ success: true, answer: 'sixth' }); }
+      }),
+    });
+    const jobs = Array.from({ length: 6 }, (_, index) => client.ask(`request-${index}`));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls.length, 5);
+    t.mock.timers.tick(40);
+    assert.ok((await Promise.all(jobs.slice(0, 5))).every(result => result.code === 'TIMEOUT' && result.attempts === 1));
+    assert.equal(calls.length, 5);
+    assert.equal(client.getQueueStatus().active, 5);
+    assert.equal(client.getQueueStatus().pending, 1);
+    calls[0].onExit();
+    assert.equal((await jobs[5]).answer, 'sixth');
+    calls.slice(1, 5).forEach(call => call.onExit());
+    assert.equal(client.getQueueStatus().active, 0);
+    await client.shutdown();
+  });
+
+  it('cancels owned CLI processes and rejects waiting reads on shutdown', { timeout: 5000 }, async () => {
+    let activeSignal;
+    let calls = 0;
+    const { client } = createHarness(successfulServer, {
+      queueOptions: { limit: 1, pacingMs: 0 },
+      semanticQuery: (_question, options) => new Promise(resolve => {
+        calls++;
+        activeSignal = options.signal;
+        options.signal.addEventListener('abort', () => {
+          options.onExit();
+          resolve({ success: false, code: 'SHUTTING_DOWN' });
+        });
+      }),
+    });
+    const active = client.ask('active');
+    const waiting = client.ask('waiting');
+    await new Promise(resolve => setImmediate(resolve));
+    await client.shutdown();
+    assert.equal(activeSignal.aborted, true);
+    assert.equal(calls, 1);
+    assert.equal((await active).code, 'SHUTTING_DOWN');
+    assert.equal((await waiting).code, 'SHUTTING_DOWN');
+    assert.equal(client.getQueueStatus().active, 0);
+  });
+
+  it('preserves explicit CLI failures and a single attempt budget without exposing raw output', async () => {
+    let calls = 0;
+    const { client } = createHarness(successfulServer, {
+      semanticQuery: async (_question, options) => {
+        calls++;
+        options.onExit();
+        return { success: false, code: 'AUTH_REQUIRED', error: 'private upstream detail' };
+      },
+    });
+    try {
+      const result = await client.ask('probe');
+      assert.equal(result.code, 'AUTH_REQUIRED');
+      assert.equal(result.attempts, 1);
+      assert.equal(calls, 1);
+      assert.equal(JSON.stringify(result).includes('private'), false);
+      assert.equal(client.getQueueStatus().active, 0);
+    } finally { await client.shutdown(); }
+  });
+
+  it('also routes proposal synthesis through CLI while retaining MCP for structured operations', async () => {
+    let question;
+    const { client, children } = createHarness(successfulServer, {
+      semanticQuery: async (prompt, options) => {
+        question = prompt;
+        options.onExit();
+        return { success: true, answer: JSON.stringify({
+          schemaVersion: 1, recommendation: 'No communication needed', confidence: 'high',
+          evidence: [], proposals: [],
+        }) };
+      },
+    });
+    try {
+      const result = await client.proposeThreadActions({
+        schemaVersion: 1, thread: { id: 'synthetic', title: 'Synthetic diagnostic' },
+      });
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.result.proposals, []);
+      assert.ok(question.includes('Synthetic diagnostic'));
+      assert.ok(children.every(child => child.messages.every(message => message.params?.name !== 'ask')));
+    } finally { await client.shutdown(); }
+  });
+
   it('verifies the observed status/data create envelope without accepting conflicts or failed statuses', async () => {
     const entity = {
       id: 'message-id', chatId: 'chat-james', createdDateTime: '2026-10-30T12:00:00Z',
@@ -947,6 +1117,195 @@ describe('createWorkiqMcpClient()', () => {
     assert.equal(children.length, 1);
     assert.equal(children[0].killCalls, 0);
     await client.shutdown();
+  });
+
+  it('accepts plain scalar answers and current structured ask envelopes', async () => {
+    const fixtures = [
+      [{ content: [{ type: 'text', text: '13' }] }, '13'],
+      [{ content: [{ type: 'text', text: '0' }] }, '0'],
+      [{ content: [{ type: 'text', text: 'true' }] }, 'true'],
+      [{ content: [{ type: 'text', text: 'false' }] }, 'false'],
+      [{ content: [{ type: 'text', text: '"quoted answer"' }] }, 'quoted answer'],
+      [{ content: [{ type: 'text', text: '{"summary":"No changes","status":"In Progress"}' }] },
+        '{"summary":"No changes","status":"In Progress"}'],
+      [{ content: [{ type: 'text', text: '' }], structuredContent: { answer: '13', conversationId: 'synthetic' } }, '13'],
+      [{ structuredContent: { answer: 'Structured answer' } }, 'Structured answer'],
+      [{ content: [{ type: 'text', text: '13 [1](https://example.com)' }],
+        structuredContent: { answer: '13 [1](https://example.com)' } }, '13 [1](https://example.com)'],
+    ];
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') queueMicrotask(() => child.respond(message.id, fixtures[0][0]));
+    });
+    try {
+      while (fixtures.length) {
+        const [, answer] = fixtures[0];
+        assert.deepEqual(await client.ask('scalar diagnostic', { maxAttempts: 1 }),
+          { success: true, answer, attempts: 1 });
+        fixtures.shift();
+      }
+    } finally { await client.shutdown(); }
+  });
+
+  it('retries a completed empty ask envelope once without restarting the shared process', async () => {
+    let calls = 0;
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') {
+        calls++;
+        assert.deepEqual(message.params.arguments, calls === 1
+          ? { question: 'calendar count' }
+          : { question: 'calendar count', conversationId: 'synthetic' });
+        queueMicrotask(() => child.respond(message.id, calls === 1
+          ? { content: [{ type: 'text', text: '' }], structuredContent: { answer: '', conversationId: 'synthetic' } }
+          : { content: [{ type: 'text', text: '13' }], structuredContent: { answer: '13' } }));
+      }
+    }, { queueOptions: { pacingMs: 0, random: () => 0 } });
+    try {
+      assert.deepEqual(await client.ask('calendar count'), { success: true, answer: '13', attempts: 2 });
+      assert.equal(calls, 2);
+      assert.equal(children.length, 1);
+      assert.equal(children[0].killCalls, 0);
+      assert.equal(client.getQueueStatus().active, 0);
+    } finally { await client.shutdown(); }
+  });
+
+  it('keeps empty-answer conversations isolated across concurrent reads and later requests', async () => {
+    const counts = new Map();
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call') return;
+      const args = message.params.arguments;
+      const count = (counts.get(args.question) || 0) + 1;
+      counts.set(args.question, count);
+      assert.deepEqual(args, count === 2
+        ? { question: args.question, conversationId: `conversation-${args.question}` }
+        : { question: args.question });
+      queueMicrotask(() => child.respond(message.id, count === 1
+        ? { content: [], structuredContent: { answer: '', conversationId: `conversation-${args.question}` } }
+        : { content: [{ type: 'text', text: args.question }] }));
+    }, { queueOptions: { pacingMs: 0, random: () => 0 } });
+    try {
+      const results = await Promise.all([client.ask('first'), client.ask('second')]);
+      assert.deepEqual(results.map(result => [result.answer, result.attempts]), [['first', 2], ['second', 2]]);
+      assert.equal((await client.ask('first')).attempts, 1);
+      assert.equal(client.getQueueStatus().active, 0);
+    } finally { await client.shutdown(); }
+  });
+
+  it('does not forward invalid conversation IDs on an empty-answer retry', async () => {
+    for (const conversationId of [null, {}, '', ' ', 'bad\nid', 'x'.repeat(513)]) {
+      let calls = 0;
+      const { client } = createHarness((message, child) => {
+        successfulServer(message, child);
+        if (message.method !== 'tools/call') return;
+        calls++;
+        assert.deepEqual(message.params.arguments, { question: 'calendar count' });
+        queueMicrotask(() => child.respond(message.id, calls === 1
+          ? { structuredContent: { answer: '', conversationId } }
+          : { content: [{ type: 'text', text: '0' }] }));
+      }, { queueOptions: { pacingMs: 0, random: () => 0 } });
+      try {
+        assert.deepEqual(await client.ask('calendar count'), { success: true, answer: '0', attempts: 2 });
+      } finally { await client.shutdown(); }
+    }
+  });
+
+  it('resumes empty proposal synthesis through MCP without dispatching writes', async () => {
+    let calls = 0;
+    let question;
+    const { client, children } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call') return;
+      assert.equal(message.params.name, 'ask');
+      calls++;
+      if (calls === 1) {
+        question = message.params.arguments.question;
+        assert.equal(message.params.arguments.conversationId, undefined);
+      } else {
+        assert.deepEqual(message.params.arguments, { question, conversationId: 'synthesis-conversation' });
+      }
+      queueMicrotask(() => child.respond(message.id, calls === 1
+        ? { structuredContent: { answer: '', conversationId: 'synthesis-conversation' } }
+        : { structuredContent: { answer: JSON.stringify({
+          schemaVersion: 1, recommendation: 'No action needed', confidence: 'high',
+          evidence: [], proposals: [],
+        }) } }));
+    }, { queueOptions: { pacingMs: 0, random: () => 0 } });
+    try {
+      const result = await client.proposeThreadActions({
+        schemaVersion: 1, thread: { id: 'empty-synthesis', title: 'Synthetic thread' },
+      });
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.result.proposals, []);
+      assert.equal(calls, 2);
+      assert.equal(children.length, 1);
+      assert.equal(client.getQueueStatus().active, 0);
+    } finally { await client.shutdown(); }
+  });
+
+  it('bounds empty-answer retries and preserves explicit single-attempt requests', async () => {
+    let calls = 0;
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') {
+        calls++;
+        queueMicrotask(() => child.respond(message.id, {
+          content: [{ type: 'text', text: ' ' }], structuredContent: { answer: ' ' },
+        }));
+      }
+    }, { queueOptions: { pacingMs: 0, random: () => 0 } });
+    try {
+      const exhausted = await client.ask('calendar count');
+      assert.equal(exhausted.success, false);
+      assert.equal(exhausted.code, 'EMPTY_RESPONSE');
+      assert.equal(exhausted.attempts, 2);
+      const single = await client.ask('calendar count', { maxAttempts: 1 });
+      assert.equal(single.code, 'EMPTY_RESPONSE');
+      assert.equal(single.attempts, 1);
+      assert.equal(calls, 3);
+      assert.equal(client.getQueueStatus().active, 0);
+    } finally { await client.shutdown(); }
+  });
+
+  it('bounds empty proposal synthesis recovery to two MCP calls', async () => {
+    let calls = 0;
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method !== 'tools/call') return;
+      calls++;
+      assert.equal(message.params.name, 'ask');
+      assert.equal(message.params.arguments.conversationId, calls === 1 ? undefined : 'empty-synthesis');
+      queueMicrotask(() => child.respond(message.id, {
+        structuredContent: { answer: '', conversationId: 'empty-synthesis' },
+      }));
+    }, { queueOptions: { pacingMs: 0, random: () => 0 } });
+    try {
+      const result = await client.proposeThreadActions({
+        schemaVersion: 1, thread: { id: 'empty-synthesis', title: 'Synthetic thread' },
+      });
+      assert.equal(result.ok, false);
+      assert.equal(result.code, 'EMPTY_RESPONSE');
+      assert.equal(calls, 2);
+      assert.equal(client.getQueueStatus().active, 0);
+    } finally { await client.shutdown(); }
+  });
+
+  it('rejects failed structured answer envelopes without exposing private data or retrying', async () => {
+    const { client } = createHarness((message, child) => {
+      successfulServer(message, child);
+      if (message.method === 'tools/call') queueMicrotask(() => child.respond(message.id, {
+        content: [{ type: 'text', text: '' }],
+        structuredContent: { answer: 'private answer', error: { message: 'private error' } },
+      }));
+    });
+    try {
+      const result = await client.ask('calendar count');
+      assert.equal(result.success, false);
+      assert.equal(result.code, 'TOOL_ERROR');
+      assert.equal(result.attempts, 1);
+      assert.equal(JSON.stringify(result).includes('private'), false);
+    } finally { await client.shutdown(); }
   });
 
   it('rejects empty/wrong-shaped and structured error results without repairing terminal output', async () => {

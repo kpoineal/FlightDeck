@@ -60,7 +60,9 @@ it('real entry keeps queue broadcasts across close-to-tray/reopen and unsubscrib
     powerMonitor: new EventEmitter(),
   });
   const { registerIpcHandlers } = require('../src/main/ipc-handlers');
+  let validateConnection;
   const client = {
+    probe: async () => ({ ok: true }),
     onQueueStatus(callback) {
       listeners.add(callback);
       return () => { unsubscribes++; listeners.delete(callback); };
@@ -71,12 +73,18 @@ it('real entry keeps queue broadcasts across close-to-tray/reopen and unsubscrib
   const requireEntry = createRequire(entry);
   const stubs = {
     electron: electronMock,
-    './ipc-handlers': { registerIpcHandlers },
+    './ipc-handlers': { registerIpcHandlers: (getWindow, popouts, dependencies) => {
+      validateConnection = dependencies.validateConnection;
+      return registerIpcHandlers(getWindow, popouts, dependencies);
+    } },
     './state-flush': { createStateFlush: () => ({ flush: async () => flushAccepted, close() {} }) },
-    './workiq-mcp-client': { createWorkiqMcpClient: () => client },
+    './workiq-cli-client': { createWorkiqCliClient: (options) => {
+      assert.equal(options, undefined, 'Production must use the buffered local CLI for all operations');
+      return client;
+    } },
     './window-state': { loadWindowState: () => null, saveWindowState() {}, debouncedSaveWindowState() {} },
     './utils': {
-      log() {}, initLogFile() {}, attachExternalNavigationGuards() {},
+      log() {}, logError() {}, initLogFile() {}, attachExternalNavigationGuards() {},
       getRuntimeWindowIcon() {}, getWindowsAppUserModelId: () => 'test', applyRuntimeWindowIcon() {},
     },
   };
@@ -85,6 +93,7 @@ it('real entry keeps queue broadcasts across close-to-tray/reopen and unsubscrib
     __dirname: path.dirname(entry), process,
   }, { filename: entry });
   await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(validateConnection, undefined, 'Enable must use the existing local WorkIQ EULA flow');
   assert.equal(windows.length, 1);
   assert.equal(listeners.size, 1);
   const win = windows[0];

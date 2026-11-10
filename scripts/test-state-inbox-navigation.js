@@ -6,10 +6,10 @@ const { _electron } = require('playwright');
 const { expect } = require('@playwright/test');
 const { createGeneratedProfile, removeGeneratedProfile } = require('../test/fixtures/state-profile');
 
-async function main() {
+async function main(threadCount) {
   const { directory, fixture } = createGeneratedProfile({ size: 'small' });
   const template = fixture.state.items[0];
-  const rows = Array.from({ length: 205 }, (_, index) => ({
+  const rows = Array.from({ length: threadCount }, (_, index) => ({
     ...template,
     id: `inbox_${String(index).padStart(3, '0')}`,
     title: `Generated unread thread ${index}`,
@@ -36,7 +36,7 @@ async function main() {
     const errors = [];
     page.on('pageerror', failure => errors.push(failure.message));
     await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 1000));
-    await expect(page.getByTestId('today-active-count')).toHaveText('205', { timeout: 60000 });
+    await expect(page.getByTestId('today-active-count')).toHaveText(String(threadCount), { timeout: 60000 });
     await page.evaluate(() => {
       window.__inboxSaveBannerInsertions = 0;
       const observer = new MutationObserver(records => {
@@ -52,7 +52,14 @@ async function main() {
       observer.observe(document.body, { childList: true, subtree: true });
     });
     await page.getByRole('button', { name: 'Radar', exact: true }).click();
-    await expect(page.locator('.radar-thread')).toHaveCount(100);
+    await expect(page.locator('.radar-thread')).toHaveCount(Math.min(100, threadCount));
+    const paging = page.getByRole('navigation', { name: 'Thread pages' });
+    if (threadCount > 100) {
+      await expect(paging).toContainText(`1–100 of ${threadCount}`);
+      const listBox = await page.locator('.radar-thread-list').boundingBox();
+      const pagingBox = await paging.boundingBox();
+      assert.ok(pagingBox.y >= listBox.y + listBox.height - 1, 'Pagination must sit below the thread list');
+    } else await expect(paging).toHaveCount(0);
 
     async function selectUnreadWithoutJump(expectedPage) {
       const target = page.locator('.radar-thread').nth(20);
@@ -78,7 +85,8 @@ async function main() {
       await expect.poll(() => electron.evaluate((_context, { offset, revision }) =>
         global.__stateHarness.pageQueries.some(query => query.offset === offset && query.revision >= revision),
       { offset: (expectedPage - 1) * 100, revision })).toBe(true);
-      await expect(page.getByRole('navigation', { name: 'Thread pages' })).toContainText(`Page ${expectedPage}`);
+      if (threadCount > 100) await expect(paging).toContainText(`Page ${expectedPage}`);
+      else await expect(paging).toHaveCount(0);
       const after = await page.locator('.radar-thread-list').evaluate(element => ({
         scrollTop: element.scrollTop, firstId: element.firstElementChild.dataset.threadId,
         documentTop: document.scrollingElement.scrollTop,
@@ -93,6 +101,13 @@ async function main() {
     }
 
     await selectUnreadWithoutJump(1);
+    if (threadCount <= 100) {
+      assert.equal(await page.evaluate(() => window.__inboxSaveBannerInsertions), 0);
+      assert.deepEqual(errors, []);
+      assert.equal(await electron.evaluate(() => global.__stateHarness.remoteCalls), 0);
+      console.log('PASS: single-page Inbox hides pagination and preserves read state, layout and scroll');
+      return;
+    }
     await page.getByRole('button', { name: 'Next threads', exact: true }).click();
     await expect(page.locator('.radar-thread').first()).toHaveAttribute('data-thread-id', 'inbox_100');
     await selectUnreadWithoutJump(2);
@@ -137,4 +152,4 @@ async function main() {
   }
 }
 
-main().catch(failure => { console.error(failure); process.exitCode = 1; });
+main(205).then(() => main(67)).catch(failure => { console.error(failure); process.exitCode = 1; });

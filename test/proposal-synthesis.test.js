@@ -35,6 +35,17 @@ function resultFixture(overrides = {}) {
   };
 }
 
+it('extracts an intact synthesis snapshot after an unfinished streaming string without altering draft content', () => {
+  const payload = resultFixture({ recommendation: 'Keep "quotes", a backslash \\ and braces {} intact.' });
+  const expected = normalizeProposalSynthesisResult(payload);
+  assert.deepEqual(parseProposalSynthesisResponse(
+    `{"previous":[{"body":"unfinished${JSON.stringify(payload)}`
+  ), expected);
+  assert.equal(parseProposalSynthesisResponse(
+    `{"previous":[{"body":"unfinished${JSON.stringify(payload).slice(0, -1)}`
+  ), null);
+});
+
 describe('proposal synthesis context', () => {
   it('keeps only bounded typed thread fields and strips arbitrary input', () => {
     const context = buildProposalSynthesisContext({

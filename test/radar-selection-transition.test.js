@@ -268,7 +268,7 @@ test('Radar Inbox preserves chronological sorting independently of status and re
   assert.doesNotMatch(threadProjection, /smartView === 'inbox'\) return .*sort\(compareInboxThreads\)/);
 });
 
-test('Radar Inbox composes independent sort, quick filter, Refine, search, smart view, and scanner state', () => {
+test('Radar Inbox composes independent sort, quick filter, Filters, search, smart view, and scanner state', () => {
   const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
   const threadProjection = source.match(/let threads = \$derived\.by\(\(\) => \{.*?\n  \}\);/s)?.[0] || '';
 
@@ -282,9 +282,37 @@ test('Radar Inbox composes independent sort, quick filter, Refine, search, smart
   assert.match(threadProjection, /scannerId === 'all'/);
   assert.match(threadProjection, /query\.trim\(\)\.toLowerCase\(\)/);
   assert.match(source, /data-testid="inbox-quick-(?:unread|new|updated|critical|blocked|due-soon)"/);
-  assert.match(source, />Refine</);
+  assert.match(source, /data-testid="inbox-filters">Filters/);
   assert.match(source, /data-testid="inbox-active-filter"/);
   assert.match(source, /aria-label=\{`Remove .* filter`\}/);
+});
+
+test('Radar keeps its default workspace quiet without removing secondary capabilities', () => {
+  const radar = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+  const app = fs.readFileSync(new URL('../src/svelte/App.svelte', import.meta.url), 'utf8');
+  assert.match(app, /\$mode !== 'Today' && \$mode !== 'Radar'/);
+  assert.doesNotMatch(app, /TickerTape|ticker-bar/);
+  assert.match(radar, /VIEWS\.slice\(0, 2\)/);
+  assert.match(radar, /VIEWS\.slice\(2\)/);
+  assert.match(radar, /data-testid="radar-more-views"/);
+  assert.match(radar, /data-testid="radar-scanner-tools"/);
+  assert.doesNotMatch(radar, /radar-smart-views__hint|<h2>Scanners<\/h2>/);
+  assert.match(radar, /database && repositoryPage\?\.total > 100/);
+  assert.match(radar, /class="radar-pagination"/);
+  const more = radar.match(/<details class="radar-more-menu".*?<\/details>/s)?.[0] || '';
+  assert.match(more, /data-testid="radar-snooze"/);
+  assert.match(more, /data-testid="radar-archive"/);
+  assert.match(more, /data-testid="radar-delete"/);
+});
+
+test('Radar puts view navigation in the thread pane and opens mobile directly to threads', () => {
+  const radar = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+  assert.doesNotMatch(radar, /radar-smart-views|<h2>Views<\/h2>|>Views<\/button>/);
+  assert.match(radar, /let mobileStep = \$state\('list'\)/);
+  assert.match(radar, /<section class="radar-thread-list-pane".*?<header>\s*<nav class="radar-view-nav" aria-label="Radar views">/s);
+  assert.match(radar, /aria-label=\{`Views, /);
+  assert.match(radar, /\{secondaryView\?\.label \|\| 'Monitored'\}/);
+  assert.match(radar, /class="radar-thread-count"/);
 });
 
 test('Radar Inbox restores frequent item and scanner controls with state cues', () => {
