@@ -52,9 +52,75 @@ it('production renderer sends incremental commands, preserves held edits and ret
     stores.density.set('minimal');
     loseAck = true;
     assert.equal(await persistence.flushPersistentState(), false);
+    assert.equal(get(stores.persistenceError), 'STATE_WRITE_FAILED');
     assert.equal(await persistence.flushPersistentState(), true);
+    assert.equal(get(stores.persistenceError), '');
     assert.equal(calls.at(-1).commandId, calls.at(-2).commandId);
     assert.equal((await service.query('projection')).value.density, 'minimal');
+  } finally {
+    dispose?.(); dispose = null;
+    persistence.cancelScheduledPersistentStateSave();
+    await service.close();
+    removeGeneratedProfile(directory);
+  }
+});
+
+it('status transitions save through the production renderer and SQLite without rejecting the legacy completed flag', async () => {
+  const { setItemLifecycle } = await import('../src/svelte/lib/item-actions.js');
+  const { directory } = createGeneratedProfile({});
+  const service = createStateService(directory);
+  try {
+    global.window = { workiq: {
+      stateQuery: (method, input) => service.query(method, input),
+      stateCommand: input => service.command(input),
+    } };
+    assert.equal(await persistence.loadPersistentState(), true);
+    dispose = persistence.subscribePersistentState();
+    const id = get(stores.items)[0].id;
+    for (const lifecycle of ['waiting', 'blocked', 'complete', 'in-progress', 'archived', 'in-progress']) {
+      assert.equal(setItemLifecycle(id, lifecycle), true);
+      assert.equal(await persistence.flushPersistentState(), true, `Could not persist ${lifecycle}`);
+      const saved = await service.query('getThread', { id });
+      assert.equal(saved.lifecycleStatus, lifecycle);
+      assert.equal(Object.hasOwn(saved, 'completed'), false, 'Legacy input must not become a second persisted status');
+      assert.ok(saved.updateHistory.some(event => event.kind === 'lifecycle'));
+      assert.equal(get(stores.persistenceError), '');
+    }
+    assert.equal(await persistence.loadPersistentState(), true);
+    assert.equal(get(stores.items).find(row => row.id === id).lifecycleStatus, 'in-progress');
+  } finally {
+    dispose?.(); dispose = null;
+    persistence.cancelScheduledPersistentStateSave();
+    await service.close();
+    removeGeneratedProfile(directory);
+  }
+});
+
+it('repository save failures expose safe error codes, retain edits and retry the same command', async () => {
+  const { directory } = createGeneratedProfile({});
+  const service = createStateService(directory);
+  const calls = [];
+  let reject = true;
+  try {
+    global.window = { workiq: {
+      stateQuery: (method, input) => service.query(method, input),
+      stateCommand: input => {
+        calls.push(structuredClone(input));
+        return reject ? { ok: false, code: 'INVALID_PATCH', message: 'private value' } : service.command(input);
+      },
+    } };
+    assert.equal(await persistence.loadPersistentState(), true);
+    dispose = persistence.subscribePersistentState();
+    stores.items.update(rows => rows.map((row, index) => index ? row : { ...row, owner: 'Unsaved owner' }));
+    assert.equal(await persistence.flushPersistentState(), false);
+    assert.equal(get(stores.persistenceError), 'INVALID_PATCH');
+    assert.equal(get(stores.persistenceStatus), 'failed');
+    assert.equal(persistence.exportPendingState().items[0].owner, 'Unsaved owner');
+    reject = false;
+    assert.equal(await persistence.flushPersistentState(), true);
+    assert.equal(calls.at(-1).commandId, calls.at(-2).commandId);
+    assert.equal(get(stores.persistenceError), '');
+    assert.equal(get(stores.persistenceStatus), 'saved');
   } finally {
     dispose?.(); dispose = null;
     persistence.cancelScheduledPersistentStateSave();

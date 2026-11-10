@@ -76,7 +76,7 @@ async function checkDueItems() {
           items.update(($i) =>
             $i.map((i) =>
               i.id === item.id
-                ? { ...i, lastRunAt: nowIso(), nextRunAt: computeNextRunAt({ ...i, lastRunAt: nowIso() }) }
+                ? { ...i, nextRunAt: computeNextRunAt(i) }
                 : i
             )
           );

@@ -84,6 +84,18 @@ removes no-effect proposals. Scanner delete/reassign is one transaction across
 both tiers; reassignment to Unassigned is supported. Exclusions and global
 tombstones retain their different meanings.
 
+Status actions may include the legacy boolean `completed` flag when clearing an
+old completion marker. Incremental thread commands accept that boolean through
+the same item normalizer used for imports; only canonical lifecycle fields are
+stored. Other unknown patch fields and non-boolean completion flags are refused.
+
+Failed repository saves show a sanitized error code alongside **Local state:
+failed** (or **conflict**), and main logs record the code without item content.
+Local edit buffers and the pending command ID/payload are retained; **Retry save**
+reuses that command safely. A successful save clears the error. Export local
+edits before restarting a window that cannot save; do not discard or reload
+unsaved work as a troubleshooting shortcut.
+
 Committed revisions invalidate other windows. Dirty buffers are not silently
 overwritten: conflicts retain local edits, offer export and explicit discard/
 refresh. Pages reset on revision invalidation; worker cursors can reject expired

@@ -19,6 +19,7 @@
 {#if ['failed', 'conflict', 'load-failed', 'recovery-required'].includes($persistenceStatus)}
   <div role="status" class="persistence-banner">
     Local state: {$persistenceStatus}.
+    {#if $persistenceError}<strong>{$persistenceError}</strong>{/if}
     {#if $persistenceStatus === 'failed'}
       <button class="small-btn" onclick={() => flushPersistentState(get(isDemo))}>Retry save</button>
     {/if}
@@ -31,7 +32,6 @@
     {/if}
     {#if $persistenceStatus === 'load-failed' || $persistenceStatus === 'recovery-required'}
       Keep this window open. The stored profile needs recovery; it has not been replaced with empty data.
-      {#if $persistenceError}<strong>{$persistenceError}</strong>{/if}
       Pre-import originals, when available, are in the profile's state-normal (or state-demo) backup directory. Do not delete the active database or select stale JSON.
       <button class="small-btn" onclick={() => loadPersistentState(get(isDemo))}>Retry reading profile</button>
     {/if}

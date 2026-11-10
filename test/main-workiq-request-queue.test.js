@@ -167,6 +167,30 @@ describe('global WorkIQ request queue', () => {
     assert.equal(h.timers.size, 0);
   });
 
+  it('retries completed empty reads within budget but never replays an empty write result', async () => {
+    const h = harness({ pacingMs: 0 });
+    let reads = 0;
+    const read = track(h.queue, () => {
+      reads++;
+      throw Object.assign(new Error('empty answer'), { code: 'EMPTY_RESPONSE' });
+    });
+    await h.tick(0);
+    assert.equal(h.queue.getStatus().active, 0);
+    assert.equal(h.queue.getStatus().pending, 1);
+    await h.tick(500);
+    assert.deepEqual(await read, { code: 'EMPTY_RESPONSE', attempts: 2 });
+    assert.equal(reads, 2);
+    let writes = 0;
+    const write = track(h.queue, () => {
+      writes++;
+      return { ok: false, code: 'EMPTY_RESPONSE' };
+    }, { readOnly: false });
+    await h.tick(0);
+    assert.deepEqual(await write, { value: { ok: false, code: 'EMPTY_RESPONSE' }, attempts: 1 });
+    assert.equal(writes, 1);
+    h.queue.shutdown();
+  });
+
   it('shutdown rejects active, queued, and delayed retries and removes timers/listeners', async () => {
     const h = harness({ pacingMs: 0, limit: 1 });
     const statuses = [];

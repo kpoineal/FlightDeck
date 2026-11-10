@@ -6,6 +6,27 @@ const path = require('path');
 const { electronMock } = require('./helpers/electron-mock');
 const { IPC_CHANNELS } = require('../src/shared/ipc-contract');
 
+it('repository command failures return sanitized codes without exposing payload or exception text', async t => {
+    const handlers = new Map();
+    t.mock.method(electronMock.ipcMain, 'handle', (channel, handler) => handlers.set(channel, handler));
+    const { registerIpcHandlers } = require('../src/main/ipc-handlers');
+    let failure;
+    const cleanup = registerIpcHandlers(() => null, new Set(), {
+      stateService: { command: async () => { throw failure; } },
+    });
+    try {
+      for (const [code, expected] of [['INVALID_PATCH', 'INVALID_PATCH'],
+        ['private thread title', 'REPOSITORY_FAILED'], [undefined, 'REPOSITORY_FAILED']]) {
+        failure = Object.assign(new Error('private payload detail'), { code });
+        const result = await handlers.get(IPC_CHANNELS.STATE_COMMAND)({ sender: {} }, {
+          type: 'applyChanges', payload: { private: 'do not log' },
+        });
+        assert.deepEqual(result, { ok: false, code: expected });
+        assert.equal(JSON.stringify(result).includes('private'), false);
+      }
+    } finally { cleanup(); }
+});
+
 describe('preload IPC contract', () => {
   let exposedApi;
   let invokeCalls;

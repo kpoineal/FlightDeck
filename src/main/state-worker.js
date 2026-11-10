@@ -176,8 +176,10 @@ function putThread(raw, residency, nextRevision) {
           const current = getThread(change.id);
           if (!current && !change.create) error('NOT_FOUND');
           if (current && change.create) error('RECORD_CONFLICT');
+          // Status actions clear this legacy flag; normalization stores only canonical lifecycle fields.
           if (!change.patch || typeof change.patch !== 'object' || Array.isArray(change.patch)
-            || Object.keys(change.patch).some(key => !Object.hasOwn(itemModel.normalizeItem({ id: change.id }), key))) error('INVALID_PATCH');
+            || Object.keys(change.patch).some(key => key !== 'completed' && !Object.hasOwn(itemModel.normalizeItem({ id: change.id }), key))
+            || (Object.hasOwn(change.patch, 'completed') && typeof change.patch.completed !== 'boolean')) error('INVALID_PATCH');
           if (change.markRead !== undefined && typeof change.markRead !== 'boolean') error('INVALID_PATCH');
           let patch = change.patch;
           // Acknowledge stored history first; newer local unseen events in the patch must stay unread.

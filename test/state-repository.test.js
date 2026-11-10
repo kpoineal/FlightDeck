@@ -10,6 +10,33 @@ const { canonicalizeState, migrateStateProfile } = require('../src/main/state-mi
 const { createStateService } = require('../src/main/state-service');
 const { EventEmitter } = require('node:events');
 
+it('legacy completed flags are boolean-only inputs normalized to canonical lifecycle fields', async () => {
+  const { directory } = createGeneratedProfile({});
+  const service = createStateService(directory);
+  try {
+    let base = await service.query('projection');
+    const id = base.value.items[0].id;
+    for (const value of ['false', null, 0, {}]) {
+      await assert.rejects(service.command({
+        commandId: `invalid-completed-${JSON.stringify(value)}`, expectedRevision: base.revision,
+        type: 'applyChanges', payload: { changes: [{ domain: 'threads', id, patch: { completed: value } }] },
+      }), { code: 'INVALID_PATCH' });
+      assert.equal((await service.query('status')).revision, base.revision);
+    }
+    const result = await service.command({
+      commandId: 'legacy-completed', expectedRevision: base.revision, type: 'applyChanges',
+      payload: { changes: [{ domain: 'threads', id, patch: { completed: true } }] },
+    });
+    const saved = await service.query('getThread', { id });
+    assert.equal(saved.lifecycleStatus, 'archived');
+    assert.equal(Object.hasOwn(saved, 'completed'), false);
+    await assert.rejects(service.command({
+      commandId: 'unknown-patch', expectedRevision: result.revision, type: 'applyChanges',
+      payload: { changes: [{ domain: 'threads', id, patch: { unsupportedFlag: true } }] },
+    }), { code: 'INVALID_PATCH' });
+  } finally { await service.close(); removeGeneratedProfile(directory); }
+});
+
 it('explicit projection mark-read acknowledges all unseen history with isNew already false and survives reload', async () => {
   const { stateDelta } = await import('../src/shared/state-delta.mjs');
   const { markMailboxThreadRead, isMailboxUnread } = await import('../src/svelte/lib/mailbox.js');

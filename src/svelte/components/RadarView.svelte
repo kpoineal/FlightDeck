@@ -75,6 +75,7 @@
   ];
 
   let smartView = $state('inbox');
+  let secondaryView = $derived(VIEWS.slice(2).find(view => view.id === smartView));
   let scannerId = $state('all');
   let query = $state('');
   const database = usesRepository();
@@ -88,7 +89,7 @@
   let refineFilters = $state({});
   let selectedId = $state(null);
   let pendingNavigationId = $state(null);
-  let mobileStep = $state('filters');
+  let mobileStep = $state('list');
   let viewRoot = $state(null);
   let originatingThread = null;
   let actionPreviewOrigin = null;
@@ -146,7 +147,6 @@
   });
   let projectionIndex = $derived.by(() => {
     const viewCounts = new Map(VIEWS.map((view) => [view.id, 0]));
-    const scannerCounts = new Map();
     const titleGroups = new Map();
 
     for (const item of projected) {
@@ -154,14 +154,13 @@
         if (view.predicate(item, now)) viewCounts.set(view.id, viewCounts.get(view.id) + 1);
       }
 
-      scannerCounts.set(item.scannerId, (scannerCounts.get(item.scannerId) || 0) + 1);
       const titleGroup = item.title?.split(/\s+[—-]\s+/)[0];
       const group = titleGroups.get(titleGroup);
       if (group) group.push(item);
       else titleGroups.set(titleGroup, [item]);
     }
 
-    return { viewCounts, scannerCounts, titleGroups };
+    return { viewCounts, titleGroups };
   });
   let threads = $derived.by(() => {
     if (database && repositoryPage) return projected;
@@ -412,6 +411,39 @@
     setSelectedThreadId(null);
     originatingThread = null;
     mobileStep = 'list';
+  }
+
+  function closeDisclosure(event) {
+    const disclosure = event.currentTarget.closest('details');
+    if (!disclosure) return;
+    disclosure.open = false;
+    disclosure.querySelector('summary')?.focus({ preventScroll: true });
+  }
+
+  function handleDisclosureKeydown(event) {
+    if (event.key !== 'Escape') return;
+    closeDisclosure(event);
+    event.stopPropagation();
+  }
+
+  function dismissMenusOutside(event) {
+    const menus = viewRoot?.querySelectorAll(
+      '.radar-secondary-views[open], .inbox-refine[open], .radar-scanner-menu[open], .radar-more-menu[open]'
+    );
+    for (const menu of menus || []) {
+      if (!menu.contains(event.target)) menu.open = false;
+    }
+  }
+
+  function sizeFilterPanel() {
+    const menu = viewRoot?.querySelector('.inbox-refine[open]');
+    if (!menu) return;
+    const panel = menu.querySelector('.inbox-refine__panel');
+    panel.style.maxHeight = '';
+    if (window.innerWidth <= 960) return;
+    const top = panel.getBoundingClientRect().top;
+    const bottom = Math.min(window.innerHeight, menu.closest('.radar-thread-list-pane').getBoundingClientRect().bottom);
+    panel.style.maxHeight = `${Math.max(0, Math.min(480, bottom - top - 12))}px`;
   }
 
   function returnToThreads() {
@@ -893,11 +925,6 @@
     return projectionIndex.viewCounts.get(view.id) || 0;
   }
 
-  function scannerThreadCount(requestedScannerId) {
-    if (database && repositoryPage) return repositoryPage.scannerCounts.find(row => row.scanner_id === requestedScannerId)?.n || 0;
-    return projectionIndex.scannerCounts.get(requestedScannerId) || 0;
-  }
-
   function dueInputValue(value) {
     const date = new Date(value || '');
     if (!Number.isFinite(date.getTime())) return '';
@@ -1156,6 +1183,8 @@
 
 </script>
 
+<svelte:window on:resize={sizeFilterPanel} on:pointerdown={dismissMenusOutside} on:focusin={dismissMenusOutside} />
+
 {#if contextMenu && contextTarget}
   {#key contextMenu}
     <ThreadContextMenu title={contextTarget.title || 'Untitled item'} x={contextMenu.x} y={contextMenu.y}
@@ -1169,9 +1198,7 @@
   {/if}
   <header class="command-view__heading radar-workspace__heading">
     <div>
-      <span>WORK TRIAGE</span>
       <h1>Radar</h1>
-      <p>Prioritized signals with deterministic thread actions.</p>
     </div>
     <div class="radar-search">
       <label class="sr-only" for="radar-search">Search Radar</label>
@@ -1188,6 +1215,28 @@
         <option value="priority">Priority</option>
         <option value="recent">Recent</option>
       </select>
+      {#if scannerId !== 'all'}
+        {@const currentScanner = $scanners.find((scanner) => scanner.id === scannerId)}
+        {#if currentScanner}
+          <details class="radar-scanner-menu" on:keydown={handleDisclosureKeydown}>
+            <summary class="small-btn" data-testid="radar-scanner-tools">Scanner tools</summary>
+            <div class="radar-scanner-menu__panel">
+              <strong>{currentScanner.name} · {currentScanner.enabled ? 'On' : 'Paused'}</strong>
+              <dl class="radar-scanner-status">
+                <div><dt>Last run</dt><dd>{safeDate(currentScanner.lastRunAt, 'Never')}{currentScanner.lastRunStatus === 'success' ? ' · Completed' : currentScanner.lastRunStatus === 'failed' ? ' · Failed' : ''}</dd></div>
+                <div><dt>Next run</dt><dd>{safeDate(currentScanner.nextRunAt, 'Not scheduled')}</dd></div>
+              </dl>
+              <div class="radar-scanner-actions">
+                <button type="button" class="small-btn" data-testid="radar-edit-scanner" on:click={openScannerSettings}>Settings</button>
+                <button type="button" class="small-btn" data-testid="radar-toggle-scanner" on:click={toggleScanner}>{currentScanner.enabled ? 'Pause' : 'Resume'}</button>
+                <button type="button" class="small-btn" disabled={!$connected || $isDemo}
+                  title={$isDemo ? 'Scanner execution is disabled in demo mode' : !$connected ? 'Connect WorkIQ to run this scanner' : 'Run scanner now'}
+                  on:click={runSelectedScanner}>Run scanner</button>
+              </div>
+            </div>
+          </details>
+        {/if}
+      {/if}
       <button type="button" class="small-btn primary" data-testid="radar-new-scanner" on:click={openNewScanner}>New scanner</button>
       <button type="button" class="small-btn" disabled={!$scanners.length} data-testid="radar-add-item"
         on:click={() => { taskModalOpen = true; }}>Add item</button>
@@ -1195,84 +1244,64 @@
   </header>
 
   <nav class="radar-mobile-progress" aria-label="Radar steps">
-    <button type="button" class:active={mobileStep === 'filters'} on:click={() => { mobileStep = 'filters'; }}>Views</button>
     <button type="button" class:active={mobileStep === 'list'} on:click={() => { mobileStep = 'list'; }}>Threads</button>
     <button type="button" class:active={mobileStep === 'detail'} disabled={!selected}
       on:click={() => { if (selected) mobileStep = 'detail'; }}>Detail</button>
   </nav>
 
   <div class="radar-triage">
-    <aside class="radar-smart-views" class:mobile-active={mobileStep === 'filters'} aria-label="Smart views">
-      <section>
-        <h2>Smart views</h2>
-        {#each VIEWS as view (view.id)}
-          <button type="button" class:active={smartView === view.id}
-            aria-pressed={smartView === view.id}
-            data-testid={`radar-view-${view.id}`}
-            on:click={() => chooseView(view.id)}>
-            <i class:enabled={viewCount(view) > 0}></i>
-            <span>{view.label}</span>
-            <strong>{viewCount(view)}</strong>
-          </button>
-        {/each}
-      </section>
-      <section>
-        <h2>Scanners</h2>
-        {#each $scanners as scanner (scanner.id)}
-          <button type="button" class:active={scannerId === scanner.id}
-            on:click={() => { scannerId = scanner.id; mobileStep = 'list'; }}>
-            <i class:enabled={scanner.enabled}></i>
-            <span>{scanner.name}</span>
-            <strong>{scannerThreadCount(scanner.id)} · {scanner.enabled ? 'On' : 'Paused'}</strong>
-          </button>
-        {/each}
-        {#if scannerId !== 'all'}
-          {@const currentScanner = $scanners.find((scanner) => scanner.id === scannerId)}
-          {#if currentScanner}
-            <dl class="radar-scanner-status">
-              <div><dt>Last run</dt><dd>{safeDate(currentScanner.lastRunAt, 'Never')}{currentScanner.lastRunStatus === 'success' ? ' · Completed' : currentScanner.lastRunStatus === 'failed' ? ' · Failed' : ''}</dd></div>
-              <div><dt>Next run</dt><dd>{safeDate(currentScanner.nextRunAt, 'Not scheduled')}</dd></div>
-            </dl>
-          {/if}
-          <div class="radar-scanner-actions">
-            <button type="button" class="small-btn" data-testid="radar-edit-scanner" on:click={openScannerSettings}>Settings</button>
-            <button type="button" class="small-btn" data-testid="radar-toggle-scanner" on:click={toggleScanner}>
-              {$scanners.find((scanner) => scanner.id === scannerId)?.enabled ? 'Pause' : 'Resume'}
-            </button>
-            <button type="button" class="small-btn" disabled={!$connected || $isDemo}
-              title={$isDemo ? 'Scanner execution is disabled in demo mode' : !$connected ? 'Connect WorkIQ to run this scanner' : 'Run scanner now'}
-              on:click={runSelectedScanner}>Run scanner</button>
-          </div>
-        {/if}
-      </section>
-      <p class="radar-smart-views__hint">Actions remove a thread from the current projection without selecting a replacement.</p>
-    </aside>
-
     <section class="radar-thread-list-pane" class:mobile-active={mobileStep === 'list'} aria-label="Radar threads">
       <header>
-        <strong>{VIEWS.find((entry) => entry.id === smartView)?.label}</strong>
-        <span>{database ? repositoryPage?.total || 0 : threads.length} threads</span>
-      </header>
-      {#if database}
-        <nav aria-label="Thread pages">
-          <button class="small-btn" disabled={pageOffset === 0} on:click={() => { pageOffset = Math.max(0, pageOffset - 100); }}>Previous threads</button>
-          <button class="small-btn" disabled={!repositoryPage?.more} on:click={() => { pageOffset += 100; }}>Next threads</button>
-          <span>Page {Math.floor(pageOffset / 100) + 1}</span>
+        <nav class="radar-view-nav" aria-label="Radar views">
+          {#each VIEWS.slice(0, 2) as view (view.id)}
+            <button type="button" class:active={smartView === view.id}
+              aria-pressed={smartView === view.id}
+              data-testid={`radar-view-${view.id}`}
+              on:click={() => chooseView(view.id)}>
+              <span>{view.label}</span>
+              <strong>{viewCount(view)}</strong>
+            </button>
+          {/each}
+          <details class="radar-secondary-views" on:keydown={handleDisclosureKeydown}>
+            <summary data-testid="radar-more-views" class:active={!!secondaryView}
+              aria-label={`Views, ${secondaryView ? `current view: ${secondaryView.label}` : 'Monitored and other views'}`}>
+              {secondaryView?.label || 'Monitored'}
+            </summary>
+            <div class="radar-secondary-views__panel">
+              {#each VIEWS.slice(2) as view (view.id)}
+                <button type="button" class:active={smartView === view.id}
+                  aria-pressed={smartView === view.id} data-testid={`radar-view-${view.id}`}
+                  on:click={(event) => { chooseView(view.id); closeDisclosure(event); }}>
+                  <span>{view.label}</span>
+                  <strong>{viewCount(view)}</strong>
+                </button>
+              {/each}
+            </div>
+          </details>
         </nav>
-        {#if pageError}<p role="alert">{pageError}</p>{/if}
-      {/if}
+      </header>
+      {#if database && pageError}<p role="alert">{pageError}</p>{/if}
       <div class="inbox-filter-bar" aria-label="Inbox filters">
         <div class="inbox-quick-filters" role="group" aria-label="Quick filters">
           <button type="button" data-testid="inbox-quick-unread" aria-pressed={quickFilter === 'unread'} on:click={() => toggleQuickFilter('unread')}>Unread</button>
-          <button type="button" data-testid="inbox-quick-new" aria-pressed={quickFilter === 'new'} on:click={() => toggleQuickFilter('new')}>NEW</button>
-          <button type="button" data-testid="inbox-quick-updated" aria-pressed={quickFilter === 'updated'} on:click={() => toggleQuickFilter('updated')}>UPDATED</button>
-          <button type="button" data-testid="inbox-quick-critical" aria-pressed={quickFilter === 'critical'} on:click={() => toggleQuickFilter('critical')}>Critical</button>
-          <button type="button" data-testid="inbox-quick-blocked" aria-pressed={quickFilter === 'blocked'} on:click={() => toggleQuickFilter('blocked')}>Blocked</button>
-          <button type="button" data-testid="inbox-quick-due-soon" aria-pressed={quickFilter === 'due-soon'} on:click={() => toggleQuickFilter('due-soon')}>Due soon</button>
         </div>
-        <details class="inbox-refine">
-          <summary>Refine</summary>
+        <details class="inbox-refine" on:keydown={handleDisclosureKeydown} on:toggle={sizeFilterPanel}>
+          <summary data-testid="inbox-filters">Filters{#if activeFilters.length}{' '}({activeFilters.length}){/if}</summary>
           <div class="inbox-refine__panel">
+            <header>
+              <strong>Filters</strong>
+              <button type="button" class="small-btn" aria-label="Close filters" on:click={closeDisclosure}>Done</button>
+            </header>
+            <fieldset class="inbox-filter-shortcuts">
+              <legend>Quick filters</legend>
+              <div class="inbox-quick-filters" role="group" aria-label="Additional quick filters">
+                <button type="button" data-testid="inbox-quick-new" aria-pressed={quickFilter === 'new'} on:click={() => toggleQuickFilter('new')}>NEW</button>
+                <button type="button" data-testid="inbox-quick-updated" aria-pressed={quickFilter === 'updated'} on:click={() => toggleQuickFilter('updated')}>UPDATED</button>
+                <button type="button" data-testid="inbox-quick-critical" aria-pressed={quickFilter === 'critical'} on:click={() => toggleQuickFilter('critical')}>Critical</button>
+                <button type="button" data-testid="inbox-quick-blocked" aria-pressed={quickFilter === 'blocked'} on:click={() => toggleQuickFilter('blocked')}>Blocked</button>
+                <button type="button" data-testid="inbox-quick-due-soon" aria-pressed={quickFilter === 'due-soon'} on:click={() => toggleQuickFilter('due-soon')}>Due soon</button>
+              </div>
+            </fieldset>
             <fieldset>
               <legend>Severity</legend>
               {#each ['Critical', 'Elevated', 'Observe'] as value}
@@ -1324,6 +1353,7 @@
             </fieldset>
           </div>
         </details>
+        <span class="radar-thread-count">{database ? repositoryPage?.total || 0 : threads.length} threads</span>
         {#if activeFilters.length}
           <div class="inbox-active-filters" aria-label="Active filters">
             {#each activeFilters as filter (`${filter.facet}:${filter.value}`)}
@@ -1386,6 +1416,17 @@
           <div class="command-empty">No threads match this view.</div>
         {/if}
       </div>
+      {#if database && repositoryPage?.total > 100}
+        <nav class="radar-pagination" aria-label="Thread pages">
+          <button class="small-btn" aria-label="Previous threads" disabled={pageOffset === 0}
+            on:click={() => { pageOffset = Math.max(0, pageOffset - 100); }}>Previous</button>
+          <span aria-live="polite">{pageOffset + 1}–{Math.min(pageOffset + 100, repositoryPage.total)} of {repositoryPage.total}
+            <span class="sr-only">Page {Math.floor(pageOffset / 100) + 1}</span>
+          </span>
+          <button class="small-btn" aria-label="Next threads" disabled={!repositoryPage.more}
+            on:click={() => { pageOffset += 100; }}>Next</button>
+        </nav>
+      {/if}
     </section>
 
     <article class="radar-thread-detail" class:mobile-active={mobileStep === 'detail'} aria-live="polite">
@@ -1398,7 +1439,24 @@
             <p>{safeDate(mailboxActivityAt(selected), 'No activity')}</p>
           </div>
           <div class="radar-action-toolbar radar-thread-toolbar" data-testid="radar-thread-toolbar">
-            <div class="radar-header-actions">
+            <div class="radar-action-group radar-action-group--disposition" role="group" aria-label="Update thread status">
+              <button type="button" class="small-btn radar-action-button radar-action-button--complete" data-testid="radar-complete"
+                title="Mark this item complete" on:click={() => setItemLifecycle(selected.id, 'complete')}>Complete</button>
+              <details class="radar-more-menu" on:keydown={handleDisclosureKeydown}>
+                <summary class="small-btn radar-action-button" data-testid="radar-more">More</summary>
+                <div class="radar-more-menu__panel" role="menu" aria-label="More item actions">
+                  <button type="button" class="radar-more-menu__item radar-action-button--snooze" data-testid="radar-snooze"
+                    title="Snooze this item for one day" on:click={snoozeSelected}>Snooze</button>
+                  <button type="button" class="radar-more-menu__item" data-testid="radar-archive"
+                    title="Archive this item" on:click={() => setItemLifecycle(selected.id, 'archived')}>Archive</button>
+                  <button type="button" class="radar-more-menu__item radar-more-menu__item--delete" data-testid="radar-delete"
+                    title="Delete this local FlightDeck card" disabled={deleteState.status === 'deleting'}
+                    on:click={requestDeleteSelected}>Delete from FlightDeck…</button>
+                </div>
+              </details>
+            </div>
+          </div>
+          <div class="radar-header-actions">
             <label class="mailbox-severity mailbox-severity-{(selected.severity || 'Observe').toLowerCase()} radar-header-pill"
               title={`Criticality: ${selected.severity || 'Observe'} — click to edit`}>
               <span aria-hidden="true">{selected.severity || 'Observe'}</span>
@@ -1422,23 +1480,6 @@
             {#if isMailboxUnread(selected)}
               <button type="button" class="small-btn radar-utility-button" title="Mark this item as read" on:click={() => markItemRead(selected.id)}>Read</button>
             {/if}
-            </div>
-            <div class="radar-action-group radar-action-group--disposition" role="group" aria-label="Update thread status">
-              <button type="button" class="small-btn radar-action-button radar-action-button--complete" data-testid="radar-complete"
-                title="Mark this item complete" on:click={() => setItemLifecycle(selected.id, 'complete')}>Complete</button>
-              <button type="button" class="small-btn radar-action-button radar-action-button--snooze" data-testid="radar-snooze"
-                title="Snooze this item for one day" on:click={snoozeSelected}>Snooze</button>
-              <details class="radar-more-menu">
-                <summary class="small-btn radar-action-button" data-testid="radar-more">More</summary>
-                <div class="radar-more-menu__panel" role="menu" aria-label="More item actions">
-                  <button type="button" class="radar-more-menu__item" data-testid="radar-archive"
-                    title="Archive this item" on:click={() => setItemLifecycle(selected.id, 'archived')}>Archive</button>
-                  <button type="button" class="radar-more-menu__item radar-more-menu__item--delete" data-testid="radar-delete"
-                    title="Delete this local FlightDeck card" disabled={deleteState.status === 'deleting'}
-                    on:click={requestDeleteSelected}>Delete from FlightDeck…</button>
-                </div>
-              </details>
-            </div>
           </div>
         </header>
 

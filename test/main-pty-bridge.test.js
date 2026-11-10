@@ -6,8 +6,9 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { EventEmitter } = require('node:events');
 
-const { getNodeExecutable, stripAnsi, isWorkiqDiagnostic } = require('../src/main/pty-bridge');
+const { getNodeExecutable, stripAnsi, isWorkiqDiagnostic, runWorkiqCommand } = require('../src/main/pty-bridge');
 
 /* ------------------------------------------------------------------ */
 /*  stripAnsi()                                                        */
@@ -300,9 +301,149 @@ describe('getNodeExecutable()', () => {
 /*  lands.                                                            */
 /* ------------------------------------------------------------------ */
 
-/* ------------------------------------------------------------------ */
-/*  Notes: runWorkiqCommand()                                          */
-/*  This function spawns a real PTY process and depends on node-pty   */
-/*  and the workiq CLI being installed. Integration testing requires  */
-/*  a running Electron environment. Deferred to Phase 5 Part 2.      */
-/* ------------------------------------------------------------------ */
+describe('buffered structured CLI semantic reads', () => {
+  function harness(t, options = {}) {
+    t.mock.method(fs, 'existsSync', () => true);
+    const child = Object.assign(new EventEmitter(), {
+      pid: 12345, stdout: new EventEmitter(), stderr: new EventEmitter(), kills: 0,
+      kill() { this.kills++; },
+    });
+    const calls = [];
+    let exits = 0;
+    const run = question => runWorkiqCommand(question, {
+      launcher: 'test-workiq.exe', onExit: () => { exits++; },
+      spawnProcess: (...args) => { calls.push(args); return child; },
+      ...options,
+    });
+    return { child, calls, run, exits: () => exits };
+  }
+
+  it('passes the unchanged question to buffered ask JSON mode without MCP or a terminal', async t => {
+    const h = harness(t);
+    const question = 'Read-only diagnostic\n"quoted" context';
+    const pending = h.run(question);
+    assert.deepEqual(h.calls[0].slice(0, 2), ['test-workiq.exe',
+      ['--log-level', 'Error', 'ask', '-q', question, '--json', '--no-streaming']]);
+    assert.deepEqual(h.calls[0][2].stdio, ['ignore', 'pipe', 'pipe']);
+    h.child.stdout.emit('data', Buffer.from(JSON.stringify({
+      isError: false, response: '{"summary":"Ready","status":"No Update"}',
+    })));
+    h.child.stderr.emit('data', Buffer.from('Non-fatal warning'));
+    h.child.emit('close', 0);
+    assert.deepEqual(await pending, { success: true, answer: '{"summary":"Ready","status":"No Update"}' });
+    assert.equal(h.exits(), 1);
+  });
+
+  it('preserves long JSON strings and UTF-8 characters split between chunks', async t => {
+    const h = harness(t);
+    const pending = h.run('probe');
+    const answer = JSON.stringify({ summary: `Long ${'x'.repeat(40000)} café`, status: 'No Update' });
+    const bytes = Buffer.from(JSON.stringify({ isError: false, response: answer }));
+    const split = bytes.indexOf(Buffer.from('é')) + 1;
+    h.child.stdout.emit('data', bytes.subarray(0, split));
+    h.child.stdout.emit('data', bytes.subarray(split));
+    h.child.emit('close', 0);
+    assert.equal((await pending).answer, answer);
+  });
+
+  it('rejects malformed, failed, and non-envelope JSON rather than falling back to plain text', async t => {
+    for (const [output, code] of [
+      ['not JSON', 'INVALID_RESPONSE'],
+      ['{"summary":"not a CLI envelope"}', 'INVALID_RESPONSE'],
+      ['{"isError":true,"response":"sign-in required"}', 'AUTH_REQUIRED'],
+      ['{"isError":true,"response":"too many requests"}', 'THROTTLED'],
+      ['{"isError":false,"response":13}', 'INVALID_RESPONSE'],
+      ['{"isError":false,"response":""}', 'EMPTY_RESPONSE'],
+    ]) {
+      const h = harness(t);
+      const pending = h.run('probe');
+      h.child.stdout.emit('data', Buffer.from(output));
+      h.child.emit('close', 0);
+      assert.equal((await pending).code, code);
+    }
+  });
+
+  it('continues only an explicitly supplied conversation and preserves scalar answers', async t => {
+    const h = harness(t, { conversationId: 'continued-read' });
+    const pending = h.run('probe');
+    assert.deepEqual(h.calls[0][1].slice(-2), ['--conversation-id', 'continued-read']);
+    h.child.stdout.emit('data', Buffer.from('{"isError":false,"response":"0"}'));
+    h.child.emit('close', 0);
+    assert.equal((await pending).answer, '0');
+  });
+
+  it('rejects empty success output and diagnostic text instead of manufacturing an answer', async t => {
+    for (const [output, expected] of [['', 'INVALID_RESPONSE'], ['Error: sign-in required', 'AUTH_REQUIRED']]) {
+      const h = harness(t);
+      const pending = h.run('probe');
+      h.child.stdout.emit('data', Buffer.from(output));
+      h.child.emit('close', 0);
+      assert.equal((await pending).code, expected);
+      assert.equal(h.exits(), 1);
+    }
+  });
+
+  it('classifies actual stderr failures without retrying inside the CLI helper', async t => {
+    for (const [output, expected] of [['Error: too many requests', 'THROTTLED'], ['Error: login required', 'AUTH_REQUIRED'], ['Error: query failed', 'REQUEST_FAILED']]) {
+      const h = harness(t);
+      const pending = h.run('probe');
+      h.child.stderr.emit('data', Buffer.from(output));
+      h.child.emit('close', 1);
+      const result = await pending;
+      assert.equal(result.success, false);
+      assert.equal(result.code, expected);
+      assert.equal(h.calls.length, 1);
+    }
+  });
+
+  it('times out only its own process and retains ownership until confirmed closure', async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const h = harness(t, { timeoutMs: 40 });
+    const pending = h.run('probe');
+    t.mock.timers.tick(40);
+    assert.equal((await pending).code, 'TIMEOUT');
+    assert.equal(h.child.kills, 1);
+    assert.equal(h.exits(), 0);
+    h.child.emit('close', null);
+    assert.equal(h.exits(), 1);
+  });
+
+  it('aborts on shutdown and rejects already-aborted calls without spawning', async t => {
+    const controller = new AbortController();
+    const h = harness(t, { signal: controller.signal });
+    const pending = h.run('probe');
+    controller.abort();
+    assert.equal((await pending).code, 'SHUTTING_DOWN');
+    assert.equal(h.child.kills, 1);
+    assert.equal(h.exits(), 0);
+    h.child.emit('close', null);
+    assert.equal(h.exits(), 1);
+    assert.equal((await h.run('second')).code, 'SHUTTING_DOWN');
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.exits(), 2);
+  });
+
+  it('reports spawn errors and releases ownership exactly once', async t => {
+    const h = harness(t);
+    const pending = h.run('probe');
+    h.child.pid = undefined;
+    h.child.emit('error', new Error('private launch detail'));
+    const result = await pending;
+    assert.equal(result.code, 'START_FAILED');
+    assert.ok(result.error);
+    assert.equal(result.error.includes('private'), false);
+    h.child.emit('close', 1);
+    assert.equal(h.exits(), 1);
+  });
+
+  it('bounds response capture and never treats oversized output as valid data', async t => {
+    const h = harness(t);
+    const pending = h.run('probe');
+    h.child.stdout.emit('data', Buffer.alloc(1024 * 1024 + 1, 'x'));
+    assert.equal((await pending).code, 'INVALID_RESPONSE');
+    assert.equal(h.child.kills, 1);
+    assert.equal(h.exits(), 0);
+    h.child.emit('close', null);
+    assert.equal(h.exits(), 1);
+  });
+});

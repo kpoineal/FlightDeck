@@ -117,7 +117,7 @@ function createWorkiqRequestQueue(options = {}) {
     if (Number.isFinite(failure?.retryAfterMs) && failure.retryAfterMs >= 0) {
       cooldownUntil = Math.max(cooldownUntil, now() + failure.retryAfterMs);
     }
-    const retryable = ['THROTTLED', 'TIMEOUT', 'PROCESS_EXITED', 'START_FAILED'].includes(failure?.code);
+    const retryable = ['THROTTLED', 'TIMEOUT', 'PROCESS_EXITED', 'START_FAILED', 'EMPTY_RESPONSE'].includes(failure?.code);
     if (!closed && task.readOnly && retryable && task.attempts < task.maxAttempts) {
       // Delayed retries occupy bounded waiting space, never active capacity.
       const backgroundCount = pending.filter((entry) => entry.priority === 'background').length;

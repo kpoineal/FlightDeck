@@ -111,6 +111,69 @@ function createWorkiqMcpClient(options = {}) {
   const queue = createWorkiqRequestQueue(options.queueOptions);
   const transportLease = new AsyncLocalStorage();
   const outstandingTransports = new Map();
+  const semanticQueries = new Map();
+
+  async function semanticAnswer(question, timeoutMs, conversation) {
+    if (typeof options.semanticQuery !== 'function') {
+      const tools = await ensureTools();
+      const name = resolveAskTool(tools);
+      if (!name) throw createClientError('UNSUPPORTED');
+      const args = { question };
+      if (conversation.id) args.conversationId = conversation.id;
+      const result = await sendRequest('tools/call', { name, arguments: args }, timeoutMs);
+      assertReadResult(result);
+      const answer = normalizeAskAnswer(result);
+      if (!answer) {
+        const empty = !extractToolText(result).trim()
+          && ['answer', 'response'].some(field => typeof result.structuredContent?.[field] === 'string'
+            && !result.structuredContent[field].trim());
+        const code = empty ? 'EMPTY_RESPONSE' : 'INVALID_RESPONSE';
+        const conversationId = result.structuredContent?.conversationId;
+        if (empty && typeof conversationId === 'string' && conversationId.trim()
+          && conversationId.length <= 512 && !C0_OR_DEL_PATTERN.test(conversationId)) {
+          // Grounding can finish without an answer; resume this read, not a new conversation.
+          conversation.id = conversationId;
+        }
+        logError('[main] WorkIQ MCP semantic query failed:', code);
+        throw createClientError(code);
+      }
+      return answer;
+    }
+
+    const result = await runOwnedQuery(queryOptions => options.semanticQuery(question, {
+      ...queryOptions, ...(conversation.id ? { conversationId: conversation.id } : {}),
+    }), timeoutMs);
+    if (!result?.success) {
+      const id = result?.conversationId;
+      if (result?.code === 'EMPTY_RESPONSE' && typeof id === 'string' && id.trim()
+        && id.length <= 512 && !C0_OR_DEL_PATTERN.test(id)) conversation.id = id;
+      throw createClientError(result?.code || 'REQUEST_FAILED');
+    }
+    if (typeof result.answer !== 'string' || !result.answer.trim()) throw createClientError('INVALID_RESPONSE');
+    return result.answer.trim();
+  }
+
+  async function runOwnedQuery(query, timeoutMs) {
+    const controller = new AbortController();
+    const release = transportLease.getStore()?.retain() || (() => {});
+    let exited = false;
+    let resolveExit;
+    const exit = new Promise(resolve => { resolveExit = resolve; });
+    const onExit = () => {
+      if (exited) return;
+      exited = true;
+      semanticQueries.delete(controller);
+      release();
+      resolveExit();
+    };
+    semanticQueries.set(controller, exit);
+    try {
+      return await query({ timeoutMs, signal: controller.signal, onExit });
+    } catch (error) {
+      logError('[main] WorkIQ CLI semantic query failed:', error.code || 'REQUEST_FAILED');
+      throw error;
+    }
+  }
 
   let child = null;
   let stdoutBuffer = '';
@@ -129,7 +192,7 @@ function createWorkiqMcpClient(options = {}) {
     return {
       ok: false,
       readOnly: true,
-      mcp: 'unavailable',
+      [options.transportName || 'mcp']: 'unavailable',
       auth: 'unknown',
       code,
     };
@@ -369,6 +432,9 @@ function createWorkiqMcpClient(options = {}) {
   }
 
   function sendRequest(method, params, timeoutMs) {
+    if (typeof options.toolQuery === 'function' && method === 'tools/call') {
+      return runOwnedQuery(queryOptions => options.toolQuery(params.name, params.arguments, queryOptions), timeoutMs);
+    }
     const activeChild = startProcess();
     const id = nextRequestId++;
     const releaseSlot = transportLease.getStore()?.retain() || (() => {});
@@ -432,12 +498,23 @@ function createWorkiqMcpClient(options = {}) {
     return {
       ok: true,
       readOnly: true,
-      mcp: 'available',
+      [options.transportName || 'mcp']: 'available',
       auth: 'unknown',
     };
   }
 
   async function ensureTools() {
+    if (typeof options.discoverTools === 'function') {
+      if (availableTools) return availableTools;
+      if (!toolsPromise) {
+        toolsPromise = runOwnedQuery(options.discoverTools, probeTimeout).then(tools => {
+          if (!(tools instanceof Set)) throw createClientError('INVALID_RESPONSE');
+          availableTools = tools;
+          return tools;
+        }).finally(() => { toolsPromise = null; });
+      }
+      return toolsPromise;
+    }
     await ensureInitialized();
     if (availableTools) return availableTools;
     if (toolsPromise) return toolsPromise;
@@ -755,7 +832,7 @@ function createWorkiqMcpClient(options = {}) {
     }
   }
 
-  async function proposeThreadActions(context) {
+  async function proposeThreadActions(context, conversation) {
     if (shuttingDown) return synthesisFailure('SHUTTING_DOWN');
 
     try {
@@ -763,21 +840,13 @@ function createWorkiqMcpClient(options = {}) {
       const normalizedContext = synthesis.normalizeProposalSynthesisContext(context);
       if (!normalizedContext) return synthesisFailure('INVALID_CONTEXT');
 
-      const tools = await ensureTools();
-      const askTool = resolveAskTool(tools);
-      if (!askTool) return synthesisFailure('UNSUPPORTED');
-
       const template = fs.readFileSync(SYNTHESIS_PROMPT_PATH, 'utf8');
       const question = `${template.trim()}\n\nSelected thread context:\n${JSON.stringify(normalizedContext)}`;
       log('[main] WorkIQ proposal synthesis started:', normalizedContext.requestedChannel || 'automatic');
-      const result = await sendRequest('tools/call', {
-        name: askTool,
-        arguments: { question },
-      }, semanticTimeout);
-
-      assertReadResult(result);
-      const normalizedResult = synthesis.parseProposalSynthesisResponse(normalizeAskAnswer(result));
+      const answer = await semanticAnswer(question, semanticTimeout, conversation);
+      const normalizedResult = synthesis.parseProposalSynthesisResponse(answer);
       if (!normalizedResult) return synthesisFailure('INVALID_RESPONSE');
+      const tools = await ensureTools();
       await enrichProposalRecipients(normalizedResult, tools);
       log('[main] WorkIQ proposal synthesis completed:', normalizedResult.proposals.length, 'proposals');
       return {
@@ -795,9 +864,18 @@ function createWorkiqMcpClient(options = {}) {
     if (shuttingDown) return;
     shuttingDown = true;
     queue.shutdown();
+    const semanticExits = [...semanticQueries.values()];
+    for (const controller of semanticQueries.keys()) controller.abort();
+    if (semanticExits.length) {
+      let timeout;
+      await Promise.race([
+        Promise.all(semanticExits),
+        new Promise(resolve => { timeout = setTimeout(resolve, shutdownGrace); }),
+      ]);
+      clearTimeout(timeout);
+    }
     probePromise = null;
     initializePromise = null;
-
     const activeChild = child;
     if (!activeChild) return;
 
@@ -841,15 +919,10 @@ function createWorkiqMcpClient(options = {}) {
       || (metadata.maxAttempts !== undefined && ![1, 2].includes(metadata.maxAttempts))) {
       return readFailure('INVALID_REQUEST', 0);
     }
+    const conversation = { id: null };
     try {
       const { value, attempts } = await scheduleRequest(async () => {
-        const tools = await ensureTools();
-        const name = resolveAskTool(tools);
-        if (!name) throw createClientError('UNSUPPORTED');
-        const result = await sendRequest('tools/call', { name, arguments: { question } }, readTimeout);
-        assertReadResult(result);
-        const answer = normalizeAskAnswer(result);
-        if (!answer) throw createClientError('INVALID_RESPONSE');
+        const answer = await semanticAnswer(question, readTimeout, conversation);
         return { success: true, answer };
       }, {
         ...metadata,
@@ -862,8 +935,8 @@ function createWorkiqMcpClient(options = {}) {
     }
   }
 
-  function scheduled(run, failure, readOnly = false) {
-    return scheduleRequest(run, { readOnly, maxAttempts: 1 })
+  function scheduled(run, failure, readOnly = false, maxAttempts = 1) {
+    return scheduleRequest(run, { readOnly, maxAttempts })
       .then(({ value }) => value)
       .catch((error) => failure(error.code || 'REQUEST_FAILED'));
   }
@@ -875,7 +948,10 @@ function createWorkiqMcpClient(options = {}) {
   return {
     ask,
     probe: () => scheduled(probe, publicFailure, true),
-    proposeThreadActions: (context) => scheduled(() => proposeThreadActions(context), synthesisFailure, true),
+    proposeThreadActions: (context) => {
+      const conversation = { id: null };
+      return scheduled(() => proposeThreadActions(context, conversation), synthesisFailure, true, 2);
+    },
     createOutlookDraft: (draft) => scheduled(() => createOutlookDraft(draft), actionFailure),
     sendTeamsMessage: (input) => scheduled(() => sendTeamsMessage(input), teamsFailure),
     getQueueStatus: queue.getStatus,
@@ -891,6 +967,8 @@ const READ_ERRORS = {
   TIMEOUT: 'WorkIQ request timed out.',
   SHUTTING_DOWN: 'WorkIQ is shutting down.',
   AUTH_REQUIRED: 'WorkIQ sign-in is required.',
+  EMPTY_RESPONSE: 'WorkIQ returned no answer after the allowed attempts. Please try again.',
+  INVALID_RESPONSE: 'WorkIQ returned an empty or unsupported response.',
 };
 
 function readFailure(code, attempts) {
@@ -944,7 +1022,7 @@ function normalizeAskAnswer(result) {
         return typeof value.response === 'string' ? value.response.trim() : '';
       }
       if (typeof value === 'string') return value.trim();
-      return value && typeof value === 'object' ? text : '';
+      return text;
     } catch (_) {
       return text;
     }
@@ -961,8 +1039,11 @@ function normalizeAskAnswer(result) {
     if (typeof envelope?.response === 'string') return envelope.response.trim();
   }
   // WorkIQ's verified ask envelope, not arbitrary structured entity payloads.
-  return typeof result.structuredContent?.response === 'string'
-    ? result.structuredContent.response.trim() : '';
+  for (const field of ['answer', 'response']) {
+    const value = result.structuredContent?.[field];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
 }
 
 function resolveEntityTool(tools, logicalName) {
@@ -1008,12 +1089,19 @@ function directoryAddresses(user) {
 
 function extractCreatedChat(result) {
   const structured = result?.structuredContent;
-  const chat = structured?.data;
+  let chat = structured?.data;
+  if (structured === undefined && result?.content?.length === 1 && result.content[0]?.type === 'text') {
+    try { chat = JSON.parse(result.content[0].text); } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      return null;
+    }
+  }
   if (!result || typeof result !== 'object' || result.error
     || (result.isError !== undefined && result.isError !== false)
-    || (Array.isArray(result.content) && result.content.length)
-    || !structured || Object.keys(structured).some(key => !['statusCode', 'data'].includes(key))
-    || ![200, 201].includes(structured.statusCode) || chat?.error || chat?.chatType !== 'oneOnOne'
+    || (structured !== undefined && ((Array.isArray(result.content) && result.content.length)
+      || !structured || Object.keys(structured).some(key => !['statusCode', 'data'].includes(key))
+      || ![200, 201].includes(structured.statusCode)))
+    || chat?.error || chat?.chatType !== 'oneOnOne'
     || typeof chat.id !== 'string' || !chat.id || chat.id.length > 512 || C0_OR_DEL_PATTERN.test(chat.id)) return null;
   return chat;
 }

@@ -6,15 +6,15 @@ This document describes the internal architecture of FlightDeck for developers w
 
 ## System Overview
 
-FlightDeck is an Electron desktop application with a strict two-process architecture. The **main process** manages the OS window, tray, persistence, and a shared queue feeding a persistent local WorkIQ MCP process. The **renderer process** runs a Svelte 5 SPA with reactive stores, background engines, and IPC-bridged persistence.
+FlightDeck is an Electron desktop application with a strict two-process architecture. The **main process** manages the OS window, tray, persistence, and a shared queue feeding local WorkIQ CLI subprocesses for semantic queries and structured operations. The **renderer process** runs a Svelte 5 SPA with reactive stores, background engines, and IPC-bridged persistence.
 
 ```mermaid
 graph TB
   subgraph Main["Electron Main Process"]
     IDX["index.js — App lifecycle, window, tray"]
     IPC["ipc-handlers.js — Route IPC messages"]
-    PTY["pty-bridge.js — node-pty → WorkIQ CLI"]
-    MCP["workiq-request-queue.js → workiq-mcp-client.js"]
+    PTY["pty-bridge.js — local WorkIQ EULA setup"]
+    MCP["workiq-request-queue.js → workiq-cli-client.js"]
     STORE["store.js — electron-store (data + cold)"]
     WS["window-state.js — Persist bounds"]
     UTILS_M["utils.js — Logging, URL safety, HTML"]
@@ -36,8 +36,8 @@ graph TB
     COMPONENTS["components/ — 27 Svelte components"]
   end
 
-  IPC --> PTY
   IPC --> MCP
+  IPC --> PTY
   IPC --> STORE
   CONTRACT -.-> IPC
   CONTRACT -.-> PRELOAD
@@ -72,8 +72,8 @@ All renderer↔main communication flows through named IPC channels defined in `s
 |---|---|---|
 | `get-app-version` | Renderer → Main | Return the app version string |
 | `check-for-updates` | Renderer → Main | Check GitHub Releases for a newer version |
-| `ask-workiq` | Renderer → Main | Queue a read through the shared persistent WorkIQ MCP transport |
-| `accept-workiq-eula` | Renderer → Main | Run WorkIQ EULA acceptance via PTY |
+| `ask-workiq` | Renderer → Main | Queue a buffered local CLI `ask --json --no-streaming` read |
+| `accept-workiq-eula` | Renderer → Main | Enable/Retry: accept the local WorkIQ EULA via PTY |
 | `read-prompt-file` | Renderer → Main | Load a markdown prompt template from `src/prompts/` |
 | `open-markdown-window` | Renderer → Main | Open rendered markdown in a new window |
 | `open-tracker-popout` | Renderer → Main | Pop out a tracking item into its own window |
@@ -91,29 +91,34 @@ All renderer↔main communication flows through named IPC channels defined in `s
 | `tracker-state-sync` | Main → Renderer | Tell a window to reload state |
 | `notification-clicked` | Main → Renderer | Forward notification click for navigation |
 
-### WorkIQ MCP Queue (`src/main/workiq-request-queue.js`)
+### WorkIQ CLI Queue (`src/main/workiq-request-queue.js`)
 
 Inbox Email and Teams composition both render inline on the source thread. Email uses the persisted action proposal as its editing/execution state; closing the editor only hides it. `outlook-draft.js` is the shared execution controller for the inline editor and Actions: it claims the proposal before awaiting, records explicit inline review transitions, invokes the existing confirmed Outlook-draft IPC, and applies the same verified outcome/audit handling. Cancelled or definitively undispatched drafts may be edited again, invalidating the old review. Executing, successful, and unconfirmed operations cannot be edited or duplicated. Outlook creation never sends email.
 
 - All WorkIQ requests share one main-process limiter across windows, including scanner/monitor reads and proposal/action calls.
 - Defaults: **5 active total**, **4 background active**, **50 pending total**, **40 background pending**, with **250 ms start pacing**. The background cap leaves an interactive slot; these are application limits, not known remote service quotas.
-- A persistent local MCP process avoids spawning a fresh PTY per read. This does **not** establish whether WorkIQ creates backend sessions/conversation threads or suppresses those artifacts.
+- The main entry creates `workiq-cli-client.js` for all production operations. Generated answers use `workiq ask --json --no-streaming`; directory reads use `workiq fetch --urls`; confirmed writes use `workiq create --url --body`. Each command is a hidden, owned subprocess with literal argv (no shell), bounded UTF-8 capture and explicit exit/error handling. Production never starts `workiq mcp`.
+- Enable/Retry WorkIQ accepts the local CLI EULA through `runWorkiqAcceptEula`. WorkIQ owns Microsoft sign-in, credential persistence and renewal. FlightDeck does not manage OAuth credentials or browser callbacks.
+- Structured directory lookups, Outlook draft creation and Teams sends use CLI entity commands and retain their existing confirmation/receipt checks. The CLI adapter reuses the queue and operation validators in `workiq-mcp-client.js`; that module's original MCP transport remains for compatibility tests, not production. Existing IPC names containing `MCP` remain compatibility identifiers, not transport selection. This does **not** establish whether WorkIQ creates backend conversation threads.
 - Scheduled work uses background priority and per-resource keys (`scanner:<id>`, `item:<id>`); manual work defaults to interactive. Keys coalesce outstanding duplicate work; renderer operation leases additionally protect the same resource.
-- Throttling signals trigger cooldown. Safe reads allow at most two total attempts, shared with renderer parse recovery. Ambiguous writes are not automatically replayed; existing confirmation and audit behavior remains.
+- Throttling signals are classified explicitly; an actual server retry-after establishes shared cooldown. Safe reads, including proposal synthesis, allow at most two total attempts, shared with renderer parse recovery. Completed empty CLI answer envelopes receive bounded read-only backoff. When WorkIQ returns a valid `conversationId` with an empty answer, the retry resubmits the original question using `--conversation-id`. Conversation state is isolated per logical request and is never reused by later scans or unrelated reads. Explicit single-attempt reads do not resume. Malformed CLI envelopes and authentication failures are not retried. Ambiguous writes are not automatically replayed; existing confirmation and audit behavior remains.
 - Generic scanner/monitor reads (`readTimeout`) and proposal synthesis (`semanticTimeout`) both default to a **300-second** caller timeout because grounding a draft also retrieves Microsoft 365 context. Both remain independently injectable for deterministic testing. Synthesis start, proposal count, and sanitized failure codes are logged without draft content or thread details.
-- WorkIQ ask envelopes can arrive as text or object content blocks. Synthesis extracts strict JSON from the answer, including answers followed by WorkIQ citations or wrapped in Markdown fences, then validates the same proposal schema. It does not repair malformed JSON or treat citation text as draft content.
-- Caller timeouts do not prove remote completion: transport leases remain counted as active until a terminal reply or confirmed child-process exit. An unresolved timed-out read is not retried, and its coalescing key remains reserved. Five unanswered calls can safely saturate all slots; there is no promised automatic recovery. If no terminal replies or process exit occur, **quit FlightDeck from the tray and relaunch** to recover. Hiding/reopening the window does not recover stuck slots. Healthy unrelated calls/writes are not killed to reclaim capacity.
+- Semantic CLI output must be a strict JSON envelope with `isError: false` and a string `response`; malformed envelopes and error envelopes are never accepted as answers. Scalar answer text such as `13`, `0` and `false` remains valid. Synthesis extracts strict JSON from the answer, including answers followed by citations or wrapped in Markdown fences, then validates the same proposal schema. It does not repair malformed JSON or treat citation text as draft content.
+- Caller timeouts do not prove remote completion: the owned CLI process is terminated, but its queue lease remains counted until confirmed closure. Unresolved calls are not retried. Shutdown rejects waiting work and cancels all owned CLI subprocesses, including structured reads/writes. An individual timeout does not close unrelated commands. If capacity remains stuck, **quit FlightDeck from the tray and relaunch**; hiding/reopening the window does not restart the main process.
+- Monitor failures reschedule `nextRunAt` without changing `lastRunAt`, the successful-check watermark used by the next monitoring prompt. Queue-full checks remain due without adding failure history.
 - `window.workiq.getWorkiqQueueStatus()` and `onWorkiqQueueStatus(callback)` expose `{ active, pending, limit, backgroundLimit, cooldownUntil }`. Topbar subscribes on mount, reads an initial snapshot, and unsubscribes on destroy; only an active cooldown creates a countdown timer. Counts describe queue execution, not resource operation leases.
-- The bundled runtime WorkIQ package is pinned to **1.0.1**. FlightDeck discovers the installed CLI's MCP tools at runtime; it does not switch to the hosted MCP endpoint. A short overlap probe does not establish a sustained throttle-safe rate.
-- WorkIQ 1.0.1 structured fetch responses use `structuredContent.results` entries containing `statusCode` and `data`. Actual create responses also use `structuredContent: { statusCode, data }`; receipt validation checks the returned entity rather than treating an HTTP success or narrative as proof of delivery.
-- With a supplied Teams address, FlightDeck uniquely resolves the directory identity (including verified SMTP aliases), fetches `/me`, then uses native-confirmed `create_entity /chats` to open/reuse the canonical one-to-one pair or create it if needed. Microsoft Graph returns the existing chat for an existing pair. Member roles respect directory guest status. A separate direct chat read must verify the returned ID, one-to-one type, and complete matching membership before the message POST. This avoids chat-list pagination entirely for verified addresses; failed chat opening or verification never dispatches a message. Name-only resolution still requires a complete bounded lookup, filtering to one-on-one conversations before expanding members and preserving the 1 MiB transport limit. Recipient enrichment is read-only: exact directory names are preferred, followed by unique parenthesized name qualifiers; ambiguous/incomplete results and guest sign-in UPNs without a usable SMTP address are not guessed.
+- The CLI probe verifies `ask`, `fetch` and `create` support using `workiq --help`, with the bundled **1.0.1** CLI on Windows or a PATH installation on macOS/Linux. It does not prove authenticated service access. A short overlap probe does not establish a sustained throttle-safe rate.
+- Investigation of the former MCP route found unfinished streaming fragments followed by complete JSON snapshots in the same tool answer. No separate progress notifications were emitted in the observed cases, even with a progress token. Forward-only extraction could mistake the final snapshot for part of an unfinished string or URL. Shared JSON extraction retains its backwards quote/escape-aware balancing for compatibility, admitting only strictly parseable complete snapshots from that pass and retaining existing workflow/synthesis validators. This does not invent a missing prefix, repair draft content, or replay writes. Truly incomplete answers still fail explicitly.
+- Direct native MCP captures also include a genuinely incomplete briefing tail with no required opening fields or complete replacement snapshot. This is already incomplete in the server's final tool response, not lost by FlightDeck's pipe framing. Extraction cannot recover absent content; renderer read workflows retain their shared two-attempt budget and report failure if no valid answer arrives. Snapshot recovery mitigates the observed duplication pattern, not every upstream incomplete response.
+- CLI entity JSON is passed to the existing entity validators without inventing HTTP statuses or success receipts. Draft creation requires a returned draft ID and `isDraft: true`; Teams delivery requires a matching chat, timestamp and exact message body. Malformed output or an error entity fails explicitly.
+- With a supplied Teams address, FlightDeck uniquely resolves the directory identity (including verified SMTP aliases), fetches `/me`, then uses confirmed `workiq create --url /chats` to open/reuse the canonical one-to-one pair or create it if needed. Microsoft Graph returns the existing chat for an existing pair. Member roles respect directory guest status. A separate direct chat read must verify the returned ID, one-to-one type, and complete matching membership before the message POST. This avoids chat-list pagination entirely for verified addresses; failed chat opening or verification never dispatches a message. Name-only resolution still requires a complete bounded lookup, filtering to one-on-one conversations before expanding members and preserving the 1 MiB transport limit. Recipient enrichment is read-only: exact directory names are preferred, followed by unique parenthesized name qualifiers; ambiguous/incomplete results and guest sign-in UPNs without a usable SMTP address are not guessed.
 - Protocol and send diagnostics record sanitized reason codes and sizes, not raw responses, recipient addresses, message bodies, or tokens. Contract fixtures cover the installed schemas and observed response envelopes without executing live writes.
 - Teams composer state retains the proposal's recipient address as `targetEmail`. The send IPC accepts an optional verified email alongside the display name; a supplied address is authoritative and must never fall back to a name match. The editor clears a stale address when its name is changed. Unconfirmed delivery remains a distinct thread-scoped state across navigation, blocking another send until the user explicitly acknowledges checking Teams; that acknowledgment never dispatches a write.
 - Queue-status broadcasting is appwide: close-to-tray and reopening retain the subscription; it is disposed only when application teardown begins.
 
 ### PTY Bridge (`src/main/pty-bridge.js`)
 
-The PTY bridge remains available for explicit EULA acceptance/recovery. Ordinary reads use MCP with **no PTY fallback**. Authentication/EULA failures require explicit recovery rather than background replay.
+The module resolves the bundled/native launcher, handles local EULA acceptance for Enable/Retry through a PTY, and executes production CLI commands through bounded child-process pipes. Semantic answers are buffered with `--json --no-streaming`. FlightDeck does not read or copy WorkIQ credentials. Authentication failures require explicit recovery rather than replaying a write.
 
 ### Window State (`src/main/window-state.js`)
 
@@ -212,7 +217,7 @@ All application state lives in Svelte `writable` stores with `derived` stores fo
 
 | Store | Type | Purpose |
 |---|---|---|
-| `connected` | `writable(false)` | Whether WorkIQ CLI is reachable |
+| `connected` | `writable(false)` | Whether local WorkIQ setup has completed and remote controls are enabled |
 | `loading` | `writable(false)` | Global loading indicator |
 | `mode` | `writable('Radar')` | Active view tab |
 | `density` | `writable('full')` | Card display density |
@@ -328,15 +333,15 @@ sequenceDiagram
   participant Engine as Scanner / Monitor
   participant JP as json-parser.js
   participant WIQ as window.workiq.ask()
-  participant IPC as IPC → Shared MCP Queue
-  participant CLI as Persistent local WorkIQ MCP
+  participant IPC as IPC → Shared CLI Queue
+  participant SERVER as Owned WorkIQ CLI subprocess
 
   Engine->>JP: runWorkiqJson(prompt, validator, label)
   JP->>WIQ: window.workiq.ask(prompt, {priority, key, maxAttempts})
   WIQ->>IPC: ipcRenderer.invoke("ask-workiq")
-  IPC->>CLI: queued tools/call
-  CLI-->>IPC: raw text + JSON
-  IPC-->>WIQ: cleaned text
+  IPC->>SERVER: queued ask --json --no-streaming
+  SERVER-->>IPC: complete JSON envelope at process close
+  IPC-->>WIQ: normalized answer + attempts
   WIQ-->>JP: raw response
   JP->>JP: extractJsonFromText()
   JP->>JP: normalizeJsonCandidate()
@@ -373,8 +378,8 @@ sequenceDiagram
   participant PR as prompts.js
   participant JP as json-parser.js
   participant WIQ as window.workiq.ask()
-  participant MCP as Shared MCP queue/client
-  participant CLI as Persistent local WorkIQ MCP
+  participant MCP as Shared CLI queue/client
+  participant SERVER as Owned WorkIQ CLI subprocess
   participant ST as Svelte stores
   participant PS as persistence.js
 
@@ -383,8 +388,8 @@ sequenceDiagram
   SE->>JP: runWorkiqJson(prompt, validator)
   JP->>WIQ: window.workiq.ask(prompt, background metadata)
   WIQ->>MCP: IPC invoke "ask-workiq"
-  MCP->>CLI: paced tools/call
-  CLI-->>MCP: MCP response
+  MCP->>SERVER: paced ask --json --no-streaming
+  SERVER-->>MCP: complete CLI JSON envelope
   MCP-->>WIQ: normalized answer + attempts
   WIQ-->>JP: response
   JP-->>SE: payload.radarItems[]
@@ -409,7 +414,7 @@ sequenceDiagram
   ME->>PR: buildMonitorPrompt(item)
   ME->>JP: runWorkiqJson(prompt, validator)
   JP->>WIQ: window.workiq.ask(prompt)
-  Note over WIQ: IPC → shared queue → persistent local MCP → response
+  Note over WIQ: IPC → shared queue → buffered local CLI → response
   JP-->>ME: payload {summary, status, severity, ...}
   ME->>ME: compare fields (status, severity, summary)
   alt Substantive change
@@ -525,6 +530,10 @@ CSS is organized into modular files:
 ## Test Architecture
 
 Tests use Node.js `node:test` runner with `node:assert`. No external test framework.
+
+### Local WorkIQ CLI live validation
+
+`npm run test:workiq:live` runs the actual monitor, day-briefing, scanner and proposal-synthesis prompts through the production buffered CLI client and existing response validators. Enable local WorkIQ before running it; WorkIQ owns any authentication prompts. The script runs only the CLI probe and reads (including any proposal recipient lookups), never external write operations, and does not load or modify tracked state. This test checks workflow response shapes, not a scalar count query as a proxy for JSON reliability.
 
 ### Test Helpers (`test/helpers/`)
 

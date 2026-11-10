@@ -93,8 +93,9 @@ npm run bench:state:node
 npm run test:state:reload -- --samples=1
 ```
 
-`test:state:inbox` opens 205 generated unread threads using the production SQLite
-path. It checks persisted read state, selection, list/document scroll and page
+`test:state:inbox` opens 205-thread and 67-thread generated profiles using the
+production SQLite path. It checks hidden pagination for a single page, paging
+controls below the list, persisted read state, selection, list/document scroll and page
 retention on the first two pages, plus keyboard activation, unread-filter
 membership and last-page deletion clamping. It waits for the committed revision's
 page query rather than a fixed delay. A DOM observer checks that routine saves
