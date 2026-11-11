@@ -256,12 +256,16 @@ test('RadarView exposes a secondary card delete command with explicit local-only
   const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
   const contract = fs.readFileSync(new URL('../src/svelte/lib/item-deletion-ui.js', import.meta.url), 'utf8');
   const toolbar = source.match(/<div class="radar-action-toolbar radar-thread-toolbar".*?<\/header>/s)?.[0] || '';
-  const disposition = toolbar.match(/<div class="radar-action-group radar-action-group--disposition".*?<\/details>/s)?.[0] || '';
+  const disposition = toolbar.match(/<details class="radar-more-menu".*?<\/details>/s)?.[0] || '';
   const confirmation = source.match(/<ConfirmModal open=\{Boolean\(deleteRequest\)\}.*?\/>/s)?.[0] || '';
 
   assert.match(disposition, /data-testid="radar-delete"/);
   assert.match(disposition, />Delete from FlightDeck…<\/button>/);
   assert.match(disposition, /class="radar-more-menu__item radar-more-menu__item--delete"/);
+  assert.match(disposition, /aria-label="More thread actions" title="More thread actions"/);
+  assert.match(disposition, /on:keydown=\{handleDisclosureKeydown\}/);
+  assert.doesNotMatch(toolbar, /radar-complete|radar-action-button--complete|Update thread status/);
+  assert.match(toolbar, /select aria-label="Work state"[\s\S]*setItemLifecycle\(selected\.id, event\.target\.value\)/);
   assert.match(confirmation, /title=\{deleteRequest\?\.bulk.*: ITEM_DELETION_CONFIRMATION\.title\}/);
   assert.match(confirmation, /summary=\{deleteRequest\?\.bulk.*: ITEM_DELETION_CONFIRMATION\.summary\}/);
   assert.match(confirmation, /earlier deletions remain saved/);

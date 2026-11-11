@@ -132,7 +132,7 @@ is retained; these changes do not rewrite previously recorded check timestamps.
 
 In the Inbox thread's **Work plan**, select a **Recommended next move**, then choose **Email** or **Teams** to draft a message focused on that step. The first move is selected initially; your selection stays with the thread while navigating. If no moves are recommended, either channel can still draft a follow-up from the thread's context. Generation uses a read-only WorkIQ request and does not create or send a Microsoft 365 message until you review and explicitly approve the separate action.
 
-**Complete** and **More** sit beside the thread title. **More** contains Snooze, Archive and Delete from FlightDeck. Criticality and work state remain editable beneath the title. Completed actions continue to appear in the thread's activity history.
+The compact **More thread actions** (...) menu beside the thread title contains Snooze, Archive and Delete from FlightDeck. The larger criticality and work state pills beneath the title are dropdown controls: choose **Complete** from **Work state** to complete a thread. Both controls support keyboard navigation. Completed actions continue to appear in the thread's activity history.
 
 You can start a draft on thread A, move to thread B, and start another. Each thread retains its own **Drafting…** state, result, or retryable error. Returning to a thread restores its state; switching to Today or another tab does not discard pending work. Background completion does not open a review pane over a different thread or tab.
 
