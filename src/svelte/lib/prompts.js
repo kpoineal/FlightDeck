@@ -3,6 +3,7 @@ import { cleanDisplayText, safeDate } from './utils.js';
 import {
   ALL_SIGNAL_TYPES,
   RADAR_SCAN_JSON_SCHEMA,
+  NEXT_MOVE_GUIDANCE,
   BRIEFING_MEETING_JSON_SCHEMA,
   DAY_BRIEFING_JSON_SCHEMA,
 } from './constants.js';
@@ -281,9 +282,8 @@ Status rules:
 - "Complete" — the item's done criteria have been met (see DONE CRITERIA above), OR clear evidence of resolution (confirmation email, explicit closure). When marking Complete, set completionConfidence to reflect your certainty.
 - "No Update" — no new signals found. Only use with hasNewInfo: false.
 
-Suggested next steps rules:
-- 0-2 specific, completable actions starting with a verb naming WHO and WHAT (e.g. 'Reply to Sarah with the revised Q3 timeline').
-- Empty array when hasNewInfo is false. No vague language ("consider", "follow up", "look into") — every action must be concrete.`;
+${NEXT_MOVE_GUIDANCE}
+- Empty array when hasNewInfo is false.`;
 }
 
 // ── Briefing prompts ────────────────────────────────────────────────

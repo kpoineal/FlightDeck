@@ -30,6 +30,7 @@ import {
   extractLabelEmbeddedUrl,
 } from '../utils.js';
 import { normalizeWorkPlanStep } from '../action-proposals.js';
+import { normalizeWorkPlanChoice } from '../work-plan.js';
 
 const MAX_ACTION_HISTORY_ENTRIES = 20;
 const MAX_OTHER_HISTORY_ENTRIES = 20;
@@ -472,13 +473,14 @@ export function normalizeItem(item) {
     reason: cleanDisplayText(item?.reason || ''),
     status: cleanDisplayText(item?.status || 'Inbound'),
     doneCriteria: typeof item?.doneCriteria === 'string' ? item.doneCriteria || null : null,
+    ...(normalizeWorkPlanChoice(item?.workPlanChoice) ? { workPlanChoice: normalizeWorkPlanChoice(item.workPlanChoice) } : {}),
     completionConfidence: ['high', 'medium', 'low'].includes(String(item?.completionConfidence || '').toLowerCase())
       ? String(item.completionConfidence).toLowerCase()
       : null,
     evidenceLinks: _buildEvidenceLinks(item, inlineLinks).slice(0, MAX_EVIDENCE_LINKS_PER_ITEM),
     sourceIdentities: collectItemSourceIdentities(identityInput),
     suggestedNextSteps: Array.isArray(item?.suggestedNextSteps)
-      ? item.suggestedNextSteps.map(cleanDisplayText).filter(Boolean).slice(0, 2)
+      ? item.suggestedNextSteps.map(cleanDisplayText).filter(Boolean)
       : [],
     discoveredAt: item?.discoveredAt || nowIso(),
     trackedAt: item?.trackedAt || null,

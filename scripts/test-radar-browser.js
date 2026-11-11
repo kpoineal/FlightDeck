@@ -3234,6 +3234,11 @@ async function prepareWorkPlanFixture(session, noMoves = false) {
   }, { id: FIXTURE_ITEM_ID, steps: noMoves ? [] : moves });
   await openApp(session, { reseed: false });
   await selectFixtureThread(page);
+  await installWorkPlanProposalMock(page);
+  return moves;
+}
+
+async function installWorkPlanProposalMock(page) {
   await page.evaluate(() => {
     const original = window.workiq.proposeThreadActions;
     window.workiq.proposeThreadActions = async (context) => {
@@ -3250,14 +3255,13 @@ async function prepareWorkPlanFixture(session, noMoves = false) {
       return response;
     };
   });
-  return moves;
 }
 
 async function workPlanDraftScenario(session, noMoves = false) {
   const { page } = session;
   const moves = await prepareWorkPlanFixture(session, noMoves);
   if (noMoves) {
-    assert.equal(await page.getByRole('radio').count(), 0, 'Empty recommendations displayed a selectable placeholder');
+    assert.equal(await page.getByRole('radio').count(), 1, 'Custom next move must remain available without recommendations');
     for (const channel of ['email', 'teams']) {
       await page.getByTestId(`radar-draft-${channel}`).click();
       await page.getByTestId(`${channel}-draft-editor`).waitFor({ state: 'visible' });
@@ -3297,15 +3301,127 @@ async function workPlanDraftScenario(session, noMoves = false) {
     await page.getByTestId('radar-draft-teams').click();
     await page.getByTestId('proposal-error').waitFor({ state: 'visible' });
     await second.check();
-    await page.getByRole('button', { name: 'Retry Teams draft', exact: true }).click();
-    await expect.poll(() => teamsEditor.locator('textarea').inputValue()).toBe(moves[0]);
+    await expect(page.getByTestId('proposal-error')).toHaveCount(0);
+    await page.getByTestId('radar-draft-teams').click();
+    await expect.poll(() => teamsEditor.locator('textarea').inputValue()).toBe(moves[1]);
     calls = await page.evaluate(() => window.__proposalCalls);
-    assert.deepEqual(calls.slice(-2).map((context) => context.requestedNextStep), [moves[0], moves[0]],
-      'Retry silently switched to a different work-plan step');
+    assert.deepEqual(calls.slice(-2).map((context) => context.requestedNextStep), [moves[0], moves[1]],
+      'Switching moves retained a stale error/retry instruction');
   }
   assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0],
     'Selecting a next move or drafting caused an external write');
   await assertHealthy(session, page.viewportSize().width > 960 ? 'desktop' : 'mobile');
+}
+
+async function customWorkPlanScenario(session, noMoves = false) {
+  const { page } = session;
+  const moves = await prepareWorkPlanFixture(session, noMoves);
+  const custom = page.getByTestId('radar-custom-next-move');
+  const input = page.getByTestId('radar-custom-next-move-text');
+  assert.equal(await page.locator('.radar-next-moves input[type="radio"]').count(), noMoves ? 1 : 3);
+  await page.getByTestId('radar-draft-email').click();
+  await page.getByTestId('email-draft-editor').waitFor({ state: 'visible' });
+  await custom.check();
+  await expect(input).toBeFocused();
+  await expect(page.getByTestId('email-draft-editor')).toHaveCount(0);
+  for (const text of ['', ' \n ']) {
+    await input.fill(text);
+    for (const channel of ['email', 'teams']) await expect(page.getByTestId(`radar-draft-${channel}`)).toBeDisabled();
+    await expect(page.getByRole('status').filter({ hasText: 'Enter a custom next move before drafting.' })).toBeVisible();
+  }
+  const instruction = 'Ask Sofia to confirm the unresolved blocker.\nRequest the ownership update.';
+  await input.fill(`  ${instruction}  `);
+  for (const channel of ['teams', 'email']) {
+    await page.getByTestId(`radar-draft-${channel}`).click();
+    const message = channel === 'email' ? page.getByTestId('email-draft-message')
+      : page.getByTestId('teams-draft-editor').locator('textarea');
+    await expect(message).toHaveValue(instruction);
+    const context = await page.evaluate(() => window.__proposalCalls.at(-1));
+    assert.equal(context.requestedNextStep, instruction);
+    assert.equal(context.requestedChannel, channel);
+    assert.equal(Object.hasOwn(context.thread, 'workPlanChoice'), false);
+    if (channel === 'email') await expect(page.getByTestId('email-draft-recipient')).toHaveValue('sofia@example.com');
+    else await expect(page.getByTestId('teams-draft-editor').locator('input[type="email"]')).toHaveValue('sofia@example.com');
+  }
+  const saved = await page.evaluate(async () => (await window.workiq.storeGet('flightdeck.demo.v2')).actionProposals);
+  assert.ok(saved.some(proposal => proposal.sourceNextStep === instruction), 'Custom email lost its completion mapping');
+  if (!noMoves) assert.ok(saved.some(proposal => proposal.sourceNextStep === moves[0]), 'Custom composition deleted the previous email draft');
+  const edited = `${instruction}\nAsk for clarification if needed.`;
+  await input.fill(edited);
+  await expect(page.getByTestId('email-draft-editor')).toHaveCount(0);
+  await expect(page.getByTestId('teams-draft-editor')).toHaveCount(0);
+  if (!noMoves) {
+    await page.getByTestId('radar-next-move-0').check();
+    await expect(input).toHaveCount(0);
+    await expect(page.getByTestId('radar-review-email')).toBeVisible();
+    await custom.check();
+    await expect(input).toHaveValue(edited);
+  }
+  const showThreads = async () => {
+    const button = page.getByRole('button', { name: 'Threads', exact: true });
+    if (await button.isVisible()) await button.click();
+  };
+  await showThreads();
+  await page.locator(`.radar-thread:not([data-thread-id="${FIXTURE_ITEM_ID}"])`).first().click();
+  await custom.check();
+  await expect(input).toHaveValue('');
+  await input.fill('Ask the other owner for a status update.');
+  await showThreads();
+  await page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"]`).click();
+  await expect(input).toHaveValue(edited);
+  await expect(custom).toBeChecked();
+  await expect.poll(() => page.evaluate(async id =>
+    (await window.workiq.storeGet('flightdeck.demo.v2')).items.find(item => item.id === id)?.workPlanChoice?.customText,
+  FIXTURE_ITEM_ID)).toBe(edited);
+  for (const theme of ['dark', 'light']) {
+    await page.locator('html').evaluate((element, value) => element.setAttribute('data-theme', value), theme);
+    await assertHealthy(session, page.viewportSize().width > 960 ? 'desktop' : 'mobile');
+    const colors = await input.evaluate(element => ({ text: getComputedStyle(element).color, background: getComputedStyle(element).backgroundColor }));
+    assert.notEqual(colors.text, colors.background);
+  }
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0],
+    'Custom typing or composition dispatched an external write');
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page);
+  await expect(custom).toBeChecked();
+  await expect(input).toHaveValue(edited);
+  await expect(page.getByTestId('radar-review-email')).toHaveCount(0);
+  await expect(page.getByTestId('radar-draft-email')).toBeEnabled();
+  await input.fill('   ');
+  for (const channel of ['email', 'teams']) await expect(page.getByTestId(`radar-draft-${channel}`)).toBeDisabled();
+  await expect(page.getByTestId('radar-review-email')).toHaveCount(0);
+  if (page.viewportSize().width > 960) {
+    await input.fill(edited);
+    await page.locator(`.radar-thread:not([data-thread-id="${FIXTURE_ITEM_ID}"])`).first().click({ modifiers: ['Control'] });
+    for (const channel of ['email', 'teams']) await expect(page.getByTestId(`radar-draft-${channel}`)).toBeDisabled();
+    await expect(input).toBeDisabled();
+    await expect(custom).toBeDisabled();
+    assert.equal(await page.evaluate(() => window.__proposalCalls.length), 0);
+  }
+  await assertHealthy(session, page.viewportSize().width > 960 ? 'desktop' : 'mobile');
+}
+
+async function customWorkPlanCompletionScenario(session, channel) {
+  const { page } = session;
+  await prepareWorkPlanFixture(session);
+  const instruction = 'Ask Sofia to confirm the remaining blocker and current owner.';
+  await page.getByTestId('radar-custom-next-move').check();
+  await page.getByTestId('radar-custom-next-move-text').fill(instruction);
+  await page.getByTestId(`radar-draft-${channel}`).click();
+  const editor = page.getByTestId(`${channel}-draft-editor`);
+  await editor.waitFor({ state: 'visible' });
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0]);
+  await page.getByTestId(channel === 'email' ? 'email-draft-create' : 'teams-draft-send').click();
+  await editor.waitFor({ state: 'hidden' });
+  await expect.poll(() => page.evaluate(async id =>
+    (await window.workiq.storeGet('flightdeck.demo.v2')).items.find(item => item.id === id)?.completedNextSteps || [],
+  FIXTURE_ITEM_ID)).toContain(instruction);
+  for (const target of ['email', 'teams']) await expect(page.getByTestId(`radar-draft-${target}`)).toBeDisabled();
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]),
+    channel === 'email' ? [1, 0] : [0, 1]);
+  await page.getByTestId('radar-custom-next-move-text').fill('Ask Sofia to clarify any follow-on work.');
+  for (const target of ['email', 'teams']) await expect(page.getByTestId(`radar-draft-${target}`)).toBeEnabled();
+  await assertHealthy(session);
 }
 
 async function workPlanCompletionScenario(session) {
@@ -3363,6 +3479,18 @@ async function workPlanCompletionScenario(session) {
   await expect(preview.getByTestId('action-message-body')).toBeInViewport();
   assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0],
     'Inspecting completed actions dispatched another write');
+  await page.getByTestId('action-preview-close').click();
+  await page.getByTestId('radar-custom-next-move').check();
+  await installWorkPlanProposalMock(page);
+  await page.getByTestId('radar-custom-next-move-text').fill('Ask Sofia to confirm whether any follow-on work is needed.');
+  for (const channel of ['email', 'teams']) {
+    await expect(page.getByTestId(`radar-draft-${channel}`)).toBeEnabled();
+    await page.getByTestId(`radar-draft-${channel}`).click();
+    await page.getByTestId(`${channel}-draft-editor`).waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => window.__proposalCalls.at(-1).requestedNextStep),
+      'Ask Sofia to confirm whether any follow-on work is needed.');
+  }
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0]);
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
   const screenshotPath = path.join(SCREENSHOT_DIR, `completed-action-message-${page.viewportSize().width}.png`);
   await page.screenshot({ path: screenshotPath, fullPage: page.viewportSize().width <= 960, animations: 'disabled' });
@@ -4023,6 +4151,16 @@ async function doneWhenEditingScenario(session, width) {
     }
     await runScenario('work-plan-no-recommendations', browser, rendererServer.baseUrl,
       (session) => workPlanDraftScenario(session, true));
+    for (const width of [1440, 360]) {
+      await runScenario(`work-plan-custom-${width}`, browser, rendererServer.baseUrl, customWorkPlanScenario,
+        { viewport: { width, height: width === 1440 ? 1000 : 900 } });
+    }
+    await runScenario('work-plan-custom-no-recommendations', browser, rendererServer.baseUrl,
+      session => customWorkPlanScenario(session, true));
+    for (const channel of ['email', 'teams']) {
+      await runScenario(`work-plan-custom-completion-${channel}`, browser, rendererServer.baseUrl,
+        session => customWorkPlanCompletionScenario(session, channel));
+    }
     for (const width of [1440, 360]) {
       await runScenario(`work-plan-completion-${width}`, browser, rendererServer.baseUrl, workPlanCompletionScenario,
         { viewport: { width, height: width === 1440 ? 1000 : 900 } });

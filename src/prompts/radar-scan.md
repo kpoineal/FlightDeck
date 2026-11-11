@@ -2,6 +2,7 @@ Analyze my recent Microsoft 365 work signals (email, Teams chats, meetings, and 
 Identify what requires attention now and classify each as Critical, Elevated, or Observe.
 
 Return grounded recommendations with explainability and citations.
+Recommend 0-2 distinct messages I can send asking an evidence-backed recipient for a specific update, confirmation, deliverable, or acceptance of ownership. Ground asks in the latest evidence, done criteria, and unresolved blocker; never invent recipients, dates, or commitments. Avoid generic task or meeting plans.
 Only include items with signals created or updated since {lastRunAt}. Do not report older items.
 Include inline citations for every referenced source.
 Include 5-15 items.

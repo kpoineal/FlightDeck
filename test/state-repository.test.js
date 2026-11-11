@@ -10,6 +10,33 @@ const { canonicalizeState, migrateStateProfile } = require('../src/main/state-mi
 const { createStateService } = require('../src/main/state-service');
 const { EventEmitter } = require('node:events');
 
+it('custom next move persists through canonical item deltas, SQLite reopen, and recommendation completion', async () => {
+  const { stateDelta } = await import('../src/shared/state-delta.mjs');
+  const { directory } = createGeneratedProfile({});
+  const databasePath = path.join(directory, 'custom-work-plan.sqlite');
+  let repository = openStateRepository(databasePath);
+  const workPlanChoice = { mode: 'custom', customText: '  Ask Alex for the blocker update.\nConfirm ownership.  ', selectedNextStep: '' };
+  try {
+    await repository.call('import', await canonicalizeState({
+      items: [{ id: 'a', title: 'A', suggestedNextSteps: ['Ask Alex', 'Ask Jo', 'Hidden suggestion'], completedNextSteps: ['Ask Alex', 'Ask Jo'] },
+        { id: 'b', title: 'B' }],
+    }, []));
+    const base = await repository.call('projection');
+    const next = { ...base.value, items: base.value.items.map(row => row.id === 'a' ? { ...row, workPlanChoice } : row) };
+    await repository.call('command', {
+      commandId: 'custom-choice', expectedRevision: base.revision, type: 'applyChanges',
+      payload: { changes: stateDelta(base.value, next) },
+    });
+    await repository.close();
+    repository = openStateRepository(databasePath);
+    const detail = await repository.call('getThread', { id: 'a' });
+    assert.deepEqual(detail.workPlanChoice, workPlanChoice);
+    assert.equal(detail.suggestedNextSteps.length, 3);
+    assert.equal(detail.completedNextSteps.length, 2);
+    assert.equal((await repository.call('getThread', { id: 'b' })).workPlanChoice, undefined);
+  } finally { await repository.close(); removeGeneratedProfile(directory); }
+});
+
 it('legacy completed flags are boolean-only inputs normalized to canonical lifecycle fields', async () => {
   const { directory } = createGeneratedProfile({});
   const service = createStateService(directory);

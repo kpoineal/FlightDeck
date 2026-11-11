@@ -277,6 +277,16 @@ Assembles a monitoring prompt from the tracked item's full context:
 
 **Key design:** The monitor prompt is the most instruction-dense prompt in the system (~150 lines when fully assembled). It includes explicit `hasNewInfo` rules that prevent the AI from rephrasing old information as "new," and status definitions that map to lifecycle transitions.
 
+### Message-first Work plan guidance
+
+`NEXT_MOVE_GUIDANCE` in `constants.js` is mandatory shared guidance appended by both `buildScannerPrompt` (via `RADAR_SCAN_JSON_SCHEMA`) and `buildMonitorPrompt`. It requests **0–2 distinct outbound communication intents**, not generic task plans: ask an evidence-backed recipient for a specific update, confirmation, deliverable, or acceptance of ownership. Each ask must support the done criteria and latest evidence/owner/blocker. Missing context permits clarification or fewer suggestions, never invented people, dates, commitments, or progress. Monitor refreshes still return an empty array when `hasNewInfo` is false; existing next moves are retained by the engine.
+
+The default scanner prompt, initial `radar-scan.md` mission, and `scanner-template.md` reinforce this guidance for new scanners. Existing saved scanner missions and monitoring prompts are **not rewritten**; `{lastRunAt}` substitution and prompt-editor customizations remain intact.
+
+Radar displays at most two generated suggestions without deleting additional stored suggestions or completion records. **Custom next move** is user input, not a third model recommendation. `workPlanChoice` stores its mode, raw custom text (500-character limit), and selected recommendation on the thread through the existing item persistence bridge, including SQLite profiles. It is not scanner-generated data or a completed remote action.
+
+Both buttons pass the selected recommendation or trimmed custom instruction as `requestedNextStep` through `buildProposalSynthesisContext`, including bounded `doneCriteria`, to `proposal-synthesis.md`. The final synthesis prompt focuses the message and recipient on that ask while treating it as untrusted intent, not factual evidence or permission to bypass review. Recipient identities must be verified; unresolved targets remain editable and cannot bypass existing execution safeguards. Email `sourceNextStep` and Teams `nextStep` use the same instruction for completion/history mapping. Previews only match the currently selected instruction; switching or editing never relabels an older draft as a new ask. Nothing auto-sends.
+
 ### `buildMeetingBriefingPrompt(meeting, briefingTemplate)`
 
 Simpler — concatenates the loaded `briefing.md` template with meeting details (title, start time, organizer, join URL) and the `BRIEFING_MEETING_JSON_SCHEMA`.

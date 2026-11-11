@@ -178,7 +178,7 @@ function putThread(raw, residency, nextRevision) {
           if (current && change.create) error('RECORD_CONFLICT');
           // Status actions clear this legacy flag; normalization stores only canonical lifecycle fields.
           if (!change.patch || typeof change.patch !== 'object' || Array.isArray(change.patch)
-            || Object.keys(change.patch).some(key => key !== 'completed' && !Object.hasOwn(itemModel.normalizeItem({ id: change.id }), key))
+            || Object.keys(change.patch).some(key => !['completed', 'workPlanChoice'].includes(key) && !Object.hasOwn(itemModel.normalizeItem({ id: change.id }), key))
             || (Object.hasOwn(change.patch, 'completed') && typeof change.patch.completed !== 'boolean')) error('INVALID_PATCH');
           if (change.markRead !== undefined && typeof change.markRead !== 'boolean') error('INVALID_PATCH');
           let patch = change.patch;
@@ -612,7 +612,7 @@ function command(input) {
         if (payload.expectedRecordRevision !== current.repositoryRevision) error('RECORD_CONFLICT');
         const allowed = new Set(['severity', 'lifecycleStatus', 'monitorEnabled', 'nextRunAt', 'monitorPrompt', 'isNew',
           'hasNewUpdate', 'snoozeUntil', 'scheduleType', 'scheduleValue', 'oneTimeAt', 'weeklyDays', 'weeklyTimes',
-          'workHoursOnly', 'completedNextSteps', 'summary', 'lastChangedAt', 'completedAt']);
+          'workHoursOnly', 'completedNextSteps', 'workPlanChoice', 'summary', 'lastChangedAt', 'completedAt']);
         if (!payload.patch || Object.keys(payload.patch).some(key => !allowed.has(key))) error('INVALID_PATCH');
         changedIds = [putThread({ ...current, ...payload.patch }, current.residency, next)];
         break;

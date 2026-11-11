@@ -2,6 +2,7 @@ import { get, writable } from 'svelte/store';
 import { buildProposalSynthesisContext, normalizeProposalSynthesisResult } from './proposal-synthesis.js';
 import { isValidEmail } from '../../shared/recipient-validation.mjs';
 import { isWorkPlanStepCompleted } from './action-proposals.js';
+import { resolveWorkPlan } from './work-plan.js';
 
 export function canAddressTeamsDraft(draft) {
   const email = String(draft?.targetEmail || '').trim();
@@ -48,7 +49,9 @@ export function createThreadComposer() {
   }
 
   async function generate({ item, channel, requestedNextStep = '', propose, saveEmail, isAvailable = () => true }) {
-    if (!item || isWorkPlanStepCompleted(item, requestedNextStep) || read(item.id).status === 'generating'
+    if (!item || (item.workPlanChoice?.mode === 'custom' && !requestedNextStep.trim())
+      || (resolveWorkPlan(item).completed && !requestedNextStep.trim())
+      || isWorkPlanStepCompleted(item, requestedNextStep) || read(item.id).status === 'generating'
       || read(item.id).teamsSendState.status === 'sending'
       || (channel === 'teams' && read(item.id).teamsSendState.status === 'unconfirmed')) return null;
     const request = {};
