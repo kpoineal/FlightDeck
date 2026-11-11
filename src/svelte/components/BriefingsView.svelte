@@ -1,10 +1,13 @@
 <script>
-  import { connected, meetings, briefingsByMeetingId, briefingSeenAt, expandedBriefingMeetingIds, items, kpis, actionProposals, openActionsQueue, selectedProposalId } from '../lib/stores.js';
+  import { onMount } from 'svelte';
+  import { connected, meetings, briefingsByMeetingId, briefingSeenAt, expandedBriefingMeetingIds, items, actionProposals, openActionsQueue, selectedProposalId, dayBriefingGenerating, dayBriefingError } from '../lib/stores.js';
   import { DAY_BRIEFING_KEY } from '../lib/constants.js';
   import { addHistory } from '../lib/actions.js';
   import { savePersistentState } from '../lib/persistence.js';
   import { nowIso, safeDate, cleanDisplayText, normalizeExternalUrl } from '../lib/utils.js';
-  import { buildMeetingBriefingPrompt, buildDayBriefingPrompt } from '../lib/prompts.js';
+  import { buildMeetingBriefingPrompt } from '../lib/prompts.js';
+  import { generateDayBriefing } from '../lib/briefings.js';
+  import { normalizeTodayMeetings } from '../lib/meetings.js';
   import { runWorkiqJson } from '../lib/json-parser.js';
   import DayBriefingCard from './DayBriefingCard.svelte';
   import MeetingCard from './MeetingCard.svelte';
@@ -12,9 +15,14 @@
 
   let { onrefresh } = $props();
 
-  let dayGenerating = $state(false);
+  let now = $state(Date.now());
   let meetingGeneratingId = $state(null);
   let refreshing = $state(false);
+
+  onMount(() => {
+    const timer = setInterval(() => { now = Date.now(); }, 60_000);
+    return () => clearInterval(timer);
+  });
 
   async function handleRefresh() {
     if (refreshing || !$connected) return;
@@ -47,7 +55,9 @@
     return $briefingsByMeetingId[meetingId] || null;
   }
 
-  let sortedMeetings = $derived(sortMeetings($meetings, $briefingsByMeetingId, $briefingSeenAt));
+  let sortedMeetings = $derived(sortMeetings(normalizeTodayMeetings($meetings, now), $briefingsByMeetingId, $briefingSeenAt));
+  let upcomingMeetings = $derived(sortedMeetings.filter((meeting) => meeting.startTime > now));
+  let earlierMeetings = $derived(sortedMeetings.filter((meeting) => meeting.startTime <= now));
 
   function sortMeetings(mtgs, briefings, seenAt) {
     return [...mtgs].sort((a, b) => {
@@ -75,72 +85,6 @@
       if (result.success && result.content) return result.content.trim();
     } catch (_) {}
     return '';
-  }
-
-  async function handleDayGenerate() {
-    if (!$connected) return;
-    if (dayGenerating) return;
-    if (!window.workiq || typeof window.workiq.ask !== 'function') return;
-
-    dayGenerating = true;
-    addHistory('recommendation', 'Day briefing generation requested');
-
-    try {
-      const template = await loadPromptTemplate('day-briefing.md');
-      const prompt = buildDayBriefingPrompt($items, $meetings, $kpis, template);
-      const payload = await runWorkiqJson(
-        prompt,
-        (p) => p && typeof p.headline === 'string',
-        'day-briefing'
-      );
-
-      const explicitSources = Array.isArray(payload.sources)
-        ? payload.sources
-            .map((s) => ({
-              label: sanitizeBriefingText(s?.label || 'Source'),
-              type: sanitizeBriefingText(s?.type || 'source'),
-              url: normalizeExternalUrl(s?.url || ''),
-            }))
-            .filter((s) => s.url)
-        : [];
-
-      const normalizedDayBriefing = {
-        headline: sanitizeBriefingText(payload.headline || 'Your day at a glance'),
-        topPriorities: Array.isArray(payload.topPriorities) ? payload.topPriorities.map(sanitizeBriefingText) : [],
-        meetingsRequiringPrep: Array.isArray(payload.meetingsRequiringPrep)
-          ? payload.meetingsRequiringPrep.map((m) => ({
-              title: sanitizeBriefingText(m?.title || 'Meeting'),
-              startAt: m?.startAt || null,
-              whyPrepNeeded: sanitizeBriefingText(m?.whyPrepNeeded || ''),
-            }))
-          : [],
-        atRiskItems: Array.isArray(payload.atRiskItems)
-          ? payload.atRiskItems.map((i) => ({
-              title: sanitizeBriefingText(i?.title || 'Item'),
-              severity: sanitizeBriefingText(i?.severity || 'Observe'),
-              risk: sanitizeBriefingText(i?.risk || ''),
-            }))
-          : [],
-        suggestedTimeBlocks: Array.isArray(payload.suggestedTimeBlocks)
-          ? payload.suggestedTimeBlocks.map((b) => ({
-              time: sanitizeBriefingText(b?.time || ''),
-              activity: sanitizeBriefingText(b?.activity || ''),
-              rationale: sanitizeBriefingText(b?.rationale || ''),
-            }))
-          : [],
-        todayFollowUps: Array.isArray(payload.todayFollowUps) ? payload.todayFollowUps.map(sanitizeBriefingText) : [],
-        sources: explicitSources,
-        generatedAt: payload.generatedAt || nowIso(),
-      };
-
-      briefingsByMeetingId.update((byId) => ({ ...byId, [DAY_BRIEFING_KEY]: normalizedDayBriefing }));
-      savePersistentState();
-      addHistory('scan', 'Day briefing generated.');
-    } catch (err) {
-      addHistory('failure', `Day briefing generation failed: ${err.message}`);
-    } finally {
-      dayGenerating = false;
-    }
   }
 
   async function handleMeetingGenerate(data) {
@@ -275,12 +219,14 @@
 
   <section class="briefing-now">
     <div class="briefing-lane-label"><strong>Now</strong><span>Operating brief</span></div>
-    <DayBriefingCard briefing={dayBriefing} unseen={dayBriefingUnseen} generating={dayGenerating} ongenerate={handleDayGenerate} />
+    <DayBriefingCard briefing={dayBriefing} unseen={dayBriefingUnseen}
+      generating={$dayBriefingGenerating} error={$dayBriefingError} ongenerate={() => generateDayBriefing()} />
   </section>
 
   {#each [
-    { label: 'Next', hint: 'Prepare before these start', meetings: sortedMeetings.slice(0, 2) },
-    { label: 'Later', hint: 'Readiness queue', meetings: sortedMeetings.slice(2) }
+    { label: 'Next', hint: 'Prepare before these start', meetings: upcomingMeetings.slice(0, 2) },
+    { label: 'Later', hint: 'Readiness queue', meetings: upcomingMeetings.slice(2) },
+    ...(earlierMeetings.length ? [{ label: 'Earlier today', hint: 'Started or finished; briefings still available', meetings: earlierMeetings }] : [])
   ] as lane}
     <section class="briefing-lane">
       <div class="briefing-lane-label"><strong>{lane.label}</strong><span>{lane.hint}</span></div>

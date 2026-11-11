@@ -113,7 +113,7 @@ Users can trigger scans manually:
 
 - **"Run Now" button** on a scanner section header → calls `runScanner(scanner)` directly (`src/svelte/components/RadarView.svelte`)
 - **"Check Now" on a tracked item** → calls `runItemCheck(item)` directly (`src/svelte/components/RadarView.svelte`)
-- **Day briefing "Generate"** → calls `handleDayGenerate()` in `BriefingsView.svelte`
+- **Day briefing "Generate"** → calls shared `generateDayBriefing()` in `src/svelte/lib/briefings.js`
 - **Meeting briefing "Generate"** → calls individual meeting briefing generation in `BriefingsView.svelte`
 
 ---
@@ -150,7 +150,7 @@ Every scanner is a first-class object with its own prompt, schedule, signal filt
 
 ### 3. Meeting Briefings
 
-**Purpose:** Prepare the user for an upcoming meeting using grounded M365 context.
+**Purpose:** Prepare the user for a meeting using grounded M365 context. Today's meetings remain available for on-demand briefings after they start or finish.
 
 **Template:** `src/prompts/briefing.md`
 
@@ -168,19 +168,21 @@ Every scanner is a first-class object with its own prompt, schedule, signal filt
 
 **Builder:** `buildDayBriefingPrompt()` in `src/svelte/lib/prompts.js`
 
-**Triggered:** On-demand from the Briefings view
+**Triggered:** Automatically after today's calendar loads (or a same-day calendar cache is reused), unless a briefing generated today is already saved. Automatic attempts are limited to one per local day per session; manual Generate/Regenerate remains available, including after a failure. No individual meeting briefings are generated automatically.
 
 **Output:** Headline, top priorities, meetings requiring prep, at-risk items, suggested time blocks, follow-ups
 
 ### 5. Meeting List Fetch
 
-**Purpose:** Retrieve today's upcoming meetings from M365.
+**Purpose:** Retrieve today's full calendar from M365, including earlier, ongoing, and upcoming meetings.
 
 **Prompt:** `TODAY_MEETINGS_PROMPT` constant in `src/svelte/lib/prompts.js`
 
 **Output:** Array of meeting objects with id, title, times, organizer, join URL, summary
 
 This is the simplest prompt — a static string with no dynamic injection.
+
+`refreshMeetings()` in `src/svelte/lib/briefings.js` coalesces concurrent reads and caches successful results for one hour within the same local day, including empty calendars. `normalizeTodayMeetings()` in `src/svelte/lib/meetings.js` is shared by fetch, hydration, and display: retain meetings overlapping today, preserve opaque IDs, and exclude other days rather than filtering against the current instant. The Briefings pane groups started meetings under **Earlier today** while keeping their Generate controls.
 
 ---
 
@@ -299,6 +301,8 @@ Injects three context blocks into the day briefing template:
 - **Today's meetings** — formatted list with titles, times, organizers
 - **Active tracked items** — filtered to exclude completed/archived, with severity and due dates
 - **Current KPIs** — critical/elevated/observe counts
+
+The builder also includes the current local time and instructs the model to distinguish earlier/ongoing meetings from upcoming preparation, avoid inferred outcomes, and suggest only future time blocks.
 
 ### `buildDefaultMonitorPrompt(item)` — `src/svelte/lib/models/item.js`
 
@@ -650,4 +654,5 @@ WorkIQ sometimes returns citation URLs as markdown footnotes (`[1](url)`) outsid
 | File | Description |
 |------|-------------|
 | `src/svelte/components/RadarView.svelte` | Manual scan triggers, "Run Now" handler |
-| `src/svelte/components/BriefingsView.svelte` | Briefing generation, template loading via `loadPromptTemplate()` |
+| `src/svelte/components/BriefingsView.svelte` | On-demand meeting generation and template loading; shared My Day generation/retry controls |
+| `src/svelte/lib/briefings.js` | Calendar refresh and daily overview orchestration, caching, background generation, and error state |

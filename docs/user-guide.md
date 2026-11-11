@@ -46,8 +46,8 @@ When you open FlightDeck for the first time, here's what happens:
    - If sign-in or the connection check fails, retain your cached data and show **Retry WorkIQ**
 4. **Automatic first refresh** — Once connected, FlightDeck immediately runs a full refresh in parallel:
    - **Radar scan** — The AI scans your M365 signals (email, Teams, meetings, documents) and populates the Radar with prioritized items.
-   - **Meetings refresh** — FlightDeck pulls your upcoming meetings for today and populates the Briefings view.
-5. **Briefings are ready** — Switch to the Briefings tab and you'll see your meetings listed. Expand any meeting to generate a briefing, or click **Regenerate My Day** for your daily overview.
+   - **Meetings refresh** — FlightDeck pulls your full calendar for today, including meetings that have already started or ended, and populates the Briefings view.
+5. **Briefings are ready** — My Day generates automatically after today's calendar is available. Switch to the Briefings tab to read it, or expand any meeting and click **Generate Briefing** for on-demand meeting preparation.
 6. **Start tracking** — As you review Radar items, click **Track Item** on anything that needs ongoing monitoring. FlightDeck will watch it on a schedule and notify you of changes.
 
 On subsequent launches, if you were previously connected, FlightDeck repeats local WorkIQ setup and runs a refresh. WorkIQ reuses and renews its own credentials. If WorkIQ requires sign-in or cannot connect, use **Retry WorkIQ** and complete WorkIQ's prompts; FlightDeck does not run its own OAuth flow.
@@ -691,13 +691,13 @@ The **Done when** field on the Overview tab lets you define what "finished" look
 
 ## Briefings View
 
-The Briefings view generates **AI-powered meeting preparation** for your upcoming meetings and a daily overview to start your day. When you switch to the Briefings tab for the first time in a session, FlightDeck automatically fetches your meetings if they haven't been loaded yet.
+The Briefings view generates **AI-powered meeting preparation** and a daily overview. FlightDeck automatically fetches today's full calendar when WorkIQ connects, reusing a same-day calendar cache for up to an hour. **Refresh Meetings** reloads it on demand. Meetings remain available all day, including after they start or finish; started meetings appear under **Earlier today** so you can still generate their briefings. Previous-day meetings are excluded unless they overlap today.
 
 ![Briefings view showing the My Day briefing with priorities, meetings, and suggested time blocks](screenshots/05-briefings-view-dark.png)
 
 ### My Day Briefing
 
-At the top of the Briefings view, the **My Day** briefing gives you a comprehensive daily overview. It's marked with a ☀️ icon and generates automatically. The briefing includes:
+At the top of the Briefings view, the **My Day** briefing gives you a comprehensive daily overview. It's marked with a ☀️ icon and generates automatically once today's calendar is available, even before you open the pane. A saved briefing from today is reused across restarts. Individual meeting briefings are still generated only when you request them, not automatically for every meeting. The briefing includes:
 
 - **Headline** — A one-line summary of your day (e.g., "Busy day: 4 meetings, 2 Critical items need attention")
 - **Top Priorities** — The most important things to address today, with specific names and actions
@@ -707,6 +707,8 @@ At the top of the Briefings view, the **My Day** briefing gives you a comprehens
 - **Follow-Ups** — Actions to take after meetings or deadlines
 
 Click **Regenerate My Day** to get a fresh briefing based on the latest data.
+
+Automatic generation attempts once per local day per session, including days with no meetings. If generation fails, the pane shows an error and you can retry with **Generate My Day** or **Regenerate My Day**; switching views or refocusing the app will not repeatedly retry a failing request. On a new day, FlightDeck refreshes the calendar and generates a new daily overview when the app resumes.
 
 ### Meeting Briefings
 

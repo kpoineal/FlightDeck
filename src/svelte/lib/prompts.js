@@ -82,12 +82,13 @@ function buildPreviousSummariesContext(item) {
 
 // ── Scanner prompt ──────────────────────────────────────────────────
 
-export const TODAY_MEETINGS_PROMPT = `List my upcoming meetings for today from Microsoft 365 context.
+export const TODAY_MEETINGS_PROMPT = `List all my meetings for today from Microsoft 365 context.
 
 For each meeting, include a brief one-sentence summary of what the meeting is about.
 
 Constraints:
-- Include only meetings starting later today in my local timezone.
+- Include the full local calendar day, from midnight to the next midnight: earlier, ongoing, and upcoming meetings, including meetings that have already ended today.
+- Include meetings that began yesterday only if they overlap today. Do not exclude a meeting because its start time has passed.
 - Keep response focused and concise.
 - Return strict valid JSON only.
 
@@ -348,6 +349,8 @@ export function buildDayBriefingPrompt(currentItems, currentMeetings, currentKpi
   return `${template}
 
 Today's date: ${today}
+Current local time: ${safeDate(new Date().toISOString(), 'Unknown')}
+The calendar includes earlier, ongoing, and upcoming meetings. For meetings already started, focus on remaining preparation or evidence-backed follow-ups; never infer outcomes merely because time has passed. Suggest future time blocks only.
 
 ${meetingsBlock}
 
