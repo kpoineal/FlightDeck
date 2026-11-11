@@ -13,6 +13,7 @@ const { isValidEmail, normalizeTeamsMessage } = require('../shared/recipient-val
 
 const DEFAULT_INITIALIZE_TIMEOUT = 30000;
 const DEFAULT_PROBE_TIMEOUT = 10000;
+const DEFAULT_ENTITY_TIMEOUT = 60000;
 const DEFAULT_SEMANTIC_TIMEOUT = 300000;
 const DEFAULT_READ_TIMEOUT = 300000;
 const DEFAULT_SHUTDOWN_GRACE = 1000;
@@ -104,6 +105,7 @@ function createWorkiqMcpClient(options = {}) {
     : options.verifyLauncher;
   const initializeTimeout = options.initializeTimeout || DEFAULT_INITIALIZE_TIMEOUT;
   const probeTimeout = options.probeTimeout || DEFAULT_PROBE_TIMEOUT;
+  const entityTimeout = options.entityTimeout || DEFAULT_ENTITY_TIMEOUT;
   const semanticTimeout = options.semanticTimeout || DEFAULT_SEMANTIC_TIMEOUT;
   const readTimeout = options.readTimeout || DEFAULT_READ_TIMEOUT;
   const shutdownGrace = options.shutdownGrace || DEFAULT_SHUTDOWN_GRACE;
@@ -578,7 +580,7 @@ function createWorkiqMcpClient(options = {}) {
           parentUrl: '/me/messages',
           jsonBody,
         },
-      }, probeTimeout);
+      }, entityTimeout);
       createDispatched = true;
       const result = await createPromise;
 
@@ -629,7 +631,7 @@ function createWorkiqMcpClient(options = {}) {
         const { user, addresses } = recipient;
         const selfResult = await sendRequest('tools/call', {
           name: fetchTool, arguments: { entityUrls: ['/me?$select=id,userType'] },
-        }, probeTimeout);
+        }, entityTimeout);
         assertReadResult(selfResult);
         const self = extractEntityData(selfResult);
         if (!DIRECTORY_ID_PATTERN.test(self?.id) || self.id.toLowerCase() === user.id.toLowerCase()) {
@@ -663,7 +665,7 @@ function createWorkiqMcpClient(options = {}) {
               })),
             },
           },
-        }, probeTimeout);
+        }, entityTimeout);
         const openedChat = extractCreatedChat(opened);
         if (!openedChat) {
           logError('[main] WorkIQ Teams send:', 'CHAT_OPEN_NOT_VERIFIED');
@@ -672,7 +674,7 @@ function createWorkiqMcpClient(options = {}) {
         const verified = await sendRequest('tools/call', {
           name: fetchTool,
           arguments: { entityUrls: [`/chats/${encodeURIComponent(openedChat.id)}?$select=id,chatType&$expand=members`] },
-        }, probeTimeout);
+        }, entityTimeout);
         assertReadResult(verified);
         const chat = extractEntityData(verified);
         const pair = findCanonicalPair(chat ? [chat] : [], identity);
@@ -699,7 +701,7 @@ function createWorkiqMcpClient(options = {}) {
         const chatsResult = await sendRequest('tools/call', {
           name: fetchTool,
           arguments: { entityUrls: [nextPage] },
-        }, probeTimeout);
+        }, entityTimeout);
         assertReadResult(chatsResult);
         const collection = extractChatCollection(chatsResult);
         if (!collection) {
@@ -739,7 +741,7 @@ function createWorkiqMcpClient(options = {}) {
           parentUrl: `/chats/${chatId}/messages`,
           jsonBody: { body: { contentType: 'text', content: payload.message } },
         },
-      }, probeTimeout);
+      }, entityTimeout);
       createDispatched = true;
       log('[main] WorkIQ Teams send:', 'CREATE_DISPATCHED');
       const sendResult = await sendPromise;
@@ -778,7 +780,7 @@ function createWorkiqMcpClient(options = {}) {
       const response = await sendRequest('tools/call', {
         name: fetchTool,
         arguments: { entityUrls: [`/users?$filter=${encodeURIComponent(filter)}&$select=id,displayName,mail,userPrincipalName,otherMails,proxyAddresses,userType&$top=3`] },
-      }, probeTimeout);
+      }, entityTimeout);
       assertReadResult(response);
       const collection = extractEntityCollection(response);
       if (!collection || collection['@odata.nextLink']) return { code: 'RESOLUTION_INCOMPLETE' };

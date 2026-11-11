@@ -34,9 +34,12 @@ function createWorkiqCliClient(options = {}) {
       }
       const result = await run(command, queryOptions);
       if (!result.success) throw failure(result.code);
+      // WorkIQ 1.0.1 prefixes create receipts with "Created (HTTP 201):".
+      const receipt = command[0] === 'create'
+        ? /^Created \(HTTP ([1-5]\d{2})\):\r?\n/.exec(result.answer) : null;
       let entity;
       try {
-        entity = JSON.parse(result.answer);
+        entity = JSON.parse(receipt ? result.answer.slice(receipt[0].length) : result.answer);
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
         throw failure('INVALID_RESPONSE');
@@ -45,7 +48,12 @@ function createWorkiqCliClient(options = {}) {
       if (entity.error || entity.isError === true) {
         return { isError: true, content: [], structuredContent: { error: entity.error || { message: 'CLI operation failed' } } };
       }
-      // CLI entity commands return the entity itself, not an MCP status/data wrapper.
+      if (receipt) {
+        return { isError: false, content: [], structuredContent: { statusCode: Number(receipt[1]), data: entity } };
+      }
+      if (command[0] === 'fetch' && Array.isArray(entity.results)) {
+        return { isError: false, content: [], structuredContent: entity };
+      }
       return { isError: false, content: [{ type: 'text', text: JSON.stringify(entity) }] };
     },
   });
