@@ -1592,22 +1592,19 @@
             <p>{safeDate(mailboxActivityAt(selected), 'No activity')}</p>
           </div>
           <div class="radar-action-toolbar radar-thread-toolbar" data-testid="radar-thread-toolbar">
-            <div class="radar-action-group radar-action-group--disposition" role="group" aria-label="Update thread status">
-              <button type="button" class="small-btn radar-action-button radar-action-button--complete" data-testid="radar-complete"
-                title="Mark this item complete" on:click={() => setItemLifecycle(selected.id, 'complete')}>Complete</button>
-              <details class="radar-more-menu" on:keydown={handleDisclosureKeydown}>
-                <summary class="small-btn radar-action-button" data-testid="radar-more">More</summary>
-                <div class="radar-more-menu__panel" role="menu" aria-label="More item actions">
-                  <button type="button" class="radar-more-menu__item radar-action-button--snooze" data-testid="radar-snooze"
-                    title="Snooze this item for one day" on:click={snoozeSelected}>Snooze</button>
-                  <button type="button" class="radar-more-menu__item" data-testid="radar-archive"
-                    title="Archive this item" on:click={() => setItemLifecycle(selected.id, 'archived')}>Archive</button>
-                  <button type="button" class="radar-more-menu__item radar-more-menu__item--delete" data-testid="radar-delete"
-                    title="Delete this local FlightDeck card" disabled={deletionBlocked || !pageReady}
-                    on:click={requestDeleteSelected}>Delete from FlightDeck…</button>
-                </div>
-              </details>
-            </div>
+            <details class="radar-more-menu" on:keydown={handleDisclosureKeydown}>
+              <summary class="small-btn radar-action-button" data-testid="radar-more"
+                aria-label="More thread actions" title="More thread actions"><span aria-hidden="true">...</span></summary>
+              <div class="radar-more-menu__panel" role="menu" aria-label="More item actions">
+                <button type="button" class="radar-more-menu__item radar-action-button--snooze" data-testid="radar-snooze"
+                  title="Snooze this item for one day" on:click={snoozeSelected}>Snooze</button>
+                <button type="button" class="radar-more-menu__item" data-testid="radar-archive"
+                  title="Archive this item" on:click={() => setItemLifecycle(selected.id, 'archived')}>Archive</button>
+                <button type="button" class="radar-more-menu__item radar-more-menu__item--delete" data-testid="radar-delete"
+                  title="Delete this local FlightDeck card" disabled={deletionBlocked || !pageReady}
+                  on:click={requestDeleteSelected}>Delete from FlightDeck…</button>
+              </div>
+            </details>
           </div>
           <div class="radar-header-actions">
             <label class="mailbox-severity mailbox-severity-{(selected.severity || 'Observe').toLowerCase()} radar-header-pill"

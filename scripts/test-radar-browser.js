@@ -2739,11 +2739,15 @@ async function synthesisRetryScenario(session) {
 }
 
 async function selectionRegressionScenario(session) {
-  for (const testId of ['radar-snooze', 'radar-complete', 'radar-archive']) {
+  for (const action of ['snooze', 'complete', 'archive']) {
     await openApp(session);
     await selectFixtureThread(session.page);
-    if (testId !== 'radar-complete') await session.page.getByTestId('radar-more').click();
-    await session.page.getByTestId(testId).click();
+    if (action === 'complete') {
+      await session.page.getByLabel('Work state', { exact: true }).selectOption('complete');
+    } else {
+      await session.page.getByTestId('radar-more').click();
+      await session.page.getByTestId(`radar-${action}`).click();
+    }
     await assertNoArbitrarySelection(session.page);
   }
   await assertHealthy(session);
@@ -3062,28 +3066,45 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   await session.page.locator('.radar-thread-detail h2').filter({ hasText: FIXTURE_ITEM_TITLE }).waitFor({ state: 'visible' });
 
   const compose = session.page.getByRole('group', { name: 'Draft work plan message', exact: true });
-  const disposition = session.page.getByRole('group', { name: 'Update thread status', exact: true });
+  const toolbar = session.page.getByTestId('radar-thread-toolbar');
   const email = session.page.getByTestId('radar-draft-email');
   const teams = session.page.getByTestId('radar-draft-teams');
-  const complete = session.page.getByTestId('radar-complete');
   const snooze = session.page.getByTestId('radar-snooze');
   const more = session.page.getByTestId('radar-more');
   const archive = session.page.getByTestId('radar-archive');
   const deleteCard = session.page.getByTestId('radar-delete');
 
   assert.equal(await compose.locator('button').count(), 2, 'Compose actions were not grouped together');
-  assert.equal(await disposition.locator('button').count(), 4, 'Disposition actions were not grouped together');
+  assert.equal(await toolbar.locator('button').count(), 3, 'Overflow actions were not grouped together');
   assert.equal(await compose.getAttribute('aria-busy'), 'false', 'Idle compose group was marked busy');
   assert.deepEqual(await compose.locator('button').allTextContents(), ['Email', 'Teams']);
-  assert.deepEqual(await disposition.locator(':scope > button').allTextContents(), ['Complete']);
-  assert.equal(await more.textContent(), 'More');
+  assert.equal(await toolbar.locator(':scope > button').count(), 0, 'Redundant standalone command remains');
+  assert.equal(await session.page.getByTestId('radar-complete').count(), 0);
+  assert.equal(await more.textContent(), '...');
+  assert.equal(await more.getAttribute('aria-label'), 'More thread actions');
+  assert.equal(await more.getAttribute('title'), 'More thread actions');
   assert.equal(await archive.isVisible(), false, 'Archive was visible before opening More actions');
   assert.equal(await snooze.isVisible(), false, 'Snooze was visible before opening More actions');
   assert.equal(await deleteCard.isVisible(), false, 'Delete was visible before opening More actions');
-  await more.click();
+  await more.focus();
+  await more.press('Enter');
   assert.equal(await archive.isVisible(), true, 'Archive was not disclosed by More actions');
   assert.equal(await deleteCard.isVisible(), true, 'Delete was not disclosed by More actions');
   assert.deepEqual(await session.page.getByRole('menu', { name: 'More item actions' }).locator('button').allTextContents(), ['Snooze', 'Archive', 'Delete from FlightDeck…']);
+  await more.press('Tab');
+  await expect(snooze).toBeFocused();
+  await session.page.keyboard.press('Tab');
+  await expect(archive).toBeFocused();
+  await session.page.keyboard.press('Tab');
+  await expect(deleteCard).toBeFocused();
+  await session.page.keyboard.press('Escape');
+  await expect(archive).toBeHidden();
+  await expect(more).toBeFocused();
+  assert.equal(await more.evaluate((element) =>
+    element.matches(':focus-visible') && parseFloat(getComputedStyle(element).outlineWidth) >= 2), true,
+  'Overflow disclosure lacked visible keyboard focus');
+  await more.press('Space');
+  await expect(snooze).toBeVisible();
   await session.page.getByRole('heading', { name: 'Radar', exact: true }).click();
   await expect(archive).toBeHidden();
   await more.click();
@@ -3106,24 +3127,12 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
         fontWeight: style.fontWeight,
       };
     };
-    const resolveColorToken = (token) => {
-      const probe = document.createElement('span');
-      probe.style.color = `var(${token})`;
-      document.body.append(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
-    };
     return {
       email: describe('radar-draft-email'),
       teams: describe('radar-draft-teams'),
-      complete: describe('radar-complete'),
       snooze: describe('radar-snooze'),
       archive: describe('radar-archive'),
       deleteCard: describe('radar-delete'),
-      tokens: {
-        success: resolveColorToken('--color-success'),
-      },
     };
   });
   assert.ok(semanticStyles.email.classes.includes('radar-action-button--compose'));
@@ -3135,13 +3144,9 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
     Object.fromEntries(Object.entries(semanticStyles.teams).filter(([key]) => key !== 'classes')),
     'Compose actions were not visually neutral and equal without a structured recommendation'
   );
-  assert.ok(semanticStyles.complete.classes.includes('radar-action-button--complete'));
   assert.ok(semanticStyles.snooze.classes.includes('radar-action-button--snooze'));
   assert.ok(semanticStyles.archive.classes.includes('radar-more-menu__item'));
   assert.ok(semanticStyles.deleteCard.classes.includes('radar-more-menu__item--delete'));
-  assert.ok(Number(semanticStyles.snooze.fontWeight) <= Number(semanticStyles.complete.fontWeight), 'Snooze received primary emphasis');
-  assert.equal(semanticStyles.complete.color, semanticStyles.tokens.success, 'Complete did not use the success token');
-  assert.notEqual(semanticStyles.complete.backgroundColor, semanticStyles.snooze.backgroundColor, 'Complete and Snooze lacked a non-color semantic distinction');
   assert.equal(semanticStyles.archive.classes.some((className) => className === 'warn' || className === 'primary'), false, 'Archive received high-emphasis styling');
 
   await email.focus();
@@ -3153,7 +3158,7 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   assert.equal(await teams.evaluate((element) => element === document.activeElement), true, 'Tab did not advance to Draft Teams message');
   assert.equal(await teams.evaluate((element) => element.matches(':focus-visible') && parseFloat(getComputedStyle(element).outlineWidth) >= 2), true, 'Draft Teams message lacked visible keyboard focus');
 
-  for (const group of [compose, disposition]) {
+  for (const group of [compose, toolbar]) {
     await group.evaluate(async (element) => {
       await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished));
     });
@@ -3169,7 +3174,6 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
       header: rectangle(element.querySelector(':scope > header')),
       recommendations: rectangle(element.querySelector('[data-testid="scanner-recommendations"]')),
       compose: rectangle(element.querySelector('.radar-action-group--compose')),
-      disposition: rectangle(element.querySelector('.radar-action-group--disposition')),
       buttons: buttons.map((button) => ({
         testId: button.dataset.testid,
         rect: rectangle(button),
@@ -3188,11 +3192,11 @@ async function actionHierarchyScenario(session, viewportWidth, captureScreenshot
   }
   assert.equal(geometry.scrollWidth > geometry.documentWidth + 1, false, `Action hierarchy overflowed at ${viewportWidth}px`);
   assert.equal(geometry.buttons.some((button) => button.clipped), false, `Action label clipped at ${viewportWidth}px: ${JSON.stringify(geometry.buttons)}`);
-  assert.equal(geometry.buttons.length, 4, `Expected three commands and one More disclosure at ${viewportWidth}px`);
+  assert.equal(geometry.buttons.length, 3, `Expected two compose commands and one overflow disclosure at ${viewportWidth}px`);
   assert.ok(geometry.toolbar.x >= geometry.header.x - 1
     && geometry.toolbar.x + geometry.toolbar.width <= geometry.header.x + geometry.header.width + 1,
   `Thread toolbar escaped the header at ${viewportWidth}px`);
-  assert.ok(geometry.disposition.bottom <= geometry.recommendations.top,
+  assert.ok(geometry.toolbar.bottom <= geometry.recommendations.top,
     `Management commands were not above the Work plan at ${viewportWidth}px`);
   assert.ok(geometry.compose.x >= geometry.recommendations.x - 1
     && geometry.compose.right <= geometry.recommendations.right + 1,
@@ -3715,9 +3719,9 @@ async function radarRichContextScenario(session) {
     'Scanner recommendations were not moved into the Work plan column');
   assert.equal(await recommendations.locator('.radar-action-group--compose').count(), 1,
     'Draft controls were not integrated with the recommended next moves');
-  assert.equal(await session.page.locator('.radar-thread-detail > header .radar-action-group--disposition').count(), 1,
+  assert.equal(await session.page.locator('.radar-thread-detail > header .radar-more-menu').count(), 1,
     'Management controls were not moved into the thread header');
-  assert.equal(await session.page.locator('.radar-work-panel .radar-action-group--disposition').count(), 0,
+  assert.equal(await session.page.locator('.radar-work-panel .radar-more-menu').count(), 0,
     'Management controls were duplicated below the draft editor');
   const columnTops = await session.page.evaluate(() => ({
     activity: document.querySelector('.radar-activity-panel')?.getBoundingClientRect().top,
@@ -3751,6 +3755,13 @@ async function radarRichContextScenario(session) {
 async function consolidatedDetailsScenario(session, width) {
   const { page } = session;
   await openApp(session);
+  const threadsStep = page.getByRole('button', { name: 'Threads', exact: true });
+  if (await threadsStep.isVisible()) await threadsStep.click();
+  const listPills = page.locator(`[data-thread-id="${FIXTURE_ITEM_ID}"] .mailbox-status, [data-thread-id="${FIXTURE_ITEM_ID}"] .mailbox-severity`);
+  const listHeights = await listPills.evaluateAll((elements) =>
+    elements.map((element) => element.getBoundingClientRect().height));
+  assert.equal(listHeights.length, 2);
+  assert.ok(listHeights.every((height) => height > 0 && height < 30), 'Read-only list pills are no longer compact');
   await selectFixtureThread(page);
   const header = page.locator('.radar-thread-detail > header');
   const metadata = page.locator('.radar-context-meta');
@@ -3758,6 +3769,7 @@ async function consolidatedDetailsScenario(session, width) {
   assert.equal(await page.getByLabel('Done when', { exact: true }).count(), 1);
   assert.equal(await page.getByLabel('Done criteria', { exact: true }).count(), 0);
   assert.equal(await header.getByRole('button', { name: 'Open', exact: true }).count(), 0);
+  assert.equal(await header.getByRole('button', { name: 'Complete', exact: true }).count(), 0);
   const layout = await header.evaluate((element) => {
     const heading = element.querySelector('h2').getBoundingClientRect();
     const actions = element.querySelector('.radar-header-actions').getBoundingClientRect();
@@ -3786,7 +3798,7 @@ async function consolidatedDetailsScenario(session, width) {
           color: style.color,
           borderColor: style.borderColor,
           borderRadius: style.borderRadius,
-          padding: style.padding,
+          backgroundColor: style.backgroundColor,
         };
       };
       return {
@@ -3796,8 +3808,31 @@ async function consolidatedDetailsScenario(session, width) {
         rowStatus: readStyle(`[data-thread-id="${id}"] .mailbox-status`),
       };
     }, FIXTURE_ITEM_ID);
-    assert.deepEqual(styles.headerSeverity, styles.rowSeverity, 'Header criticality differs from Inbox pill');
-    assert.deepEqual(styles.headerStatus, styles.rowStatus, 'Header work state differs from Inbox pill');
+    assert.deepEqual(styles.headerSeverity, styles.rowSeverity, 'Header criticality lost its themed colors');
+    assert.deepEqual(styles.headerStatus, styles.rowStatus, 'Header work state lost its themed colors');
+    const geometry = await header.locator('.radar-header-pill').evaluateAll((pills) =>
+      pills.map((pill) => {
+        const bounds = pill.getBoundingClientRect();
+        const select = pill.querySelector('select');
+        const target = select.getBoundingClientRect();
+        const style = getComputedStyle(pill);
+        const chevron = getComputedStyle(pill, '::after');
+        return {
+          height: bounds.height, left: bounds.left, right: bounds.right,
+          fontSize: parseFloat(style.fontSize), padding: parseFloat(style.paddingLeft),
+          fullTarget: Math.abs(target.width - bounds.width) <= 2 && Math.abs(target.height - bounds.height) <= 2
+            && Math.abs(target.left - bounds.left) <= 1 && Math.abs(target.top - bounds.top) <= 1,
+          nativeSelect: select instanceof HTMLSelectElement && style.position === 'relative',
+          chevron: parseFloat(chevron.width) >= 5 && parseFloat(chevron.borderRightWidth) >= 1,
+          clipped: pill.scrollWidth > pill.clientWidth + 1,
+        };
+      }));
+    for (const pill of geometry) {
+      assert.ok(pill.height >= (width <= 960 ? 40 : 36), `Editable pill is too small: ${JSON.stringify(pill)}`);
+      assert.ok(pill.fontSize >= 12 && pill.padding >= 10, 'Editable pill text or padding is too small');
+      assert.ok(pill.fullTarget && pill.nativeSelect && pill.chevron, 'Editable pill lost its full-area native dropdown');
+      assert.ok(pill.left >= 0 && pill.right <= width && !pill.clipped, 'Editable pill is clipped or overflows');
+    }
   };
   await assertPillStyles();
   await page.getByRole('button', { name: 'Toggle theme' }).click();
@@ -3855,6 +3890,23 @@ async function consolidatedDetailsScenario(session, width) {
   await selectFixtureThread(page);
   assert.equal(await owner.inputValue(), 'You', 'Cleared owner did not retain the default responsibility');
   assert.equal(await due.inputValue(), '', 'Cleared due date returned after reload');
+  const workState = header.getByLabel('Work state', { exact: true });
+  await workState.focus();
+  assert.equal(await workState.evaluate((element) =>
+    parseFloat(getComputedStyle(element.closest('label')).outlineWidth) >= 2), true,
+  'Work state lacks visible keyboard focus');
+  await workState.press('Home');
+  await workState.press('ArrowDown');
+  await workState.press('ArrowDown');
+  await workState.press('ArrowDown');
+  await page.waitForFunction(async (id) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return state?.items.find((item) => item.id === id)?.lifecycleStatus === 'complete';
+  }, FIXTURE_ITEM_ID);
+  await openApp(session, { reseed: false });
+  await selectFixtureThread(page, 'completed');
+  assert.equal(await workState.inputValue(), 'complete', 'Native select completion did not survive reload');
+  assert.equal(await header.getByLabel('Criticality', { exact: true }).inputValue(), 'Elevated');
   await assertHealthy(session, width <= 960 ? 'mobile' : 'desktop');
 }
 
