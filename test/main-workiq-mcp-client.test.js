@@ -46,6 +46,7 @@ function createHarness(onMessage, options = {}) {
     verifyLauncher: false,
     initializeTimeout: 30,
     probeTimeout: 30,
+    entityTimeout: 30,
     shutdownGrace: 5,
     queueOptions: { pacingMs: 0 },
     spawnProcess: (executable, args, spawnOptions) => {
@@ -77,6 +78,30 @@ function canonicalMembers(email = 'alex@example.com', targetId = TARGET_USER_ID)
     { displayName: 'Self', email: 'self@example.com', userId: SELF_USER_ID },
   ];
 }
+
+it('uses a separate 60-second entity budget instead of the 10-second availability probe', async () => {
+  const timeouts = [];
+  const client = createWorkiqMcpClient({
+    queueOptions: { pacingMs: 0 },
+    discoverTools: async options => {
+      timeouts.push(['probe', options.timeoutMs]);
+      options.onExit();
+      return new Set(['create_entity']);
+    },
+    toolQuery: async (name, args, options) => {
+      assert.equal(name, 'create_entity');
+      assert.equal(args.parentUrl, '/me/messages');
+      timeouts.push(['entity', options.timeoutMs]);
+      options.onExit();
+      return workiq101.createResult({ id: 'draft-id', isDraft: true });
+    },
+  });
+  try {
+    assert.equal((await client.createOutlookDraft({ to: ['alex@example.com'], subject: 'Subject', body: 'Body' })).ok, true);
+    assert.deepEqual(timeouts, [['probe', 10000], ['entity', 60000]]);
+    assert.equal(client.getQueueStatus().active, 0);
+  } finally { await client.shutdown(); }
+});
 
 function respondIdentityRead(message, child) {
   if (message.params?.name !== 'fetch') return false;

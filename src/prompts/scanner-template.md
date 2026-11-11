@@ -9,6 +9,7 @@ Look for items since {lastRunAt}.
 - Include any commitments made to me or made by me, inferred or otherwise.
 - Include inline citations for every referenced source.
 - Recommend 0-2 distinct messages I can send asking an evidence-backed recipient for a specific update, confirmation, deliverable, or acceptance of ownership. Ground asks in the latest evidence, done criteria, and unresolved blocker; never invent recipients, dates, or commitments. Avoid generic task or meeting plans.
+- Phrase each suggestion as "Send a message to [recipient] about [topic], asking [specific question or action]", replacing brackets with known details. The person is the recipient, not the action owner; never use owner-name prefixes. If the recipient is unknown, explicitly ask to confirm who to contact rather than guessing.
 - Prioritize current, time-sensitive work.
 
 # Due date extraction rules:

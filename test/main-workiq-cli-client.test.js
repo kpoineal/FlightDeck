@@ -12,6 +12,7 @@ function harness(respond, options = {}) {
   const client = createWorkiqCliClient({
     launcher: 'C:\\WorkIQ\\workiq.exe', verifyLauncher: false,
     queueOptions: { pacingMs: 0 }, shutdownGrace: 5,
+    entityTimeout: 1000,
     spawnProcess(executable, args, spawnOptions) {
       const child = Object.assign(new EventEmitter(), {
         pid: 123, stdout: new EventEmitter(), stderr: new EventEmitter(), kills: 0,
@@ -39,6 +40,10 @@ function harness(respond, options = {}) {
 }
 const argument = (args, name) => args[args.indexOf(name) + 1];
 const draft = { to: ['alex@example.com'], subject: 'Subject', body: 'Body' };
+function respondCreated(child, entity, status = 201) {
+  child.stdout.emit('data', Buffer.from(`Created (HTTP ${status}):\r\n${JSON.stringify(entity, null, 2)}\r\n`));
+  child.emit('close', 0);
+}
 
 test('production CLI routes semantic reads and probe without starting an MCP server', async () => {
   const h = harness((command, args, child, respond) => {
@@ -111,32 +116,70 @@ test('Outlook create uses literal argv JSON and requires a returned draft entity
   }
 });
 
+test('Outlook accepts observed CLI create framing only with authoritative successful draft evidence', async () => {
+  const entity = { id: 'private-draft-id', isDraft: true };
+  for (const [output, expected] of [
+    [`Created (HTTP 201):\r\n${JSON.stringify(entity, null, 2)}`, true],
+    [`Created (HTTP 200):\n${JSON.stringify(entity)}`, true],
+    [`Created (HTTP 500):\n${JSON.stringify(entity)}`, false],
+    ['Created (HTTP 201):\n{"id":"private-draft-id","isDraft":false}', false],
+    ['Created (HTTP 201):\n{"id":"private-draft-id"}', false],
+    ['Created (HTTP 201):\n{"message":"Draft created successfully"}', false],
+    ['Created (HTTP 201):\n{"error":{"message":"private failure"}}', false],
+    [`Unrecognized diagnostic\n${JSON.stringify(entity)}`, false],
+    [`Created (HTTP 201):\n${JSON.stringify(entity)}\n{"id":"second","isDraft":true}`, false],
+    [`Created (HTTP 201):\n${JSON.stringify(entity)}\ntrailing diagnostic`, false],
+    ['Created (HTTP 201):\nnot JSON', false],
+    ['Created (HTTP 201):\n[]', false],
+  ]) {
+    let writes = 0;
+    const h = harness((command, _args, child) => {
+      assert.equal(command, 'create');
+      writes++;
+      child.stdout.emit('data', Buffer.from(output));
+      child.emit('close', 0);
+    });
+    try {
+      const result = await h.client.createOutlookDraft(draft);
+      assert.equal(result.ok, expected, output);
+      assert.equal(writes, 1, 'An uncertain create must never be replayed');
+      if (!expected) assert.equal(result.dispatched, true);
+      assert.equal(JSON.stringify(result).includes('private'), false);
+    } finally { await h.client.shutdown(); }
+  }
+});
+
 test('Teams CLI verifies directory identity and canonical chat before sending and checking the receipt', async () => {
   const targetId = '00000000-0000-0000-0000-000000000001';
   const selfId = '00000000-0000-0000-0000-000000000002';
   const members = [{ userId: targetId, email: 'alex@example.com' }, { userId: selfId }];
-  for (const validReceipt of [true, false]) {
+  for (const [validReceipt, framed] of [[true, false], [false, false], [true, true], [false, true]]) {
     let sends = 0;
     const h = harness((command, args, child, respond) => {
       const url = argument(args, command === 'fetch' ? '--urls' : '--url');
+      const fetch = entity => respond(framed ? { results: [{ data: entity, statusCode: 200 }], requestId: 'synthetic-request' } : entity);
       if (command === 'fetch' && url.startsWith('/users?')) {
-        respond({ value: [{ id: targetId, mail: 'alex@example.com' }] });
+        fetch({ value: [{ id: targetId, mail: 'alex@example.com' }] });
       } else if (command === 'fetch' && url.startsWith('/me?')) {
-        respond({ id: selfId });
+        fetch({ id: selfId });
       } else if (command === 'create' && url === '/chats') {
         const body = JSON.parse(argument(args, '--body'));
         assert.equal(body.members.length, 2);
-        respond({ id: 'chat-id', chatType: 'oneOnOne' });
+        const chat = { id: 'chat-id', chatType: 'oneOnOne' };
+        if (framed) respondCreated(child, chat, 200);
+        else respond(chat);
       } else if (command === 'fetch' && url.startsWith('/chats/')) {
-        respond({ id: 'chat-id', chatType: 'oneOnOne', members });
+        fetch({ id: 'chat-id', chatType: 'oneOnOne', members });
       } else {
         assert.equal(command, 'create');
         assert.equal(url, '/chats/chat-id/messages');
         sends++;
         const body = JSON.parse(argument(args, '--body')).body;
         assert.equal(body.content, 'Hello');
-        respond({ id: 'message-id', chatId: validReceipt ? 'chat-id' : 'wrong-chat',
-          createdDateTime: '2026-11-10T12:00:00Z', body });
+        const receipt = { id: 'message-id', chatId: validReceipt ? 'chat-id' : 'wrong-chat',
+          createdDateTime: '2026-11-10T12:00:00Z', body };
+        if (framed) respondCreated(child, receipt);
+        else respond(receipt);
       }
     });
     try {
@@ -148,6 +191,35 @@ test('Teams CLI verifies directory identity and canonical chat before sending an
       assert.equal(sends, 1);
     } finally { await h.client.shutdown(); }
   }
+});
+
+test('CLI fetch error envelopes preserve safe failure classification without posting', async () => {
+  for (const [statusCode, expected] of [[401, 'AUTH_REQUIRED'], [403, 'AUTH_REQUIRED'], [429, 'THROTTLED'], [404, 'RESOLUTION_FAILED']]) {
+    const h = harness((command, _args, _child, respond) => {
+      assert.equal(command, 'fetch', 'No write is allowed after a failed identity lookup');
+      respond({ results: [{ data: null, statusCode, error: { error: { code: 'SyntheticFailure', message: 'private detail' } } }],
+        requestId: 'private-request-id' });
+    });
+    try {
+      const result = await h.client.sendTeamsMessage({ targetDisplayName: 'Alex', targetEmail: 'alex@example.com', message: 'Hello' });
+      assert.equal(result.code, expected);
+      assert.equal(JSON.stringify(result).includes('private'), false);
+      assert.equal(h.calls.filter(call => call.args[2] === 'fetch').length, 1);
+    } finally { await h.client.shutdown(); }
+  }
+});
+
+test('CLI entity work can finish after the availability-probe budget without duplicate writes', async () => {
+  let writes = 0;
+  const h = harness((command, _args, child) => {
+    assert.equal(command, 'create');
+    writes++;
+    setTimeout(() => respondCreated(child, { id: 'draft-id', isDraft: true }), 40);
+  }, { probeTimeout: 20, entityTimeout: 1000 });
+  try {
+    assert.equal((await h.client.createOutlookDraft(draft)).ok, true);
+    assert.equal(writes, 1);
+  } finally { await h.client.shutdown(); }
 });
 
 test('failed or ambiguous CLI writes are never replayed', async () => {
@@ -164,7 +236,7 @@ test('failed or ambiguous CLI writes are never replayed', async () => {
         child.stderr.emit('data', Buffer.from('Error: too many requests'));
         child.emit('close', 1);
       }
-    }, { probeTimeout: 20 });
+    }, { probeTimeout: 20, entityTimeout: 20 });
     try {
       const result = await h.client.createOutlookDraft(draft);
       assert.equal(result.ok, false);

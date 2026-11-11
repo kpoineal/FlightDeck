@@ -281,6 +281,8 @@ Assembles a monitoring prompt from the tracked item's full context:
 
 `NEXT_MOVE_GUIDANCE` in `constants.js` is mandatory shared guidance appended by both `buildScannerPrompt` (via `RADAR_SCAN_JSON_SCHEMA`) and `buildMonitorPrompt`. It requests **0–2 distinct outbound communication intents**, not generic task plans: ask an evidence-backed recipient for a specific update, confirmation, deliverable, or acceptance of ownership. Each ask must support the done criteria and latest evidence/owner/blocker. Missing context permits clarification or fewer suggestions, never invented people, dates, commitments, or progress. Monitor refreshes still return an empty array when `hasNewInfo` is false; existing next moves are retained by the engine.
 
+Recommendations use **"Send a message to [recipient] about [topic], asking [specific question or action]"**, with evidence-backed details replacing the brackets. The person is the message recipient, not an owner-name prefix or the sender. If no recipient is supported, the recommendation explicitly asks to confirm who to contact. Draft synthesis preserves that distinction and does not treat legacy owner-prefixed wording as a recipient address. Stored recommendations are not rewritten; the wording changes on subsequent scans or monitor updates that produce new recommendations.
+
 The default scanner prompt, initial `radar-scan.md` mission, and `scanner-template.md` reinforce this guidance for new scanners. Existing saved scanner missions and monitoring prompts are **not rewritten**; `{lastRunAt}` substitution and prompt-editor customizations remain intact.
 
 Radar displays at most two generated suggestions without deleting additional stored suggestions or completion records. **Custom next move** is user input, not a third model recommendation. `workPlanChoice` stores its mode, raw custom text (500-character limit), and selected recommendation on the thread through the existing item persistence bridge, including SQLite profiles. It is not scanner-generated data or a completed remote action.
@@ -476,7 +478,7 @@ All schemas share several design principles:
 
 - **Explicit field-level constraints** — e.g., `"string — brief one-sentence summary"` with examples
 - **URL quarantine** — text fields must NOT contain URLs, links, or encoded identifiers. All URLs go exclusively in `sources` or `evidenceLinks` arrays. This prevents broken markdown rendering.
-- **Suggested next steps discipline** — "0-2 specific, completable actions starting with a verb naming WHO and WHAT." Explicitly bans vague language: "consider", "think about", "follow up", "look into."
+- **Suggested next steps discipline** — "0-2 specific message requests naming the recipient, topic, and ask." Use "Send a message to [recipient] about [topic], asking [specific question or action]", not owner-prefixed tasks. Explicitly bans vague language: "consider", "think about", "follow up", "look into."
 - **Due date extraction** — every schema includes rules for converting temporal language ("by end of week") to ISO-8601 dates, with explicit instructions never to fabricate deadlines
 - **Severity tri-level** — Critical / Elevated / Observe used consistently across all scan types
 
