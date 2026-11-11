@@ -2,9 +2,42 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { nextRadarSelectionAfterRemoval, reconcileRadarSelection } from '../src/svelte/lib/radar-selection.js';
+import { nextRadarSelectionAfterRemoval, reconcileRadarSelection, selectInboxRows } from '../src/svelte/lib/radar-selection.js';
 import { createThreadComposer } from '../src/svelte/lib/thread-composer.js';
 import { buildTodayDashboard } from '../src/svelte/lib/today.js';
+import { inboxActionState } from '../src/svelte/lib/inbox-action-state.js';
+
+test('Inbox bulk intent is aggregate, with uniform submenu indicators and all-target snooze eligibility', () => {
+  const active = { lifecycleStatus: 'in-progress', severity: 'Observe', isNew: false };
+  const unread = { ...active, isNew: true };
+  const archived = { ...active, lifecycleStatus: 'archived' };
+  const snoozed = { ...active, snoozeUntil: '2030-01-02T00:00:00Z' };
+  const at = Date.parse('2030-01-01T00:00:00Z');
+  assert.equal(inboxActionState([active, unread], at).markRead, true);
+  assert.equal(inboxActionState([active, active], at).markRead, false);
+  const mixed = inboxActionState([unread, { ...archived, severity: 'Critical' }], at);
+  assert.equal(mixed.archive, true);
+  assert.equal(mixed.lifecycle, null);
+  assert.equal(mixed.severity, null);
+  assert.equal(mixed.snoozeBlocked, true);
+  assert.equal(inboxActionState([archived, archived], at).archive, false);
+  assert.equal(inboxActionState([snoozed, active], at).unsnooze, false);
+  assert.equal(inboxActionState([snoozed, snoozed], at).unsnooze, true);
+  assert.equal(inboxActionState([active, active], at).lifecycle, 'in-progress');
+  assert.equal(inboxActionState([active, active], at).severity, 'Observe');
+});
+
+test('Radar guards draft generation, review and editor visibility during multi-selection', () => {
+  const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
+  for (const name of ['draftMessage', 'reviewEmailProposal', 'openEmailActions', 'sendTeamsDraft']) {
+    const body = source.match(new RegExp(`(?:async )?function ${name}\\(.*?\\n  \\}`, 's'))?.[0] || '';
+    assert.match(body, /if \([^)]*multipleSelected[^)]*\) return/, `${name} must not operate on a multi-selection`);
+  }
+  assert.match(source, /if \(deletionBlocked \|\| !pageReady \|\| \(action\.startsWith\('draft:'\) && multipleSelected\)\) return/);
+  assert.match(source, /#if !multipleSelected && emailProposal/);
+  assert.match(source, /#if !multipleSelected && teamsDraft/);
+  assert.match(source, /Select one thread to draft a message\./);
+});
 
 test('reconcileRadarSelection clears stale selected thread and resets detail view without altering filters', () => {
   const state = {
@@ -66,6 +99,26 @@ test('nextRadarSelectionAfterRemoval chooses next, then previous, then empty', (
   assert.equal(nextRadarSelectionAfterRemoval(threads, 'missing'), null);
 });
 
+test('Inbox selection toggles additive rows without retaining hidden IDs', () => {
+  const visible = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(selectInboxRows(visible, ['hidden', 'a'], 'hidden', 'c', { additive: true }),
+    { ids: ['a', 'c'], anchorId: 'c' });
+  assert.deepEqual(selectInboxRows(visible, ['a', 'c'], 'a', 'c', { additive: true }),
+    { ids: ['a'], anchorId: 'c' });
+  assert.deepEqual(selectInboxRows(visible, ['a', 'b'], 'a', 'd'), { ids: ['d'], anchorId: 'd' });
+});
+
+test('Inbox range selection supports reversed ranges, additive ranges and missing anchors', () => {
+  const visible = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(selectInboxRows(visible, ['d'], 'd', 'b', { range: true }),
+    { ids: ['b', 'c', 'd'], anchorId: 'd' });
+  assert.deepEqual(selectInboxRows(visible, ['d'], 'a', 'b', { range: true, additive: true }),
+    { ids: ['d', 'a', 'b'], anchorId: 'a' });
+  assert.deepEqual(selectInboxRows(visible, ['d'], 'hidden', 'b', { range: true }),
+    { ids: ['b'], anchorId: 'b' });
+  assert.deepEqual(selectInboxRows(visible, ['hidden', 'a'], 'a', 'missing', { range: true }),
+    { ids: ['a'], anchorId: 'a' });
+});
 test('RadarView source uses helper and has no fallback to first visible thread', () => {
   const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
   assert.match(source, /reconcileRadarSelection/);
@@ -183,7 +236,10 @@ test('RadarView marks read only from the native card activation path', () => {
 
   assert.match(selectThreadSource, /\{ markRead = false \}/);
   assert.match(selectThreadSource, /if \(markRead && isMailboxUnread\(item\)\) markItemRead\(item\.id\)/);
-  assert.match(cardSource, /on:click=.*selectThread\(item, event\.currentTarget, \{ markRead: true \}\)/);
+  assert.match(cardSource, /on:click=.*changeRowSelection\(item, event\)/);
+  const activationSource = source.match(/function changeRowSelection\(.*?\n  \}/s)?.[0] || '';
+  assert.match(activationSource, /!event.ctrlKey && !event.metaKey && !event.shiftKey/);
+  assert.match(activationSource, /selectThread\(item, event\.currentTarget, \{ markRead: true \}\)/);
   assert.doesNotMatch(cardSource, /on:keydown/);
 });
 
@@ -206,8 +262,9 @@ test('RadarView exposes a secondary card delete command with explicit local-only
   assert.match(disposition, /data-testid="radar-delete"/);
   assert.match(disposition, />Delete from FlightDeck…<\/button>/);
   assert.match(disposition, /class="radar-more-menu__item radar-more-menu__item--delete"/);
-  assert.match(confirmation, /title=\{ITEM_DELETION_CONFIRMATION\.title\}/);
-  assert.match(confirmation, /summary=\{ITEM_DELETION_CONFIRMATION\.summary\}/);
+  assert.match(confirmation, /title=\{deleteRequest\?\.bulk.*: ITEM_DELETION_CONFIRMATION\.title\}/);
+  assert.match(confirmation, /summary=\{deleteRequest\?\.bulk.*: ITEM_DELETION_CONFIRMATION\.summary\}/);
+  assert.match(confirmation, /earlier deletions remain saved/);
   assert.match(contract, /Delete card from FlightDeck\?/);
   assert.match(contract, /permanently removes the card from FlightDeck/i);
   assert.match(contract, /does not delete the source email, Teams message or chat, meeting, document, or other Microsoft 365 content/i);

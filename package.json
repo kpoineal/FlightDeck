@@ -15,7 +15,7 @@
     "test:state:production": "npm run build:renderer && node scripts/test-state-durability.js --large",
     "test:state:runtime": "npm run build:renderer && node scripts/test-state-sqlite-runtime.js",
     "test:state:durability": "npm run build:renderer && node scripts/test-state-durability.js",
-    "test:state:inbox": "npm run build:renderer && node scripts/test-state-inbox-navigation.js",
+    "test:state:inbox": "npm run build:renderer && node scripts/test-state-inbox-navigation.js && node scripts/test-state-inbox-selection.js",
     "bench:state:sqlite": "node scripts/bench-state-repository.js",
     "test:state:reload": "npm run build:renderer && node scripts/test-state-reload.js",
     "bench:state:node": "node scripts/test-state-reload.js --node",

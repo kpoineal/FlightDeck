@@ -23,3 +23,19 @@ export function nextItemSelectionAfterRemoval(threads, removedId) {
 export function nextRadarSelectionAfterRemoval(threads, removedId) {
   return nextItemSelectionAfterRemoval(threads, removedId);
 }
+
+export function selectInboxRows(visibleIds, selectedIds, anchorId, targetId, { additive = false, range = false } = {}) {
+  const visible = new Set(visibleIds);
+  const current = selectedIds.filter(id => visible.has(id));
+  if (!visible.has(targetId)) return { ids: current, anchorId: visible.has(anchorId) ? anchorId : null };
+  if (range && visible.has(anchorId)) {
+    const start = visibleIds.indexOf(anchorId);
+    const end = visibleIds.indexOf(targetId);
+    const span = visibleIds.slice(Math.min(start, end), Math.max(start, end) + 1);
+    return { ids: additive ? [...new Set([...current, ...span])] : span, anchorId };
+  }
+  return {
+    ids: additive ? current.includes(targetId) ? current.filter(id => id !== targetId) : [...current, targetId] : [targetId],
+    anchorId: targetId,
+  };
+}

@@ -24,6 +24,12 @@ dialog.showMessageBoxSync = () => 0;
 const handle = ipcMain.handle.bind(ipcMain);
 ipcMain.handle = (channel, handler) => {
   if (channel === 'state-query') return handle(channel, async (...args) => {
+    if (args[1] === 'getThread') {
+      if (args[2].id === global.__stateHarness.failThreadReadId) throw new Error('Synthetic thread read failure');
+      if (args[2].id === global.__stateHarness.holdThreadReadId) {
+        await new Promise(resolve => { global.__stateHarness.releaseThreadRead = resolve; });
+      }
+    }
     const result = await handler(...args);
     if (args[1] === 'radarPage') {
       global.__stateHarness.pageQueries.push({ offset: args[2].offset, revision: result.revision });
@@ -32,7 +38,21 @@ ipcMain.handle = (channel, handler) => {
     return result;
   });
   return handle(channel, channel === 'store-set' || channel === 'state-command'
-    ? (...args) => global.__stateHarness.rejectWrites ? { success: false } : handler(...args)
+    ? async (...args) => {
+      if (channel === 'state-command' && args[1]?.payload?.changes?.some(change =>
+        change.domain === 'deletedItemIds' && change.id === global.__stateHarness.failDeletionOnceId)) {
+        global.__stateHarness.failDeletionOnceId = null;
+        return { ok: false, code: 'SYNTHETIC_WRITE_FAILURE' };
+      }
+      if (global.__stateHarness.rejectWrites) return { success: false };
+      const result = await handler(...args);
+      if (channel === 'state-command' && args[1]?.payload?.changes?.some(change =>
+        change.domain === 'deletedItemIds' && change.id === global.__stateHarness.loseDeletionAckId)) {
+        global.__stateHarness.loseDeletionAckId = null;
+        throw new Error('Synthetic deletion acknowledgement loss');
+      }
+      return result;
+    }
     : handler);
 };
 function blocked() {
