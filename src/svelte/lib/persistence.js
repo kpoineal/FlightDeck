@@ -39,6 +39,7 @@ import {
   DEFAULT_SCANNER_PROMPT,
 } from './constants.js';
 import { hashString } from './utils.js';
+import { normalizeTodayMeetings } from './meetings.js';
 import {
   capItemUpdateHistory,
   filterDeletedItems,
@@ -693,14 +694,7 @@ export async function loadPersistentState(isDemo = false) {
       : {};
     const prunedBriefings = pruneHydratedBriefings(loadedBriefings, loadedBriefingSeenAt);
 
-    // Restore cached meetings (filter to today's future meetings)
-    let loadedMeetings = [];
-    if (Array.isArray(parsed.meetings) && parsed.meetings.length) {
-      const now = Date.now();
-      loadedMeetings = parsed.meetings.filter(
-        (m) => m.startTime && Number.isFinite(m.startTime) && m.startTime >= now
-      );
-    }
+    const loadedMeetings = Array.isArray(parsed.meetings) ? normalizeTodayMeetings(parsed.meetings) : [];
     const loadedMeetingsLastFetched = typeof parsed.meetingsLastFetched === 'number'
       ? parsed.meetingsLastFetched
       : 0;

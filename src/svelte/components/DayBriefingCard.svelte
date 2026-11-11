@@ -2,7 +2,7 @@
   import { safeDate, sanitizeBriefingText } from '../lib/utils.js';
   import { connected } from '../lib/stores.js';
 
-  let { briefing = null, unseen = false, generating = false, ongenerate } = $props();
+  let { briefing = null, unseen = false, generating = false, error = '', ongenerate } = $props();
 
   let hasBriefing = $derived(!!briefing);
 
@@ -17,6 +17,10 @@
     ongenerate?.();
   }
 </script>
+
+{#if error}
+  <div class="evidence-box" role="alert">{error} Use Generate or Regenerate My Day to retry.</div>
+{/if}
 
 {#if !hasBriefing}
   <details class="list-card day-briefing-card" open>

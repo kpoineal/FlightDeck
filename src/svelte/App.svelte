@@ -3,7 +3,7 @@
   import { stateDiagnostics as diagnostics } from './lib/state-diagnostics.js';
   import { get } from 'svelte/store';
   import { mode, connected, history as historyStore, isDemo, actionProposals } from './lib/stores.js';
-  import { applyConnectionStatus, validateConnection, getConnectionGeneration } from './lib/connection.js';
+  import { applyConnectionStatus, validateConnection } from './lib/connection.js';
   import {
     cancelScheduledPersistentStateSave,
     loadPersistentState,
@@ -13,15 +13,14 @@
     subscribePersistentState,
     flushPersistentState,
   } from './lib/persistence.js';
-  import { items, scanners, meetings, meetingsLastFetched, briefingsByMeetingId, briefingSeenAt,
+  import { items, scanners, briefingsByMeetingId, briefingSeenAt,
     density, filter, collapsedSections, highlightedItemId } from './lib/stores.js';
   import { addHistory } from './lib/actions.js';
   import { resumeScannerEngine, startScannerEngine, stopScannerEngine } from './lib/scanner-engine.js';
   import { startMonitoringLoop, stopMonitoringLoop } from './lib/monitor-engine.js';
-  import { cleanDisplayText, hashString, normalizeExternalUrl, nowIso } from './lib/utils.js';
+  import { nowIso } from './lib/utils.js';
   import { logInfo, persistLog, loadPersistedLog } from './lib/logger.js';
-  import { TODAY_MEETINGS_PROMPT } from './lib/prompts.js';
-  import { runWorkiqJson } from './lib/json-parser.js';
+  import { refreshMeetings as fetchMeetings } from './lib/briefings.js';
   import Topbar from './components/Topbar.svelte';
   import TodayView from './components/TodayView.svelte';
   import ActionQueue from './components/ActionQueue.svelte';
@@ -56,63 +55,6 @@
       document.documentElement.setAttribute('data-theme', stored);
     } else {
       document.documentElement.setAttribute('data-theme', 'dark');
-    }
-  }
-
-  async function fetchMeetings(force = false) {
-    if (!get(connected) || get(isDemo)) return;
-    if (!window.workiq || typeof window.workiq.ask !== 'function') return;
-
-    // Use cached meetings if fetched recently (within 1 hour and same calendar day)
-    if (!force) {
-      const lastFetch = get(meetingsLastFetched);
-      const cached = get(meetings);
-      if (lastFetch && cached.length) {
-        const age = Date.now() - lastFetch;
-        const sameDay = new Date(lastFetch).toDateString() === new Date().toDateString();
-        if (age < 3_600_000 && sameDay) return;
-      }
-    }
-
-    const requestGeneration = getConnectionGeneration();
-    try {
-      const payload = await runWorkiqJson(
-        TODAY_MEETINGS_PROMPT,
-        (p) => p && Array.isArray(p.meetings),
-        'meetings'
-      );
-      if (!get(connected) || requestGeneration !== getConnectionGeneration()) return;
-
-      const raw = Array.isArray(payload?.meetings) ? payload.meetings : [];
-      const now = Date.now();
-      const processed = raw
-        .map((item) => {
-          const startAt = item.startAt || null;
-          const startTime = startAt ? new Date(startAt).getTime() : Number.NaN;
-          const title = cleanDisplayText(item.title || 'Untitled meeting');
-          const organizer = cleanDisplayText(item.organizer || 'Unknown organizer');
-          const seed = [title.toLowerCase(), organizer.toLowerCase(), String(startAt), String(item.endAt || '')].join('|');
-          const id = cleanDisplayText(item.id || '').trim() || `meeting_${hashString(seed)}`;
-          return {
-            id,
-            title,
-            startAt,
-            endAt: item.endAt || null,
-            organizer,
-            joinUrl: normalizeExternalUrl(item.joinUrl || ''),
-            summary: cleanDisplayText(item.summary || ''),
-            startTime,
-          };
-        })
-        .filter((item) => Number.isFinite(item.startTime) && item.startTime >= now)
-        .sort((a, b) => a.startTime - b.startTime);
-
-      meetings.set(processed);
-      meetingsLastFetched.set(Date.now());
-      addHistory('scan', `Loaded ${processed.length} upcoming meeting(s)`);
-      savePersistentState();
-    } catch (err) {
-      console.warn('[flightdeck] meetings fetch failed', err.message);
     }
   }
 

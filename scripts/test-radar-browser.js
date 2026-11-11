@@ -67,8 +67,8 @@ async function startRendererServer() {
   };
 }
 
-async function installLocalBridge(context, draftMode, proposalMode, teamsSendMode, queueStatus) {
-  await context.addInitScript(({ mode, synthesisMode, sendMode, itemTitle, initialQueueStatus }) => {
+async function installLocalBridge(context, draftMode, proposalMode, teamsSendMode, queueStatus, briefingMode) {
+  await context.addInitScript(({ mode, synthesisMode, sendMode, itemTitle, initialQueueStatus, briefingMode }) => {
     const prefix = '__flightdeck_browser_acceptance__:';
     const read = (key, fallback = null) => {
       const raw = localStorage.getItem(prefix + key);
@@ -216,6 +216,28 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
         return { ok: true, action: 'teams-message-sent' };
       },
     };
+    if (briefingMode) {
+      window.__briefingCalls = [];
+      window.__briefingFail = briefingMode === 'fail';
+      window.workiq.readPromptFile = async (name) => ({ success: true, content: name });
+      window.workiq.ask = async (prompt) => {
+        const label = prompt.startsWith('List all my meetings') ? 'calendar'
+          : prompt.startsWith('day-briefing.md') ? 'day' : 'meeting';
+        window.__briefingCalls.push(label);
+        const today = new Date();
+        const at = (offset, hour) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset, hour).toISOString();
+        if (label === 'day' && window.__briefingFail) {
+          return { success: false, error: 'Simulated day briefing failure' };
+        }
+        const payload = label === 'calendar' ? { meetings: [
+          { id: 'briefing-earlier', title: 'Earlier customer sync', startAt: at(0, 9), endAt: at(0, 10) },
+          { id: 'briefing-ongoing', title: 'Ongoing customer review', startAt: at(0, 12), endAt: at(0, 14) },
+          { id: 'briefing-later', title: 'Upcoming planning', startAt: at(0, 15), endAt: at(0, 16) },
+          { id: 'briefing-tomorrow', title: 'Tomorrow meeting', startAt: at(1, 9) },
+        ] } : { headline: label === 'day' ? 'Your automatically generated day' : 'Earlier meeting briefing' };
+        return { success: true, answer: JSON.stringify(payload) };
+      };
+    }
     if (initialQueueStatus) {
       let snapshot = structuredClone(initialQueueStatus);
       const listeners = new Set();
@@ -234,12 +256,12 @@ async function installLocalBridge(context, draftMode, proposalMode, teamsSendMod
         return () => listeners.delete(callback);
       };
     }
-  }, { mode: draftMode, synthesisMode: proposalMode, sendMode: teamsSendMode, itemTitle: FIXTURE_ITEM_TITLE, initialQueueStatus: queueStatus });
+  }, { mode: draftMode, synthesisMode: proposalMode, sendMode: teamsSendMode, itemTitle: FIXTURE_ITEM_TITLE, initialQueueStatus: queueStatus, briefingMode });
 }
 
-async function createSession(browser, baseUrl, { draftMode = 'success', proposalMode = 'email', teamsSendMode = 'success', queueStatus = null, viewport = { width: 1440, height: 1000 } } = {}) {
+async function createSession(browser, baseUrl, { draftMode = 'success', proposalMode = 'email', teamsSendMode = 'success', queueStatus = null, briefingMode = null, viewport = { width: 1440, height: 1000 } } = {}) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
-  await installLocalBridge(context, draftMode, proposalMode, teamsSendMode, queueStatus);
+  await installLocalBridge(context, draftMode, proposalMode, teamsSendMode, queueStatus, briefingMode);
   const diagnostics = { external: [], pageErrors: [], consoleErrors: [] };
   await context.route('**/*', async (route) => {
     const requestUrl = route.request().url();
@@ -1793,6 +1815,65 @@ async function actionQueueReliabilityScenario(session, viewportWidth) {
     assert.equal(await topbarTrigger.evaluate((element) => element === document.activeElement), true, 'Queue backdrop close did not restore its exact trigger');
   }
   await assertHealthy(session, viewportWidth > 960 ? 'desktop' : 'mobile');
+}
+
+async function automaticBriefingsScenario(session, failure = false) {
+  const { page } = session;
+  await page.clock.setFixedTime(new Date(2026, 10, 11, 13));
+  await openApp(session);
+  await page.evaluate(async () => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    await window.workiq.storeSet('flightdeck.persisted.v2', {
+      ...state, connected: true, connectionIntent: true, meetings: [], meetingsLastFetched: 0,
+      briefingsByMeetingId: {}, briefingSeenAt: {},
+      scanners: state.scanners.map(scanner => ({ ...scanner, enabled: false })),
+      items: state.items.map(item => ({ ...item, monitorEnabled: false })),
+    });
+  });
+  await page.goto(`${session.baseUrl}/app.html`, { waitUntil: 'domcontentloaded' });
+  await expect.poll(() => page.evaluate(() => window.__briefingCalls)).toEqual(['calendar', 'day']);
+  await page.getByRole('button', { name: 'Briefings', exact: true }).click();
+  const day = page.locator('.day-briefing-card');
+  if (failure) {
+    await expect(page.getByRole('alert')).toContainText('Simulated day briefing failure');
+    await page.getByRole('button', { name: 'Today', exact: true }).click();
+    await page.getByRole('button', { name: 'Briefings', exact: true }).click();
+    assert.deepEqual(await page.evaluate(() => window.__briefingCalls), ['calendar', 'day']);
+    await page.evaluate(() => { window.__briefingFail = false; });
+    await day.getByRole('button', { name: 'Generate My Day', exact: true }).click();
+    await expect(day).toContainText('Your automatically generated day');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await assertHealthy(session, page.viewportSize().width > 960 ? 'desktop' : 'mobile');
+    return;
+  }
+  await expect(day).toContainText('Your automatically generated day');
+  const earlier = page.locator('[data-briefing-meeting-id="briefing-earlier"]');
+  const ongoing = page.locator('[data-briefing-meeting-id="briefing-ongoing"]');
+  const earlierLane = page.locator('.briefing-lane').filter({ hasText: 'Earlier today' });
+  await expect(earlierLane).toContainText('Earlier customer sync');
+  await expect(earlierLane).toContainText('Ongoing customer review');
+  await expect(ongoing).toBeVisible();
+  await expect(page.locator('[data-briefing-meeting-id="briefing-later"]')).toBeVisible();
+  await expect(page.locator('[data-briefing-meeting-id="briefing-tomorrow"]')).toHaveCount(0);
+  await earlier.locator('.meeting-card__header').click();
+  await earlier.getByRole('button', { name: 'Generate Briefing', exact: true }).click();
+  await expect(earlier).toContainText('Earlier meeting briefing');
+  assert.deepEqual(await page.evaluate(() => window.__briefingCalls), ['calendar', 'day', 'meeting']);
+  await page.getByRole('button', { name: 'Refresh Meetings', exact: false }).click();
+  await expect.poll(() => page.evaluate(() => window.__briefingCalls)).toEqual(['calendar', 'day', 'meeting', 'calendar']);
+  await expect(earlier).toBeVisible();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByRole('button', { name: 'Briefings', exact: true }).click();
+  await expect(day).toContainText('Your automatically generated day');
+  await expect.poll(() => page.evaluate(async () =>
+    (await window.workiq.storeGet('flightdeck.persisted.v2'))?.briefingsByMeetingId?.__day_briefing__?.headline
+  )).toBe('Your automatically generated day');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Briefings', exact: true }).click();
+  await expect(day).toContainText('Your automatically generated day');
+  await expect(earlier).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => window.__briefingCalls), [], 'Restart regenerated a saved day or meeting briefing');
+  await assertHealthy(session, page.viewportSize().width > 960 ? 'desktop' : 'mobile');
 }
 
 async function seedTodayDashboard(session) {
@@ -4139,6 +4220,13 @@ async function doneWhenEditingScenario(session, width) {
         session => todayDashboardScenario(session, width),
         { viewport: { width, height: width === 1440 ? 1000 : 900 } });
     }
+    for (const width of [1440, 360]) {
+      await runScenario(`briefings-automatic-day-${width}`, browser, rendererServer.baseUrl,
+        session => automaticBriefingsScenario(session),
+        { briefingMode: 'success', viewport: { width, height: 1000 } });
+    }
+    await runScenario('briefings-automatic-failure-retry', browser, rendererServer.baseUrl,
+      session => automaticBriefingsScenario(session, true), { briefingMode: 'fail' });
     await runScenario('today-midnight-rollover', browser, rendererServer.baseUrl, todayRolloverScenario);
     await runScenario('today-empty-states', browser, rendererServer.baseUrl, todayEmptyScenario);
     await runScenario('proposal-missing-address-edit-state', browser, rendererServer.baseUrl, missingAddressScenario, { proposalMode: 'missing-address' });
