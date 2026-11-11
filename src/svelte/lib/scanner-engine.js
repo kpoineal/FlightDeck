@@ -176,6 +176,7 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     const candidateId = normalizeItemId(item?.id) || deriveStableItemId(item, scanner.id);
     return normalizeItem({
       ...item,
+      workPlanChoice: undefined,
       ...(candidateId ? { id: candidateId } : {}),
       status: item.status || 'Inbound',
       scannerId: scanner.id,

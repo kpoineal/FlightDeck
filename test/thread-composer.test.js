@@ -4,6 +4,105 @@ import { get } from 'svelte/store';
 import { canAddressTeamsDraft, createThreadComposer, threadComposer } from '../src/svelte/lib/thread-composer.js';
 import { adaptEmailProposalsToActionQueue } from '../src/svelte/lib/proposal-synthesis.js';
 import { actionsQueueOpen, deletedItemIds, openActionsQueue, selectedProposalId } from '../src/svelte/lib/stores.js';
+import { draftMatchesWorkPlan, resolveWorkPlan } from '../src/svelte/lib/work-plan.js';
+import { normalizeItem } from '../src/svelte/lib/models/item.js';
+import { isWorkPlanStepCompleted } from '../src/svelte/lib/action-proposals.js';
+
+test('work-plan choice survives normalization and round trip without dropping hidden moves or completion data', () => {
+  const raw = {
+    id: 'a', title: 'Thread A', suggestedNextSteps: ['Ask Alex for status', 'Ask Jo for acceptance', 'Older hidden move'],
+    completedNextSteps: ['Ask Alex for status'],
+    workPlanChoice: { mode: 'custom', customText: '  Ask Alex for an update.\nKeep the scope narrow.  ' },
+  };
+  const restored = normalizeItem(JSON.parse(JSON.stringify(normalizeItem(raw))));
+  assert.equal(restored.workPlanChoice.customText, raw.workPlanChoice.customText);
+  assert.deepEqual(restored.suggestedNextSteps, raw.suggestedNextSteps);
+  assert.equal(restored.completedNextSteps.length, 1);
+  const plan = resolveWorkPlan(restored);
+  assert.equal(plan.moves.length, 2);
+  assert.equal(plan.step, raw.workPlanChoice.customText.trim());
+  assert.equal(plan.blockedReason, '');
+  assert.equal(isWorkPlanStepCompleted(restored, plan.step), false, 'Typing is not a completed action');
+  assert.equal(resolveWorkPlan({ id: 'b' }).customText, '', 'Another thread inherited custom text');
+  assert.equal(resolveWorkPlan({ ...restored, suggestedNextSteps: [] }).customText, raw.workPlanChoice.customText);
+});
+
+test('blank custom input never falls back to recommendations and new custom asks work after suggestions complete', async () => {
+  const composer = createThreadComposer();
+  for (const text of ['', ' \n\t ']) {
+    const item = { id: 'a', title: 'A', suggestedNextSteps: ['Ask Alex'], workPlanChoice: { mode: 'custom', customText: text } };
+    const plan = resolveWorkPlan(item);
+    assert.equal(plan.step, '');
+    assert.match(plan.blockedReason, /Enter a custom/);
+    for (const channel of ['email', 'teams']) assert.equal(await composer.generate({
+      item, channel, requestedNextStep: plan.step,
+      propose: () => assert.fail('Blank custom instruction reached WorkIQ'),
+    }), null);
+  }
+  const item = { id: 'a', title: 'A', suggestedNextSteps: ['Ask Alex'], completedNextSteps: ['Ask Alex'],
+    workPlanChoice: { mode: 'custom', customText: 'Ask Alex to clarify the remaining blocker' } };
+  assert.equal(resolveWorkPlan(item).completed, true);
+  assert.equal(resolveWorkPlan(item).blockedReason, '');
+  assert.ok(await composer.generate({ item, channel: 'teams', requestedNextStep: resolveWorkPlan(item).step,
+    propose: async () => response('teams') }));
+});
+
+test('selection and text edits never match stale or unrelated drafts; original drafts remain intact', () => {
+  const composer = createThreadComposer();
+  const draft = { sourceItemId: 'a', nextStep: 'Ask Alex for status', message: 'Reviewed text' };
+  composer.update('a', { teamsDraft: draft, emailProposalId: 'older-email', teamsSendState: { status: 'unconfirmed' } });
+  for (const step of ['Ask Jo for acceptance', '', 'Ask Alex for status and timeline']) {
+    assert.equal(draftMatchesWorkPlan(draft.nextStep, step), false);
+  }
+  assert.equal(draftMatchesWorkPlan(draft.nextStep, ' Ask Alex for status '), true);
+  assert.equal(draftMatchesWorkPlan(undefined, 'Ask Alex for status'), false);
+  assert.equal(composer.read('a').teamsDraft, draft);
+  assert.equal(composer.read('a').emailProposalId, 'older-email');
+  assert.equal(composer.read('a').teamsSendState.status, 'unconfirmed');
+  assert.equal(composer.read('b').teamsDraft, null);
+});
+
+for (const channel of ['email', 'teams']) {
+  test(`custom ${channel} instruction follows draft/completion mapping without leaking local fields or bypassing targets`, async () => {
+    const composer = createThreadComposer();
+    const instruction = 'Ask Alex to confirm the blocker.\nRequest the update.';
+    const item = { id: 'custom-a', title: 'A', doneCriteria: 'Alex confirms the resolution',
+      workPlanChoice: { mode: 'custom', customText: `  ${instruction}  ` }, completedNextSteps: [] };
+    const contexts = [];
+    let saved;
+    await composer.generate({
+      item, channel, requestedNextStep: resolveWorkPlan(item).step,
+      propose: async context => {
+        contexts.push(context);
+        const result = response(channel);
+        result.result.proposals[0].target = { displayName: '', address: '' };
+        result.result.proposals[0].needsTargetResolution = true;
+        return result;
+      },
+      saveEmail: async (source, result, current, step) => {
+        saved = adaptEmailProposalsToActionQueue(source, result, [], { sourceNextStep: step })[0];
+        return saved.id;
+      },
+    });
+    assert.equal(contexts[0].requestedNextStep, instruction);
+    assert.equal(contexts[0].thread.doneCriteria, item.doneCriteria);
+    assert.equal(Object.hasOwn(contexts[0].thread, 'workPlanChoice'), false);
+    assert.equal(isWorkPlanStepCompleted(item, instruction), false);
+    if (channel === 'email') {
+      assert.equal(saved.sourceNextStep, instruction);
+      assert.equal(saved.target, '');
+      assert.equal(saved.state, 'Drafted');
+    } else {
+      const draft = composer.read(item.id).teamsDraft;
+      assert.equal(draft.nextStep, instruction);
+      assert.equal(draft.targetEmail, '');
+      assert.equal(draft.needsTargetResolution, true);
+      assert.equal(canAddressTeamsDraft(draft), false);
+    }
+    item.completedNextSteps = [instruction];
+    assert.match(resolveWorkPlan(item).blockedReason, /complete/);
+  });
+}
 
 function deferred() {
   let resolve;

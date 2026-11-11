@@ -117,7 +117,7 @@ describe('WorkIQ prompt metadata parity', () => {
     assert.match(prompt, /"url": "https URL for the exact source signal"/);
     assert.match(prompt, /define what "done" looks like/);
     assert.match(prompt, /"doneCriteria":/);
-    assert.match(prompt, /0-2 specific, completable actions/);
+    assert.match(prompt, /0-2 distinct, concise outbound communication intents/);
   });
 });
 

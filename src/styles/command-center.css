@@ -255,6 +255,9 @@ rect[class*="today-color-"], rect[class*="today-event-"] { fill: var(--today-col
 .radar-next-move input { flex: 0 0 auto; width: 14px; height: 14px; margin: 3px 0 0; accent-color: var(--accent); }
 .radar-next-move span { min-width: 0; overflow-wrap: anywhere; }
 .radar-next-moves li:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.radar-custom-next-move { display: grid; gap: 6px; min-width: 0; padding: 0 9px 10px 32px; }
+.radar-custom-next-move label, .radar-custom-next-move small { color: var(--text-muted); font-size: .7rem; overflow-wrap: anywhere; }
+.radar-custom-next-move textarea { box-sizing: border-box; width: 100%; min-width: 0; resize: vertical; padding: 8px; border: 1px solid var(--border-input); border-radius: 5px; background: var(--bg-inset); color: var(--text); font: inherit; }
 .radar-plan-compose { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .at-card-head:has(.at-action-open) { flex-wrap: wrap; }
 .at-action-open { min-height: 28px; padding: 4px 7px; cursor: pointer; font-family: inherit; white-space: nowrap; }

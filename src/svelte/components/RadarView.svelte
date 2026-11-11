@@ -54,6 +54,7 @@
   import { safeDate } from '../lib/utils.js';
   import { nextItemSelectionAfterRemoval, reconcileRadarSelection, selectInboxRows } from '../lib/radar-selection.js';
   import { canAddressTeamsDraft, emptyThreadComposer, threadComposer } from '../lib/thread-composer.js';
+  import { draftMatchesWorkPlan, resolveWorkPlan } from '../lib/work-plan.js';
   import { hydrateRadarColdItems, resolveRadarItem } from '../lib/radar-navigation.js';
   import { ITEM_DELETION_CONFIRMATION, itemDeletionFailureMessage } from '../lib/item-deletion-ui.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
@@ -120,15 +121,18 @@
     returnFocus: null,
   });
   let synthesisState = $derived($threadComposer.get(selectedId) || emptyThreadComposer());
-  let teamsDraft = $derived(synthesisState.teamsDraft);
+  let teamsDraft = $derived(synthesisState.teamsDraft && (!workPlan.custom || selectedNextMove)
+    && draftMatchesWorkPlan(synthesisState.teamsDraft.nextStep, selectedNextMove) ? synthesisState.teamsDraft : null);
   let teamsCopyStatus = $derived(synthesisState.teamsCopyStatus);
   let teamsSendState = $derived(synthesisState.teamsSendState);
   let creatingEmailItemIds = $derived(new Set($actionProposals
     .filter((proposal) => proposal.channel === 'outlook-draft' && proposal.state === 'Executing')
     .map((proposal) => proposal.sourceItemId)));
   let emailProposal = $derived(
-    $actionProposals.find((proposal) => proposal.id === synthesisState.emailProposalId)
+    workPlan.custom && !selectedNextMove ? null : $actionProposals.find((proposal) => proposal.id === synthesisState.emailProposalId
+      && proposal.sourceItemId === selectedId && draftMatchesWorkPlan(proposal.sourceNextStep, selectedNextMove))
       || $actionProposals.filter((proposal) => proposal.sourceItemId === selectedId
+        && draftMatchesWorkPlan(proposal.sourceNextStep, selectedNextMove)
         && proposal.channel === 'outlook-draft' && !proposal.archivedAt && !proposal.auditOnly)
         .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0]
       || null
@@ -250,11 +254,12 @@
     const id = selectedId;
     if (database && id) untrack(() => { void resolveRadarItem(id).catch(() => { pageError = 'Could not load thread details.'; }); });
   });
-  let nextMoves = $derived(selected?.suggestedNextSteps?.slice(0, 2) || []);
-  let availableNextMoves = $derived(nextMoves.filter((step) => !isWorkPlanStepCompleted(selected, step)));
-  let selectedNextMove = $derived(availableNextMoves.includes(synthesisState.selectedNextStep)
-    ? synthesisState.selectedNextStep : availableNextMoves[0] || '');
-  let workPlanCompleted = $derived(nextMoves.length > 0 && !availableNextMoves.length);
+  let workPlan = $derived(resolveWorkPlan(selected, synthesisState));
+  let nextMoves = $derived(workPlan.moves);
+  let selectedNextMove = $derived(workPlan.step);
+  let workPlanCompleted = $derived(workPlan.completed);
+  let moveEditingBlocked = $derived(multipleSelected || deletionBlocked || !pageReady || synthesisState.status === 'generating'
+    || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selectedId));
   let timeline = $derived([...(selected?.updateHistory || [])].sort((a, b) => Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0)));
   let viewedAction = $derived(timeline.find((entry) => entry.eventId === synthesisState.viewedActionId && canViewCommunication(entry)) || null);
   let viewedMessage = $derived(viewedAction ? $actionProposals.find((proposal) => proposal.id === viewedAction.proposalId
@@ -269,6 +274,21 @@
     threadComposer.update(selectedId, {
       teamsDraft: null, teamsCopyStatus: '', teamsSendState: { status: 'idle', message: '' },
     });
+  }
+
+  function chooseNextMove(mode, step = '') {
+    if (!selected || moveEditingBlocked) return;
+    const id = selected.id;
+    setItemField(id, 'workPlanChoice', { ...selected.workPlanChoice, mode, selectedNextStep: step });
+    threadComposer.update(id, { selectedNextStep: step, emailOpen: false, viewedActionId: null });
+    if (mode === 'custom') requestAnimationFrame(() => {
+      if (selectedId === id) viewRoot?.querySelector('[data-testid="radar-custom-next-move-text"]')?.focus();
+    });
+  }
+
+  function editCustomNextMove(text) {
+    if (!selected || moveEditingBlocked) return;
+    setItemField(selected.id, 'workPlanChoice', { ...selected.workPlanChoice, mode: 'custom', customText: text });
   }
 
   function setSelectedThreadId(nextId) {
@@ -562,8 +582,7 @@
   async function draftMessage(requestedChannel, initiator = null, requestedNextStep = selectedNextMove, sourceItem = selected) {
     if (!$connected || multipleSelected || deletionBlocked || !pageReady) return;
     if (!sourceItem || creatingEmailItemIds.has(sourceItem.id)
-      || (sourceItem.suggestedNextSteps?.slice(0, 2).length > 0
-        && sourceItem.suggestedNextSteps.slice(0, 2).every((step) => isWorkPlanStepCompleted(sourceItem, step)))
+      || (sourceItem.id === selectedId && workPlan.blockedReason)
       || isWorkPlanStepCompleted(sourceItem, requestedNextStep)) return;
     const state = await threadComposer.generate({
       item: sourceItem,
@@ -1648,45 +1667,62 @@
           <h3>Work plan</h3>
           <div class="radar-context-block radar-context-recommendations" data-testid="scanner-recommendations">
             <h4>Recommended next moves</h4>
-            {#if nextMoves.length}
               <p class="radar-next-move-hint" id="radar-next-move-hint">{workPlanCompleted
-                ? 'These moves are complete. View their messages in Activity.'
-                : 'Choose a next move, then draft how to move it forward.'}</p>
-              <ol class="radar-next-moves" aria-label="Choose a recommended next move" aria-describedby="radar-next-move-hint">
+                ? 'These moves are complete. View their messages in Activity, or write a custom next move.'
+                : 'Choose what to ask someone for, then review an Email or Teams draft. Nothing is sent automatically.'}</p>
+              {#if !nextMoves.length}<p>No recommended next moves yet. Write a custom next move, or draft a follow-up from this thread's context.</p>{/if}
+              <ol class="radar-next-moves" aria-label="Choose a next move" aria-describedby="radar-next-move-hint">
                 {#each nextMoves as step, index}
-                  <li class:is-selected={selectedNextMove === step} class:is-completed={isWorkPlanStepCompleted(selected, step)}>
+                  <li class:is-selected={!workPlan.custom && selectedNextMove === step} class:is-completed={isWorkPlanStepCompleted(selected, step)}>
                     <label class="radar-next-move">
                       <input type="radio" name={`next-move-${selected.id}`} value={step}
-                        checked={selectedNextMove === step} data-testid={`radar-next-move-${index}`}
-                        disabled={!$connected || isWorkPlanStepCompleted(selected, step) || synthesisState.status === 'generating' || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selected.id)}
-                        on:change={() => threadComposer.update(selected.id, { selectedNextStep: step })} />
+                        checked={!workPlan.custom && selectedNextMove === step} data-testid={`radar-next-move-${index}`}
+                        disabled={moveEditingBlocked || isWorkPlanStepCompleted(selected, step)}
+                        on:change={() => chooseNextMove('recommended', step)} />
                       <span><span data-next-move-text>{step}</span>
                         {#if isWorkPlanStepCompleted(selected, step)}<small class="radar-next-move-completed">Completed</small>{/if}
                       </span>
                     </label>
                   </li>
                 {/each}
+                <li class:is-selected={workPlan.custom}>
+                  <label class="radar-next-move">
+                    <input type="radio" name={`next-move-${selected.id}`} value="custom"
+                      checked={workPlan.custom} data-testid="radar-custom-next-move"
+                      disabled={moveEditingBlocked} on:change={() => chooseNextMove('custom')} />
+                    <span>Custom next move</span>
+                  </label>
+                  {#if workPlan.custom}
+                    <div class="radar-custom-next-move">
+                      <label for="radar-custom-next-move-text">What should the message ask for?</label>
+                      <textarea id="radar-custom-next-move-text" data-testid="radar-custom-next-move-text"
+                        rows="3" maxlength="500" value={workPlan.customText} disabled={moveEditingBlocked}
+                        aria-describedby="radar-custom-next-move-help"
+                        placeholder="Ask the owner to confirm the blocker and share the next deliverable or update."
+                        on:input={(event) => editCustomNextMove(event.target.value)}></textarea>
+                      <small id="radar-custom-next-move-help">Describe the recipient and specific ask. Verify facts and recipient in the draft before using it.</small>
+                    </div>
+                  {/if}
+                </li>
               </ol>
-            {:else}
-              <p>No recommended next moves yet. Draft a follow-up from this thread's context.</p>
-            {/if}
+            {#if workPlan.blockedReason}<p class="radar-next-move-hint" role="status">{workPlan.blockedReason}</p>{/if}
             <div class="radar-plan-compose">
-              <span class="radar-action-label">{workPlanCompleted ? 'All next moves completed' : nextMoves.length ? 'Draft selected next move' : 'Draft a follow-up'}</span>
+              <span class="radar-action-label">{workPlan.custom ? 'Draft custom next move' : workPlanCompleted ? 'All next moves completed' : nextMoves.length ? 'Draft selected next move' : 'Draft a follow-up'}</span>
               <div class="radar-action-group radar-action-group--compose" role="group" aria-label="Draft work plan message"
                 aria-busy={synthesisState.threadId === selected.id && synthesisState.status === 'generating' ? 'true' : 'false'}>
                 <button type="button" class="small-btn radar-action-button radar-action-button--compose" data-testid="radar-draft-email"
-                  title={multipleSelected ? draftSelectionReason : 'Draft an email for the selected next move'}
+                  title={multipleSelected ? draftSelectionReason : workPlan.blockedReason || 'Draft an email for the selected next move'}
                   class:is-loading={synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'email' && synthesisState.status === 'generating'}
-                  disabled={multipleSelected || deletionBlocked || !pageReady || !$connected || workPlanCompleted || synthesisState.status === 'generating' || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selected.id)}
+                  disabled={multipleSelected || deletionBlocked || !pageReady || !$connected || Boolean(workPlan.blockedReason) || synthesisState.status === 'generating' || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selected.id)}
                   on:click={(event) => draftMessage('email', event.currentTarget)}>
                   {synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'email' && synthesisState.status === 'generating'
                     ? 'Drafting…'
                     : 'Email'}
                 </button>
                 <button type="button" class="small-btn radar-action-button radar-action-button--compose" data-testid="radar-draft-teams"
-                  title={multipleSelected ? draftSelectionReason : 'Draft a Teams message for the selected next move'}
+                  title={multipleSelected ? draftSelectionReason : workPlan.blockedReason || 'Draft a Teams message for the selected next move'}
                   class:is-loading={synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'teams' && synthesisState.status === 'generating'}
-                  disabled={multipleSelected || deletionBlocked || !pageReady || !$connected || workPlanCompleted || synthesisState.status === 'generating' || ['sending', 'unconfirmed'].includes(teamsSendState.status) || creatingEmailItemIds.has(selected.id)}
+                  disabled={multipleSelected || deletionBlocked || !pageReady || !$connected || Boolean(workPlan.blockedReason) || synthesisState.status === 'generating' || ['sending', 'unconfirmed'].includes(teamsSendState.status) || creatingEmailItemIds.has(selected.id)}
                   on:click={(event) => draftMessage('teams', event.currentTarget)}>
                   {synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'teams' && synthesisState.status === 'generating'
                     ? 'Drafting…'
@@ -1722,7 +1758,7 @@
                   </div>
                 </section>
           {/if}
-          {#if synthesisState.threadId === selected.id && synthesisState.status === 'error'}
+          {#if synthesisState.threadId === selected.id && synthesisState.status === 'error' && draftMatchesWorkPlan(synthesisState.requestedNextStep, selectedNextMove)}
             <div class="radar-draft-error" role="alert" data-testid="proposal-error">
               <strong>{synthesisState.requestedChannel === 'teams' ? 'Teams' : 'Email'} draft generation failed</strong>
               <p>{synthesisState.error}</p>
@@ -1734,7 +1770,7 @@
               </button>
             </div>
           {/if}
-          {#if synthesisState.threadId === selected.id && synthesisState.status === 'ready'
+          {#if synthesisState.threadId === selected.id && synthesisState.status === 'ready' && draftMatchesWorkPlan(synthesisState.requestedNextStep, selectedNextMove)
             && !synthesisState.result.proposals.length}
             <div class="radar-draft-notice" role="status" data-testid="proposal-no-communication">
               <strong>No {synthesisState.requestedChannel === 'teams' ? 'Teams' : 'email'} draft generated</strong>
