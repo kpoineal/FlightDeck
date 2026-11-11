@@ -82,7 +82,8 @@ export function rememberRepositoryThread(item) {
 registerRepositoryProjection(rememberRepositoryThread);
 export function cacheRepositoryRows(rows) {
   const known = new Set([...get(items), ...get(coldItems)].map(item => item.id));
-  const added = rows.filter(item => !known.has(item.id));
+  const deleted = new Set(get(deletedItemIds));
+  const added = rows.filter(item => !known.has(item.id) && !deleted.has(item.id));
   added.forEach(rememberRepositoryThread);
   if (added.length) coldItems.update(current => {
     const merged = [...current, ...added];
@@ -299,6 +300,9 @@ export async function runPersistentStateTransaction({
   }
 
   if (!result.ok) {
+    const repositoryOutcome = usesRepository() && canonicalAttempted ? _pendingCommand?.outcome : null;
+    // A rolled-back transaction must not replay its rejected destructive command on a later save.
+    if (repositoryOutcome === 'rejected') _pendingCommand = null;
     transaction.phase = 'rolling-back';
     let restored = false;
     try {
@@ -321,7 +325,7 @@ export async function runPersistentStateTransaction({
     } catch (_) {
       restored = false;
     }
-    if (!restored) result = { ok: false, code: 'PERSISTENCE_RECOVERY_REQUIRED' };
+    if (!restored || repositoryOutcome === 'unknown') result = { ok: false, code: 'PERSISTENCE_RECOVERY_REQUIRED' };
   }
 
   transaction.phase = 'finishing';
@@ -928,14 +932,22 @@ async function writeRepositoryState() {
       _pendingCommand = { input: { commandId: crypto.randomUUID(), expectedRevision: _revision,
         type: 'applyChanges', payload: { changes } }, included };
     }
+    _pendingCommand.outcome = 'unknown';
     const result = await window.workiq.stateCommand(_pendingCommand.input);
     if (!result.ok) {
+      _pendingCommand.outcome = 'rejected';
       _dirty = true;
       reportRepositoryFailure(result);
       persistenceStatus.set(['CONFLICT','RECORD_CONFLICT','DELETED','NOT_FOUND'].includes(result.code) ? 'conflict' : 'failed');
       return false;
     }
-    _databaseBase = _pendingCommand.included;
+    // Page/detail reads can remember existing records while this write awaits its receipt.
+    // Do not turn those newly cached records into creates on the next save.
+    const included = _pendingCommand.included;
+    const knownIds = new Set(included.items.map(item => item.id));
+    const deleted = new Set(included.deletedItemIds);
+    included.items.push(..._databaseBase.items.filter(item => !knownIds.has(item.id) && !deleted.has(item.id)));
+    _databaseBase = included;
     _pendingCommand = null;
     _revision = result.revision;
     repositoryRevision.set(_revision);

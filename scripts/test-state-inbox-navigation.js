@@ -69,7 +69,7 @@ async function main(threadCount) {
       const title = await target.locator('strong').innerText();
       await expect(target).toHaveClass(/unread/);
       const before = await page.locator('.radar-thread-list').evaluate(element => ({
-        scrollTop: element.scrollTop, firstId: element.firstElementChild.dataset.threadId,
+        scrollTop: element.scrollTop, firstId: element.querySelector('.radar-thread').dataset.threadId,
         documentTop: document.scrollingElement.scrollTop,
         listTop: element.getBoundingClientRect().top,
       }));
@@ -88,7 +88,7 @@ async function main(threadCount) {
       if (threadCount > 100) await expect(paging).toContainText(`Page ${expectedPage}`);
       else await expect(paging).toHaveCount(0);
       const after = await page.locator('.radar-thread-list').evaluate(element => ({
-        scrollTop: element.scrollTop, firstId: element.firstElementChild.dataset.threadId,
+        scrollTop: element.scrollTop, firstId: element.querySelector('.radar-thread').dataset.threadId,
         documentTop: document.scrollingElement.scrollTop,
         listTop: element.getBoundingClientRect().top,
       }));

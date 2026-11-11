@@ -28,6 +28,7 @@
     mailboxWorkStatusClass,
   } from '../lib/mailbox.js';
   import { matchesInboxFilters } from '../lib/inbox-filters.js';
+  import { inboxActionState } from '../lib/inbox-action-state.js';
   import {
     createActionEventId,
     deleteItem,
@@ -51,7 +52,7 @@
   import { runItemCheck } from '../lib/monitor-engine.js';
   import { logError } from '../lib/logger.js';
   import { safeDate } from '../lib/utils.js';
-  import { nextItemSelectionAfterRemoval, reconcileRadarSelection } from '../lib/radar-selection.js';
+  import { nextItemSelectionAfterRemoval, reconcileRadarSelection, selectInboxRows } from '../lib/radar-selection.js';
   import { canAddressTeamsDraft, emptyThreadComposer, threadComposer } from '../lib/thread-composer.js';
   import { hydrateRadarColdItems, resolveRadarItem } from '../lib/radar-navigation.js';
   import { ITEM_DELETION_CONFIRMATION, itemDeletionFailureMessage } from '../lib/item-deletion-ui.js';
@@ -88,6 +89,17 @@
   let quickFilter = $state('');
   let refineFilters = $state({});
   let selectedId = $state(null);
+  let selectedIds = $state([]);
+  let selectionAnchor = $state(null);
+  let loadedPageScope = $state('');
+  let recoveryRequired = $state(false);
+  let localActionBusy = $state(false);
+  let multipleSelected = $derived(selectedIds.length > 1);
+  const draftSelectionReason = 'Select one thread to draft a message.';
+  let selectionScope = $derived(JSON.stringify({ smartView, scannerId, query, sort, quickFilter, refineFilters, pageOffset }));
+  let pageReady = $derived(!database || loadedPageScope === selectionScope);
+  let deletionBlocked = $derived(localActionBusy || deleteState.status === 'deleting' || recoveryRequired
+    || ['submitting', 'recovery'].includes(scannerDeletion.status));
   let pendingNavigationId = $state(null);
   let mobileStep = $state('list');
   let viewRoot = $state(null);
@@ -126,6 +138,26 @@
   let contextMenu = $state(null);
   let contextTarget = $derived(threads.find((item) => item.id === contextMenu?.id) || null);
   let contextEntries = $derived(contextTarget ? threadMenuEntries(contextTarget) : []);
+
+  $effect(() => {
+    selectionScope;
+    untrack(() => {
+      selectedIds = [];
+      selectionAnchor = null;
+      deleteRequest = null;
+    });
+  });
+
+  $effect(() => {
+    const visibleIds = new Set(threads.map(item => item.id));
+    if (deleteState.status === 'deleting') return;
+    untrack(() => {
+      const remaining = selectedIds.filter(id => visibleIds.has(id));
+      if (remaining.length !== selectedIds.length) selectedIds = remaining;
+      if (!visibleIds.has(selectionAnchor)) selectionAnchor = null;
+      if (deleteRequest?.ids.some(id => !visibleIds.has(id) && (deleteRequest.bulk || selected?.id !== id))) deleteRequest = null;
+    });
+  });
 
   $effect(() => {
     const menu = contextMenu;
@@ -183,6 +215,7 @@
     return filtered.sort(compareMailboxThreads);
   });
   let firstThreadId = $derived(threads.at(0)?.id || null);
+  let tabbableThreadId = $derived(threads.some(item => item.id === selectedId) ? selectedId : firstThreadId);
   let activeFilters = $derived.by(() => {
     const filters = [];
     if (quickFilter) filters.push({ facet: 'quick', value: quickFilter, label: filterLabel(quickFilter) });
@@ -202,11 +235,13 @@
     const revision = $repositoryRevision;
     if (pageFilter !== filters) { pageFilter = filters; pageOffset = 0; }
     const offset = pageOffset;
+    const scope = selectionScope;
     void window.workiq.stateQuery('radarPage', { ...JSON.parse(filters), now, offset, limit: 100 }).then(result => {
       if (request !== pageRequest || result.revision < revision) return;
       const lastOffset = Math.max(0, Math.ceil(result.total / 100) - 1) * 100;
       if (offset > lastOffset) { pageOffset = lastOffset; return; }
       repositoryPage = result;
+      loadedPageScope = scope;
       cacheRepositoryRows(result.rows);
       pageError = '';
     }).catch(() => { if (request === pageRequest) pageError = 'Could not load this page. Your saved data has not been replaced.'; });
@@ -308,6 +343,9 @@
   });
 
   async function selectThread(item, origin, { markRead = false } = {}) {
+    if (deletionBlocked || !pageReady) return;
+    selectedIds = [item.id];
+    selectionAnchor = item.id;
     setSelectedThreadId(item.id);
     originatingThread = origin;
     mobileStep = 'detail';
@@ -333,13 +371,54 @@
     if (markRead && isMailboxUnread(item)) markItemRead(item.id);
   }
 
+  function changeRowSelection(item, event) {
+    if (!pageReady || deletionBlocked) return;
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      void selectThread(item, event.currentTarget, { markRead: true });
+      return;
+    }
+    const next = selectInboxRows(threads.map(thread => thread.id), selectedIds, selectionAnchor, item.id, {
+      additive: event.ctrlKey || event.metaKey, range: event.shiftKey,
+    });
+    selectedIds = next.ids;
+    selectionAnchor = next.anchorId;
+  }
+
+  function selectVisiblePage() {
+    if (!pageReady || deletionBlocked) return;
+    selectedIds = threads.map(item => item.id);
+    selectionAnchor = selectedIds.at(0) || null;
+  }
+
+  function clearSelection() {
+    if (deleteState.status === 'deleting') return;
+    selectedIds = [];
+    selectionAnchor = null;
+  }
+
   function handleThreadKeydown(event, item) {
+    if (event.target?.matches?.('input, select, textarea, [contenteditable="true"]')) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      clearSelection();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      event.preventDefault();
+      selectVisiblePage();
+      return;
+    }
+    if (event.key === 'Delete') {
+      event.preventDefault();
+      requestDeleteRows(selectedIds.length ? selectedIds : [item.id], event.currentTarget, true);
+      return;
+    }
+    if (!pageReady || deletionBlocked) { event.preventDefault(); return; }
     if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
       openThreadMenu(event, item, true);
       return;
     }
     if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-    if (event.target?.matches?.('input, select, textarea, [contenteditable="true"]')) return;
     const currentIndex = threads.findIndex((thread) => thread.id === item.id);
     if (currentIndex < 0) return;
     event.preventDefault();
@@ -349,6 +428,11 @@
       : Math.min(threads.length - 1, currentIndex + 1);
     const target = threads[targetIndex];
     if (!target) return;
+    const next = selectInboxRows(threads.map(thread => thread.id), selectedIds, selectionAnchor || item.id, target.id, {
+      additive: event.ctrlKey || event.metaKey, range: event.shiftKey,
+    });
+    selectedIds = next.ids;
+    selectionAnchor = next.anchorId;
     setSelectedThreadId(target.id);
     originatingThread = event.currentTarget;
     requestAnimationFrame(() => {
@@ -476,7 +560,7 @@
   }
 
   async function draftMessage(requestedChannel, initiator = null, requestedNextStep = selectedNextMove, sourceItem = selected) {
-    if (!$connected) return;
+    if (!$connected || multipleSelected || deletionBlocked || !pageReady) return;
     if (!sourceItem || creatingEmailItemIds.has(sourceItem.id)
       || (sourceItem.suggestedNextSteps?.slice(0, 2).length > 0
         && sourceItem.suggestedNextSteps.slice(0, 2).every((step) => isWorkPlanStepCompleted(sourceItem, step)))
@@ -528,12 +612,14 @@
   }
 
   function reviewEmailProposal(proposalId, initiator) {
+    if (multipleSelected || deletionBlocked || !pageReady) return;
     if (!get(actionProposals).some((proposal) => proposal.id === proposalId)) return;
     threadComposer.update(selectedId, { emailProposalId: proposalId, emailOpen: true });
     requestAnimationFrame(() => viewRoot?.querySelector('[data-testid="email-draft-recipient"]')?.focus());
   }
 
   function openEmailActions(proposalId, initiator) {
+    if (multipleSelected || deletionBlocked || !pageReady) return;
     selectedProposalId.set(proposalId);
     openActionsQueue(initiator);
   }
@@ -563,6 +649,7 @@
   }
 
   async function copyTeamsDraft() {
+    if (multipleSelected) return;
     const draft = teamsDraft;
     if (!draft || draft.sourceItemId !== selected?.id || !draft.message) return;
     try {
@@ -578,7 +665,7 @@
   }
 
   async function sendTeamsDraft() {
-    if (!$connected) return;
+    if (!$connected || multipleSelected || deletionBlocked || !pageReady) return;
     const draft = teamsDraft;
     if (!draft || draft.sourceItemId !== selected?.id || creatingEmailItemIds.has(selected.id)
       || isWorkPlanStepCompleted(selected, draft.nextStep) || ['sending', 'sent', 'unconfirmed'].includes(teamsSendState.status)) return;
@@ -787,41 +874,97 @@
   }
 
   function threadMenuEntries(item) {
+    const targets = threadActionTargets(item);
+    const state = inboxActionState(targets, now);
+    const scope = targets.length > 1 ? ` (${targets.length} selected cards)` : '';
+    const blocked = deletionBlocked || !pageReady;
     return [
-      { id: 'open', label: 'Open thread' },
-      { id: 'read', label: isMailboxUnread(item) ? 'Mark read' : 'Mark unread' },
-      { id: 'status', label: 'Change work status', children: LIFECYCLE_STATUSES.map((status) => ({
-        id: `status:${status}`, label: LIFECYCLE_LABELS[status], current: item.lifecycleStatus === status,
+      { id: 'open', label: 'Open thread', disabled: blocked },
+      { id: 'read', label: `${state.markRead ? 'Mark read' : 'Mark unread'}${scope}`, disabled: blocked },
+      { id: 'status', label: `Change work status${scope}`, disabled: blocked, children: LIFECYCLE_STATUSES.map((status) => ({
+        id: `status:${status}`, label: LIFECYCLE_LABELS[status], current: state.lifecycle === status, disabled: blocked,
       })) },
-      { id: 'severity', label: 'Change criticality', children: ['Critical', 'Elevated', 'Observe'].map((severity) => ({
-        id: `severity:${severity}`, label: severity, current: item.severity === severity,
+      { id: 'severity', label: `Change criticality${scope}`, disabled: blocked, children: ['Critical', 'Elevated', 'Observe'].map((severity) => ({
+        id: `severity:${severity}`, label: severity, current: state.severity === severity, disabled: blocked,
       })) },
-      { id: 'snooze', label: isMailboxSnoozed(item, now) ? 'Unsnooze' : 'Snooze for 24 hours',
-        disabled: !isMailboxActive(item) && !isMailboxSnoozed(item, now),
-        reason: !isMailboxActive(item) && !isMailboxSnoozed(item, now) ? 'Reopen this thread first.' : '' },
-      { id: 'archive', label: isMailboxArchived(item) ? 'Restore to In Progress' : 'Archive' },
+      { id: 'snooze', label: `${state.unsnooze ? 'Unsnooze' : 'Snooze for 24 hours'}${scope}`,
+        disabled: blocked || state.snoozeBlocked,
+        reason: state.snoozeBlocked ? 'Reopen all targeted threads first.' : '' },
+      { id: 'archive', label: `${state.archive ? 'Archive' : 'Restore to In Progress'}${scope}`, disabled: blocked },
       ...['email', 'teams'].map((channel) => {
         const draft = threadDraft(item, channel);
         return { id: `draft:${channel}`, label: `${draft.existing || draft.busy ? 'View' : 'Draft'} ${channel === 'email' ? 'email' : 'Teams message'}`,
-          disabled: draft.unavailable, reason: draft.reason };
+          disabled: multipleSelected || blocked || draft.unavailable,
+          reason: multipleSelected ? draftSelectionReason : draft.reason };
       }),
-      { id: 'delete', label: 'Delete from FlightDeck…', danger: true, disabled: deleteState.status === 'deleting' },
+      { id: 'delete', label: selectedIds.includes(item.id) && selectedIds.length > 1
+        ? `Delete ${selectedIds.length} selected cards…` : 'Delete from FlightDeck…',
+        danger: true, disabled: blocked },
     ];
+  }
+
+  function threadActionTargets(item) {
+    return selectedIds.includes(item.id) && multipleSelected
+      ? threads.filter(row => selectedIds.includes(row.id)) : [item];
+  }
+
+  async function applyThreadAction(action, targets) {
+    const scope = selectionScope;
+    const state = inboxActionState(targets, now);
+    if (action === 'snooze' && state.snoozeBlocked) return;
+    const snoozeUntil = state.unsnooze ? null : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    let saved = 0;
+    let mutating = false;
+    localActionBusy = true;
+    try {
+      // Resolve the complete snapshot before edits can remove filtered rows or truncate history.
+      for (const target of targets) {
+        if (!await resolveRadarItem(target.id)) throw new Error('Thread could not be loaded.');
+        if (!mounted || scope !== selectionScope) return;
+      }
+      for (const target of targets) {
+        if (get(deletedItemIds).includes(target.id)
+          || ![...get(items), ...get(coldItems)].some(item => item.id === target.id)) {
+          throw new Error('Target is no longer available.');
+        }
+        mutating = true;
+        if (action === 'read') {
+          if (state.markRead) markItemRead(target.id);
+          else setItemField(target.id, 'hasNewUpdate', true);
+        } else if (action.startsWith('status:')) setItemLifecycle(target.id, action.slice(7));
+        else if (action.startsWith('severity:')) setItemSeverity(target.id, action.slice(9));
+        else if (action === 'snooze') setItemField(target.id, 'snoozeUntil', snoozeUntil);
+        else if (action === 'archive') setItemLifecycle(target.id, state.archive ? 'archived' : 'in-progress');
+        if (!await savePersistentState($isDemo)) throw new Error('Save was not acknowledged.');
+        saved += 1;
+      }
+    } catch (error) {
+      logError('radar', 'Thread menu action failed', { action, saved, total: targets.length });
+      showToast(`${saved} of ${targets.length} cards confirmed saved. ${mutating
+        ? 'Changes may remain unsaved locally; retry saving in the local-state banner before reloading.'
+        : 'No cards changed. Could not load every target; try again.'}`, { icon: '!', durationMs: 9000 });
+    } finally {
+      localActionBusy = false;
+    }
   }
 
   async function chooseThreadAction(action) {
     const menu = contextMenu;
     const item = threads.find((entry) => entry.id === menu?.id);
     if (!item) { closeThreadMenu(false); return; }
+    const targets = threadActionTargets(item);
+    if (deletionBlocked || !pageReady || (action.startsWith('draft:') && multipleSelected)) return;
     closeThreadMenu(false);
     if (action === 'delete') {
-      requestDeleteThread(item, menu.origin);
+      if (selectedIds.includes(item.id) && selectedIds.length > 1) requestDeleteRows(selectedIds, menu.origin);
+      else requestDeleteThread(item, menu.origin);
       return;
     }
     if (action === 'open' || action.startsWith('draft:')) {
       const channel = action.split(':')[1];
       const draft = channel ? threadDraft(item, channel) : null;
-      selectThread(item, menu.origin, { markRead: action === 'open' });
+      await selectThread(item, menu.origin, { markRead: action === 'open' });
+      if (multipleSelected || selectedId !== item.id) return;
       if (!draft || draft.unavailable) return;
       threadComposer.update(item.id, { viewedActionId: null });
       // Resolve the target before selecting; reactive selection must never choose the draft's owner.
@@ -838,17 +981,7 @@
       }
       return;
     }
-    if (action === 'read') {
-      if (isMailboxUnread(item)) markItemRead(item.id);
-      else setItemField(item.id, 'hasNewUpdate', true);
-    } else if (action.startsWith('status:')) setItemLifecycle(item.id, action.slice(7));
-    else if (action.startsWith('severity:')) setItemSeverity(item.id, action.slice(9));
-    else if (action === 'snooze') snoozeThread(item);
-    else if (action === 'archive') {
-      if (isMailboxArchived(item)) {
-        setItemLifecycle(item.id, 'in-progress');
-      } else setItemLifecycle(item.id, 'archived');
-    }
+    await applyThreadAction(action, targets);
     requestAnimationFrame(() => {
       const target = menu.origin?.isConnected ? menu.origin
         : viewRoot?.querySelector('.radar-thread[tabindex="0"]') || viewRoot?.querySelector('.radar-thread-list-pane > header');
@@ -857,7 +990,7 @@
   }
 
   function requestDeleteSelected(event) {
-    if (!selected || deleteState.status === 'deleting') return;
+    if (!selected || deletionBlocked) return;
     const menu = event.currentTarget.closest('details');
     const returnFocus = menu?.querySelector('summary') || event.currentTarget;
     if (menu) menu.open = false;
@@ -865,52 +998,69 @@
   }
 
   function requestDeleteThread(item, returnFocus) {
-    if (!item || deleteState.status === 'deleting') return;
+    if (!item) return;
+    requestDeleteRows([item.id], returnFocus, false);
+  }
+
+  function requestDeleteRows(ids, returnFocus, bulk = true) {
+    if (!pageReady || deletionBlocked || deleteRequest) return;
+    const targets = bulk ? threads.filter(item => ids.includes(item.id))
+      : ids.map(id => threads.find(item => item.id === id) || (selected?.id === id ? selected : null)).filter(Boolean);
+    if (!targets.length) return;
     deleteState = { status: 'idle', message: '' };
     deleteRequest = {
-      id: item.id,
-      title: item.title || 'Untitled item',
-      replacementId: nextItemSelectionAfterRemoval(threads, item.id),
+      ids: targets.map(item => item.id),
+      title: bulk ? `${targets.length} selected card${targets.length === 1 ? '' : 's'} on this page` : targets[0].title || 'Untitled item',
+      bulk,
+      scope: selectionScope,
+      replacementId: nextItemSelectionAfterRemoval(threads, targets[0].id),
       returnFocus,
     };
   }
 
   async function confirmDeleteSelected() {
     const request = deleteRequest;
-    if (!request || deleteState.status === 'deleting') return;
+    if (!request || deletionBlocked || request.scope !== selectionScope || !pageReady) return;
     deleteRequest = null;
     deleteState = { status: 'deleting', message: '' };
     const selectedBefore = selectedId;
-    const deletingSelected = selectedBefore === request.id;
-    const result = await deleteItem(request.id);
-    if (result.ok) {
-      if (!deletingSelected) {
-        deleteState = { status: 'idle', message: '' };
-        requestAnimationFrame(() => viewRoot?.querySelector(`[data-thread-id="${CSS.escape(selectedId || request.replacementId || '')}"]`)?.focus({ preventScroll: true }));
-        return;
+    const removed = [];
+    let failure = null;
+    for (const id of request.ids) {
+      try {
+        // Repository pages contain partial/off-cache rows; hydrate before the existing durable transaction.
+        const target = await resolveRadarItem(id);
+        const result = target ? await deleteItem(id) : { ok: false, code: 'NOT_FOUND' };
+        if (!result.ok) { failure = result; break; }
+        removed.push(id);
+      } catch (error) {
+        logError('radar', 'Could not delete card', { code: error?.code || 'DELETE_FAILED' });
+        failure = { code: error?.code || 'DELETE_FAILED' };
+        break;
       }
-      const replacementId = threads.some((thread) => thread.id === request.replacementId)
-        ? request.replacementId
-        : null;
-      setSelectedThreadId(replacementId);
+    }
+    recoveryRequired = failure?.code === 'PERSISTENCE_RECOVERY_REQUIRED';
+    const remaining = request.ids.filter(id => !removed.includes(id));
+    selectedIds = request.scope === selectionScope
+      ? (failure ? remaining : selectedIds.filter(id => !removed.includes(id))) : [];
+    if (removed.includes(selectedBefore)) {
+      setSelectedThreadId(threads.find(thread => thread.id === request.replacementId)?.id
+        || threads.find(thread => !removed.includes(thread.id))?.id || null);
       originatingThread = null;
-      mobileStep = replacementId ? 'detail' : 'list';
-      deleteState = { status: 'idle', message: '' };
-      if (replacementId) requestAnimationFrame(() => viewRoot?.querySelector('.radar-thread-detail h2')?.focus());
-      return;
-    }
-
-    if (deletingSelected) {
-      setSelectedThreadId(threads.some((thread) => thread.id === request.id) ? request.id : null);
-      mobileStep = selectedId ? 'detail' : 'list';
-    }
-    deleteState = {
+    } else if (failure && request.ids.includes(selectedBefore)) setSelectedThreadId(selectedBefore);
+    if (request.bulk) mobileStep = 'list';
+    else mobileStep = selectedId ? 'detail' : 'list';
+    deleteState = failure ? {
       status: 'error',
-      message: itemDeletionFailureMessage(result.code),
-    };
+      message: request.bulk
+        ? `${removed.length} of ${request.ids.length} cards deleted. ${remaining.length} not confirmed deleted; deletion stopped. ${recoveryRequired ? itemDeletionFailureMessage(failure.code) : 'The remaining visible cards stay selected for retry.'}`
+        : itemDeletionFailureMessage(failure.code),
+    } : { status: 'idle', message: '' };
+    if (!failure && request.bulk) showToast(`Deleted ${removed.length} cards from FlightDeck.`);
     requestAnimationFrame(() => {
-      const target = deletingSelected ? viewRoot?.querySelector('.radar-thread-detail h2')
-        : viewRoot?.querySelector(`[data-thread-id="${CSS.escape(request.id)}"]`) || request.returnFocus;
+      const target = !request.bulk && selectedId ? viewRoot?.querySelector('.radar-thread-detail h2')
+        : viewRoot?.querySelector(`[data-thread-id="${CSS.escape(remaining[0] || selectedId || '')}"]`)
+          || viewRoot?.querySelector('[data-testid="inbox-select-page"]');
       target?.focus({ preventScroll: true });
     });
   }
@@ -1013,6 +1163,7 @@
   }
 
   async function requestScannerDeletion({ scannerId: requestedScannerId, returnFocus }) {
+    if (deletionBlocked) return;
     const preview = await previewScannerDeletion(requestedScannerId);
     if (preview?.ok === false) return;
     scannerModalOpen = false;
@@ -1064,7 +1215,7 @@
   }
 
   async function confirmScannerDeletion(request) {
-    if (!scannerDeletion.preview || ['submitting', 'recovery'].includes(scannerDeletion.status)) return;
+    if (!scannerDeletion.preview || deletionBlocked) return;
     const currentPreview = scannerDeletion.preview;
     const replacementId = request.disposition === 'delete-all'
       ? replacementAfterScannerDeletion(currentPreview.itemIds)
@@ -1364,7 +1515,7 @@
           </div>
         {/if}
       </div>
-      <div class="radar-thread-list">
+      <div class="radar-thread-list" aria-busy={!pageReady || deleteState.status === 'deleting'}>
         {#if threads.length}
           {#each threads as item (item.id)}
             {@const statusLabel = mailboxWorkStatus(item)}
@@ -1378,14 +1529,16 @@
                 ? (composer.requestedChannel === 'teams' ? 'Teams draft failed' : 'Email draft failed')
               : composer?.teamsSendState.status === 'sending' ? 'Sending Teams message...' : ''}
             <button type="button" class="radar-thread mailbox-thread-row"
-              class:selected={selectedId === item.id}
+              class:selected={selectedIds.includes(item.id)}
               class:unread={isMailboxUnread(item)}
               data-thread-id={item.id}
+              aria-pressed={selectedIds.includes(item.id)}
+              disabled={!pageReady || deleteState.status === 'deleting'}
               aria-current={selectedId === item.id ? 'true' : undefined}
-              tabindex={selectedId === item.id || (!selectedId && item.id === firstThreadId) ? 0 : -1}
+              tabindex={tabbableThreadId === item.id ? 0 : -1}
               use:onkeydown={item}
               on:contextmenu={(event) => openThreadMenu(event, item)}
-              on:click={(event) => selectThread(item, event.currentTarget, { markRead: true })}>
+              on:click={(event) => changeRowSelection(item, event)}>
               <span class="mailbox-row-topline radar-thread__top">
                 <span class="mailbox-unread-dot" aria-label={isMailboxUnread(item) ? 'Unread' : 'Read'}></span>
                 <strong>{item.title || 'Untitled item'}</strong>
@@ -1450,7 +1603,7 @@
                   <button type="button" class="radar-more-menu__item" data-testid="radar-archive"
                     title="Archive this item" on:click={() => setItemLifecycle(selected.id, 'archived')}>Archive</button>
                   <button type="button" class="radar-more-menu__item radar-more-menu__item--delete" data-testid="radar-delete"
-                    title="Delete this local FlightDeck card" disabled={deleteState.status === 'deleting'}
+                    title="Delete this local FlightDeck card" disabled={deletionBlocked || !pageReady}
                     on:click={requestDeleteSelected}>Delete from FlightDeck…</button>
                 </div>
               </details>
@@ -1525,18 +1678,18 @@
               <div class="radar-action-group radar-action-group--compose" role="group" aria-label="Draft work plan message"
                 aria-busy={synthesisState.threadId === selected.id && synthesisState.status === 'generating' ? 'true' : 'false'}>
                 <button type="button" class="small-btn radar-action-button radar-action-button--compose" data-testid="radar-draft-email"
-                  title="Draft an email for the selected next move"
+                  title={multipleSelected ? draftSelectionReason : 'Draft an email for the selected next move'}
                   class:is-loading={synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'email' && synthesisState.status === 'generating'}
-                  disabled={!$connected || workPlanCompleted || synthesisState.status === 'generating' || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selected.id)}
+                  disabled={multipleSelected || deletionBlocked || !pageReady || !$connected || workPlanCompleted || synthesisState.status === 'generating' || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selected.id)}
                   on:click={(event) => draftMessage('email', event.currentTarget)}>
                   {synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'email' && synthesisState.status === 'generating'
                     ? 'Drafting…'
                     : 'Email'}
                 </button>
                 <button type="button" class="small-btn radar-action-button radar-action-button--compose" data-testid="radar-draft-teams"
-                  title="Draft a Teams message for the selected next move"
+                  title={multipleSelected ? draftSelectionReason : 'Draft a Teams message for the selected next move'}
                   class:is-loading={synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'teams' && synthesisState.status === 'generating'}
-                  disabled={!$connected || workPlanCompleted || synthesisState.status === 'generating' || ['sending', 'unconfirmed'].includes(teamsSendState.status) || creatingEmailItemIds.has(selected.id)}
+                  disabled={multipleSelected || deletionBlocked || !pageReady || !$connected || workPlanCompleted || synthesisState.status === 'generating' || ['sending', 'unconfirmed'].includes(teamsSendState.status) || creatingEmailItemIds.has(selected.id)}
                   on:click={(event) => draftMessage('teams', event.currentTarget)}>
                   {synthesisState.threadId === selected.id && synthesisState.requestedChannel === 'teams' && synthesisState.status === 'generating'
                     ? 'Drafting…'
@@ -1577,7 +1730,8 @@
               <strong>{synthesisState.requestedChannel === 'teams' ? 'Teams' : 'Email'} draft generation failed</strong>
               <p>{synthesisState.error}</p>
               <button type="button" class="small-btn"
-                disabled={teamsSendState.status === 'sending' || (synthesisState.requestedChannel === 'teams' && teamsSendState.status === 'unconfirmed')}
+                title={multipleSelected ? draftSelectionReason : undefined}
+                disabled={multipleSelected || deletionBlocked || !pageReady || teamsSendState.status === 'sending' || (synthesisState.requestedChannel === 'teams' && teamsSendState.status === 'unconfirmed')}
                 on:click={(event) => draftMessage(synthesisState.requestedChannel, event.currentTarget, synthesisState.requestedNextStep)}>
                 Retry {synthesisState.requestedChannel === 'teams' ? 'Teams' : 'email'} draft
               </button>
@@ -1592,17 +1746,18 @@
           {/if}
           {#if emailProposal && !synthesisState.emailOpen && emailProposal.state !== 'Succeeded' && !isWorkPlanStepCompleted(selected, emailProposal.sourceNextStep)}
             <button type="button" class="small-btn" data-testid="radar-review-email"
+              disabled={multipleSelected || deletionBlocked || !pageReady} title={multipleSelected ? draftSelectionReason : undefined}
               on:click={(event) => reviewEmailProposal(emailProposal.id, event.currentTarget)}>
               Review email draft
             </button>
           {/if}
-          {#if emailProposal && synthesisState.emailOpen && emailProposal.state !== 'Succeeded' && !isWorkPlanStepCompleted(selected, emailProposal.sourceNextStep)}
+          {#if !multipleSelected && emailProposal && synthesisState.emailOpen && emailProposal.state !== 'Succeeded' && !isWorkPlanStepCompleted(selected, emailProposal.sourceNextStep)}
             <EmailDraft proposalId={emailProposal.id}
-              blocked={teamsSendState.status === 'sending' || (teamsSendState.status === 'unconfirmed' && teamsDraft?.nextStep && teamsDraft.nextStep === emailProposal.sourceNextStep)}
+              blocked={deletionBlocked || !pageReady || teamsSendState.status === 'sending' || (teamsSendState.status === 'unconfirmed' && teamsDraft?.nextStep && teamsDraft.nextStep === emailProposal.sourceNextStep)}
               onclose={() => threadComposer.update(selectedId, { emailOpen: false })}
               onopenActions={(event) => openEmailActions(emailProposal.id, event.currentTarget)} />
           {/if}
-          {#if teamsDraft && teamsDraft.sourceItemId === selected.id && teamsSendState.status !== 'sent' && !isWorkPlanStepCompleted(selected, teamsDraft.nextStep)}
+          {#if !multipleSelected && teamsDraft && teamsDraft.sourceItemId === selected.id && teamsSendState.status !== 'sent' && !isWorkPlanStepCompleted(selected, teamsDraft.nextStep)}
             <section class="radar-teams-draft" data-testid="teams-draft-editor">
               <header>
                 <div>
@@ -1775,10 +1930,10 @@
   oncreate={createTask} oncancel={() => { taskModalOpen = false; }} />
 
 <ConfirmModal open={Boolean(deleteRequest)}
-  title={ITEM_DELETION_CONFIRMATION.title}
-  summary={ITEM_DELETION_CONFIRMATION.summary}
+  title={deleteRequest?.bulk ? `Delete ${deleteRequest.ids.length} ${deleteRequest.ids.length === 1 ? 'card' : 'cards'} from FlightDeck?` : ITEM_DELETION_CONFIRMATION.title}
+  summary={deleteRequest?.bulk ? `This permanently removes the selected cards from FlightDeck, one at a time. If a deletion fails, earlier deletions remain saved. It does not delete source email, Teams messages or chats, meetings, documents, or other Microsoft 365 content.` : ITEM_DELETION_CONFIRMATION.summary}
   targets={deleteRequest?.title || ''}
-  confirmLabel={ITEM_DELETION_CONFIRMATION.confirmLabel}
+  confirmLabel={deleteRequest?.bulk ? `Delete ${deleteRequest.ids.length} ${deleteRequest.ids.length === 1 ? 'card' : 'cards'}` : ITEM_DELETION_CONFIRMATION.confirmLabel}
   returnFocus={deleteRequest?.returnFocus || null}
   onconfirm={confirmDeleteSelected}
   oncancel={() => { deleteRequest = null; }} />

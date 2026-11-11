@@ -96,6 +96,46 @@ it('status transitions save through the production renderer and SQLite without r
   }
 });
 
+it('page rows learned during a save remain existing records and stale deleted pages cannot re-cache tombstones', async () => {
+  const { directory } = createGeneratedProfile({ size: 'large' });
+  const service = createStateService(directory);
+  let release;
+  let hold = true;
+  try {
+    global.window = { workiq: {
+      stateQuery: (method, input) => service.query(method, input),
+      stateCommand: async input => {
+        const result = await service.command(input);
+        if (hold) { hold = false; await new Promise(resolve => { release = resolve; }); }
+        return result;
+      },
+    } };
+    assert.equal(await persistence.loadPersistentState(), true);
+    const cachedIds = new Set(get(stores.items).map(row => row.id));
+    const page = await service.query('radarPage', { view: 'archived', offset: 0, limit: 100 });
+    const unseen = page.rows.find(row => !cachedIds.has(row.id));
+    assert.ok(unseen, 'Use an existing off-cache row');
+    stores.density.set('minimal');
+    const saving = persistence.savePersistentState();
+    while (!release) await new Promise(resolve => setImmediate(resolve));
+    persistence.cacheRepositoryRows([unseen]);
+    release();
+    assert.equal(await saving, true);
+    stores.coldItems.update(rows => rows.map(row => row.id === unseen.id ? { ...row, severity: 'Critical' } : row));
+    assert.equal(await persistence.savePersistentState(), true);
+    assert.equal((await service.query('getThread', { id: unseen.id })).severity, 'Critical');
+    stores.deletedItemIds.update(ids => [...ids, unseen.id]);
+    stores.coldItems.update(rows => rows.filter(row => row.id !== unseen.id));
+    persistence.cacheRepositoryRows([unseen]);
+    assert.equal(get(stores.coldItems).some(row => row.id === unseen.id), false);
+  } finally {
+    dispose?.(); dispose = null;
+    persistence.cancelScheduledPersistentStateSave();
+    await service.close();
+    removeGeneratedProfile(directory);
+  }
+});
+
 it('repository save failures expose safe error codes, retain edits and retry the same command', async () => {
   const { directory } = createGeneratedProfile({});
   const service = createStateService(directory);
@@ -121,6 +161,79 @@ it('repository save failures expose safe error codes, retain edits and retry the
     assert.equal(calls.at(-1).commandId, calls.at(-2).commandId);
     assert.equal(get(stores.persistenceError), '');
     assert.equal(get(stores.persistenceStatus), 'saved');
+  } finally {
+    dispose?.(); dispose = null;
+    persistence.cancelScheduledPersistentStateSave();
+    await service.close();
+    removeGeneratedProfile(directory);
+  }
+});
+
+it('rejected deletion transactions cannot replay after rollback and remain explicitly retryable', async () => {
+  const { deleteItem } = await import('../src/svelte/lib/item-actions.js');
+  const { resolveRadarItem } = await import('../src/svelte/lib/radar-navigation.js');
+  const { directory } = createGeneratedProfile({});
+  const service = createStateService(directory);
+  let reject = true;
+  const deletions = [];
+  try {
+    global.window = { workiq: {
+      stateQuery: (method, input) => service.query(method, input),
+      stateCommand: input => {
+        if (input.payload.changes.some(change => change.domain === 'deletedItemIds')) {
+          deletions.push(input);
+          if (reject) { reject = false; return { ok: false, code: 'GENERATED_REJECTION' }; }
+        }
+        return service.command(input);
+      },
+    } };
+    assert.equal(await persistence.loadPersistentState(), true);
+    const id = get(stores.items)[0].id;
+    await resolveRadarItem(id);
+    dispose = persistence.subscribePersistentState();
+    assert.deepEqual(await deleteItem(id), { ok: false, code: 'PERSISTENCE_FAILED' });
+    assert.equal(await persistence.flushPersistentState(), true);
+    assert.ok(await service.query('getThread', { id }), 'Rollback must preserve the durable card');
+    assert.equal(deletions.length, 1, 'Follow-up saves must not replay a rejected deletion');
+    assert.equal(get(stores.deletedItemIds).includes(id), false);
+    assert.equal((await deleteItem(id)).ok, true);
+    assert.equal(await service.query('getThread', { id }), null);
+    assert.notEqual(deletions[0].commandId, deletions[1].commandId);
+  } finally {
+    dispose?.(); dispose = null;
+    persistence.cancelScheduledPersistentStateSave();
+    await service.close();
+    removeGeneratedProfile(directory);
+  }
+});
+
+it('deletion with an unknown acknowledgement requires recovery and blocks subsequent commands', async () => {
+  const { deleteItem } = await import('../src/svelte/lib/item-actions.js');
+  const { resolveRadarItem } = await import('../src/svelte/lib/radar-navigation.js');
+  const { directory } = createGeneratedProfile({});
+  const service = createStateService(directory);
+  let commands = 0;
+  try {
+    global.window = { workiq: {
+      stateQuery: (method, input) => service.query(method, input),
+      stateCommand: async input => {
+        commands++;
+        const result = await service.command(input);
+        if (input.payload.changes.some(change => change.domain === 'deletedItemIds')) throw new Error('Generated acknowledgement loss');
+        return result;
+      },
+    } };
+    assert.equal(await persistence.loadPersistentState(), true);
+    const id = get(stores.items)[0].id;
+    await resolveRadarItem(id);
+    dispose = persistence.subscribePersistentState();
+    assert.deepEqual(await deleteItem(id), { ok: false, code: 'PERSISTENCE_RECOVERY_REQUIRED' });
+    assert.equal(get(stores.persistenceStatus), 'recovery-required');
+    assert.equal(await service.query('getThread', { id }), null, 'The unacknowledged command may already be durable');
+    const before = commands;
+    assert.equal(await persistence.flushPersistentState(), false);
+    assert.deepEqual(await deleteItem(id), { ok: false, code: 'PERSISTENCE_CONFLICT' });
+    assert.equal(commands, before, 'No follow-up destructive command is safe before reload');
   } finally {
     dispose?.(); dispose = null;
     persistence.cancelScheduledPersistentStateSave();
