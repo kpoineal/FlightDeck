@@ -479,6 +479,7 @@ export function normalizeItem(item) {
       : null,
     evidenceLinks: _buildEvidenceLinks(item, inlineLinks).slice(0, MAX_EVIDENCE_LINKS_PER_ITEM),
     sourceIdentities: collectItemSourceIdentities(identityInput),
+    mergedSourceIdentities: collectItemSourceIdentities({ sourceIdentities: item?.mergedSourceIdentities || [] }),
     suggestedNextSteps: Array.isArray(item?.suggestedNextSteps)
       ? item.suggestedNextSteps.map(cleanDisplayText).filter(Boolean)
       : [],
@@ -542,6 +543,9 @@ export function normalizeItem(item) {
     snoozeUntil: item?.snoozeUntil || null,
     ledgerEvidenceLinks: Array.isArray(item?.ledgerEvidenceLinks) ? item.ledgerEvidenceLinks : [],
     isLedger: item?.isLedger === true,
+    mergedRecords: Array.isArray(item?.mergedRecords) ? item.mergedRecords : [],
+    mergeHistory: Array.isArray(item?.mergeHistory) ? item.mergeHistory : [],
+    mergedComposer: item?.mergedComposer && typeof item.mergedComposer === 'object' ? item.mergedComposer : null,
   };
 
   if (!normalized.updateHistory.length) {

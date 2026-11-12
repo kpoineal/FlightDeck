@@ -11,6 +11,7 @@ let scannerModel;
 let todayModel;
 let mailbox;
 let inboxFilters;
+let threadMatching;
 const dirtyTodayThreads = new Set();
 let resetTodayProjection = false;
 const todayProjectionStats = { threadsRebuilt: 0, eventsRead: 0 };
@@ -29,6 +30,7 @@ const ready = (async () => {
     import(pathToFileURL(path.join(__dirname, '..', 'svelte', 'lib', 'mailbox.js')).href),
     import(pathToFileURL(path.join(__dirname, '..', 'svelte', 'lib', 'inbox-filters.js')).href),
   ]);
+  threadMatching = await import(pathToFileURL(path.join(__dirname, '..', 'svelte', 'lib', 'thread-matching.js')).href);
   db = new DatabaseSync(workerData.databasePath);
   db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=1000;');
   const version = db.prepare('PRAGMA user_version').get().user_version;
@@ -586,6 +588,7 @@ function command(input) {
     const next = revision() + 1;
     const payload = input.payload || {};
     let changedIds = [], deletedIds = [];
+    let scanReceipt;
     switch (input.type) {
       case 'reseedDemo':
         resetTodayProjection = true;
@@ -646,23 +649,74 @@ function command(input) {
         if (!row) error('SCANNER_DELETED');
         const scanner = parse(row.detail);
         if (!scanner.enabled || !Array.isArray(payload.items) || payload.items.length > 100) error('INVALID_SCAN');
+        const updates = payload.updates || [];
+        if (!Array.isArray(updates) || updates.length > 100) error('INVALID_SCAN');
+        scanReceipt = { acceptedFindings: [], skippedFindings: [] };
+        const skipReason = item => {
+          if (db.prepare('SELECT 1 FROM deleted_items WHERE id=?').get(item.id)) return 'deleted';
+          if (db.prepare('SELECT 1 FROM scanner_exclusions WHERE scanner_id=? AND item_id=?').get(scanner.id, item.id)) return 'excluded';
+          if (db.prepare('SELECT 1 FROM threads WHERE id=?').get(item.id)) return 'existing-id';
+          for (const identity of itemModel.collectItemSourceIdentities(item)) {
+            const owners = db.prepare(`SELECT t.scanner_id,t.detail FROM thread_sources s
+              JOIN threads t ON t.id=s.thread_id WHERE s.identity=?`).all(identity);
+            if (owners.some(owner => owner.scanner_id === scanner.id || scanner.crossScannerDedup !== false
+              || parse(owner.detail).mergedSourceIdentities?.includes(identity))) return 'exact-source-duplicate';
+          }
+          return null;
+        };
+        const skip = (findingId, reason) => scanReceipt.skippedFindings.push({ findingId, reason });
+        for (const update of updates) {
+          const target = getThread(update.targetId);
+          if (!target || !threadMatching.activeMatchThread(target)) error('MATCH_TARGET_UNAVAILABLE');
+          if (target.repositoryRevision !== update.expectedRecordRevision) error('RECORD_CONFLICT');
+        }
+        for (const update of updates) {
+          const finding = itemModel.normalizeItem({ ...update.finding, scannerId: scanner.id });
+          const reason = skipReason(finding);
+          if (reason) { skip(finding.id, reason); continue; }
+          const target = getThread(update.targetId);
+          if (!threadMatching.matchScore(finding, target)) error('INVALID_MATCH');
+          changedIds.push(putThread(threadMatching.combineThreads(target, finding, { automatic: true, reason: update.reason }), target.residency, next));
+          db.prepare('INSERT OR IGNORE INTO deleted_items VALUES(?)').run(finding.id);
+          scanReceipt.acceptedFindings.push({ findingId: finding.id, targetId: target.id, disposition: 'updated' });
+        }
         for (const candidate of payload.items) {
           const item = itemModel.normalizeItem({ ...candidate, scannerId: scanner.id });
-          if (db.prepare('SELECT 1 FROM deleted_items WHERE id=?').get(item.id)
-            || db.prepare('SELECT 1 FROM scanner_exclusions WHERE scanner_id=? AND item_id=?').get(scanner.id, item.id)
-            || db.prepare('SELECT 1 FROM threads WHERE id=?').get(item.id)) continue;
-          let duplicate = false;
-          for (const identity of itemModel.collectItemSourceIdentities(item)) {
-            const owners = db.prepare(`SELECT t.scanner_id FROM thread_sources s
-              JOIN threads t ON t.id=s.thread_id WHERE s.identity=?`).all(identity);
-            if (owners.some(owner => owner.scanner_id === scanner.id || scanner.crossScannerDedup !== false)) {
-              duplicate = true; break;
-            }
-          }
-          if (!duplicate) changedIds.push(putThread(item, 'hot', next));
+          const reason = skipReason(item);
+          if (reason) { skip(item.id, reason); continue; }
+          changedIds.push(putThread(item, 'hot', next));
+          scanReceipt.acceptedFindings.push({ findingId: item.id, targetId: item.id, disposition: 'inserted' });
         }
         if (payload.scannerPatch) putScanner({ ...scanner, ...payload.scannerPatch, id: scanner.id }, next);
         maintain(next);
+        break;
+      }
+      case 'mergeThreads': {
+        const source = getThread(payload.sourceId), target = getThread(payload.targetId);
+        if (!source || !target) error('NOT_FOUND');
+        if (source.repositoryRevision !== payload.sourceRevision || target.repositoryRevision !== payload.targetRevision) error('RECORD_CONFLICT');
+        if (source.id === target.id || !threadMatching.activeMatchThread(source) || !threadMatching.activeMatchThread(target)) error('INVALID_MERGE_TARGET');
+        const proposals = db.prepare('SELECT detail FROM proposals WHERE source_item_id IN (?,?)').all(source.id, target.id).map(row => parse(row.detail));
+        if (proposals.some(proposal => proposal.state === 'Executing')) error('BUSY');
+        const merged = threadMatching.combineThreads(target, source);
+        const composers = [source.mergedComposer, target.mergedComposer, payload.composer].filter(Boolean);
+        if (!threadMatching.mergeDraftPlanCompatible(merged, composers, proposals)) error('DRAFT_PLAN_CONFLICT');
+        const pendingEmails = proposals.filter(proposal => proposal.channel === 'outlook-draft'
+          && !['Succeeded', 'Rejected'].includes(proposal.state));
+        if (pendingEmails.some(proposal => proposal.sourceItemId === source.id)
+          && pendingEmails.some(proposal => proposal.sourceItemId === target.id)) error('DRAFT_CONFLICT');
+        changedIds = [putThread({ ...merged,
+          ...(payload.composer ? { mergedComposer: payload.composer } : {}) }, target.residency, next)];
+        for (const proposal of proposals.filter(proposal => proposal.sourceItemId === source.id)) {
+          putProposal(threadMatching.relinkMergedProposal(proposal, source.id, target.id), next);
+        }
+        for (const row of db.prepare("SELECT id,detail FROM audit_events WHERE json_extract(detail,'$.payload.itemId')=?").all(source.id)) {
+          db.prepare('UPDATE audit_events SET detail=? WHERE id=?').run(json(threadMatching.relinkMergedHistory(parse(row.detail), source.id, target.id)), row.id);
+        }
+        db.prepare('INSERT OR IGNORE INTO deleted_items VALUES(?)').run(source.id);
+        db.prepare('DELETE FROM threads WHERE id=?').run(source.id);
+        dirtyTodayThreads.add(source.id);
+        deletedIds = [source.id];
         break;
       }
       case 'saveProposal':
@@ -676,7 +730,7 @@ function command(input) {
       default: error('UNKNOWN_COMMAND');
     }
     setMeta('revision', next);
-    const result = { ok: true, revision: next, changedIds, deletedIds };
+    const result = { ok: true, revision: next, changedIds, deletedIds, ...scanReceipt };
     db.prepare('INSERT INTO command_receipts VALUES(?,?,?,?)').run(input.commandId, fingerprint, next, json(result));
     db.prepare('DELETE FROM command_receipts WHERE revision < ?').run(Math.max(0, next - 1000));
     return result;
@@ -709,13 +763,33 @@ async function dispatch(method, input) {
       || !!db.prepare("SELECT 1 FROM audit_events WHERE julianday(at)<=julianday('now','-30 days') LIMIT 1").get();
     case 'radarPage': return radarPage(input);
     case 'today': return today(input);
+    case 'mergeDestinations': {
+      if (typeof input.sourceId !== 'string' || typeof input.query !== 'string' || input.query.length > 200) error('INVALID_FILTER');
+      return db.prepare(`SELECT id,json_extract(detail,'$.title') AS title FROM threads
+        WHERE id<>? AND lifecycle NOT IN ('complete','archived') AND coalesce(json_extract(detail,'$.archived'),0)=0
+        AND instr(lower(json_extract(detail,'$.title') || ' ' || json_extract(detail,'$.summary')),lower(?))>0
+        ORDER BY changed_at DESC,id LIMIT 30`).all(input.sourceId, input.query);
+    }
+    case 'matchCandidates': {
+      if (!Array.isArray(input.findings) || input.findings.length > 100) error('INVALID_SCAN');
+      const candidates = input.findings.map(() => []);
+      // Iterate every canonical active record, retaining at most five matches per finding in memory.
+      for (const row of db.prepare("SELECT detail FROM threads WHERE lifecycle NOT IN ('complete','archived')").iterate()) {
+        const item = parse(row.detail);
+        input.findings.forEach((finding, index) => {
+          candidates[index] = threadMatching.shortlistThreadCandidates(finding, [...candidates[index], item]);
+        });
+      }
+      return candidates.map((rows, index) => ({ findingId: input.findings[index].id, candidates: rows.map(item => getThread(item.id)) }));
+    }
     case 'sourceOwners': {
       if (!Array.isArray(input.identities) || input.identities.length > 500) error('INVALID_IDENTITIES');
       const rows = [];
       for (const identity of input.identities) {
-        rows.push(...db.prepare(`SELECT t.id,t.scanner_id AS scannerId FROM thread_sources s
+        rows.push(...db.prepare(`SELECT t.id,t.scanner_id AS scannerId,t.detail FROM thread_sources s
           JOIN threads t ON t.id=s.thread_id WHERE s.identity=? LIMIT 100`).all(identity)
-          .map(row => ({ ...row, identity })));
+          .map(({ detail, ...row }) => ({ ...row, identity,
+            ...(parse(detail).mergedSourceIdentities?.includes(identity) ? { merged: true } : {}) })));
       }
       const ids = (input.ids || []).slice(0, 100).filter(id => db.prepare('SELECT 1 FROM threads WHERE id=?').get(id));
       return { revision: revision(), rows, ids };

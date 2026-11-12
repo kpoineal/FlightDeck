@@ -20,8 +20,8 @@ function createStateService(profileDirectory, { demo = false } = {}) {
   }).catch(failure => { opening = undefined; throw failure; });
   return {
     async query(method, input) {
-      if (!['projection', 'getThread', 'listHistory', 'radarPage', 'today', 'sourceOwners', 'dueMonitors',
-        'collisionGroups', 'previewScannerDeletion', 'status', 'listProposals', 'listRetainedEvidence'].includes(method)) {
+      if (!['projection', 'getThread', 'listHistory', 'radarPage', 'today', 'sourceOwners', 'dueMonitors', 'matchCandidates',
+        'collisionGroups', 'previewScannerDeletion', 'status', 'listProposals', 'listRetainedEvidence', 'mergeDestinations'].includes(method)) {
         throw new Error('INVALID_STATE_QUERY');
       }
       return (await repository()).call(method, input);

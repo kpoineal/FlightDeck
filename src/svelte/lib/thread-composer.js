@@ -3,6 +3,7 @@ import { buildProposalSynthesisContext, normalizeProposalSynthesisResult } from 
 import { isValidEmail } from '../../shared/recipient-validation.mjs';
 import { isWorkPlanStepCompleted } from './action-proposals.js';
 import { resolveWorkPlan } from './work-plan.js';
+import { items, coldItems } from './stores.js';
 
 export function canAddressTeamsDraft(draft) {
   const email = String(draft?.targetEmail || '').trim();
@@ -38,6 +39,13 @@ export function createThreadComposer() {
   const read = (id) => get(states).get(id) || emptyThreadComposer();
   function update(id, patch) {
     states.update((entries) => new Map(entries).set(id, { ...(entries.get(id) || emptyThreadComposer()), ...patch }));
+    const state = read(id);
+    for (const store of [items, coldItems]) {
+      if (get(store).some(item => item.id === id && item.mergedComposer
+        && JSON.stringify(item.mergedComposer) !== JSON.stringify(state))) {
+        store.update(rows => rows.map(item => item.id === id ? { ...item, mergedComposer: state } : item));
+      }
+    }
   }
   function forget(id) {
     requests.delete(id);

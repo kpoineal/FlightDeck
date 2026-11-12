@@ -33,6 +33,36 @@ FlightDeck is a personal work-intelligence dashboard that connects to Microsoft 
 
 ## First Launch
 
+### Combining duplicate threads
+
+New scanner findings about the same deliverable can become unread updates on an
+existing active thread. Different outcomes at the same customer remain separate;
+uncertain comparisons also remain separate.
+
+For missed matches, right-click one thread or open its detail **More** menu and
+choose **Merge into…**. Search active stored threads (including cold records;
+30 results at a time), select the survivor, and explicitly confirm. Cancel makes
+no changes. Multi-selection and busy operations disable merge. Conflicting open
+composer drafts (including pending email proposals on both threads) must be
+resolved first. A merge is rejected before changing either
+thread if a pending email or Teams draft would no longer have a selectable,
+unfinished next move in the destination Work plan (including its two displayed
+recommendations or custom move). Keep both threads or resolve the draft first.
+A failed merge shows an error rather than reporting success; recovery removes
+the failed merge while retaining user edits made during the save.
+
+The destination keeps its identity and custom next move. Activity, source evidence,
+completed moves and proposal references are combined; the source custom text
+appears in merge provenance and the original source record is retained locally.
+Draft/proposal IDs and original source provenance survive. The removed card's ID
+and source evidence prevent later scanner re-ingestion. No email or Teams message
+is sent by merging. Scanner acceptance receipts distinguish retained findings
+from explicitly skipped duplicates/exclusions; cross-scanner source deduplication
+respects the scanner's opt-out, except for sources already retained by a merge.
+Only successfully retained updates remove their incoming finding IDs.
+If a persistence/recovery banner appears, resolve it before
+retrying or reloading.
+
 When you open FlightDeck for the first time, here's what happens:
 
 > **Local WorkIQ setup:** Windows includes the WorkIQ CLI; macOS/Linux require `npm i -g @microsoft/workiq@1.0.1`. FlightDeck uses its buffered CLI commands, not its MCP server. WorkIQ manages Microsoft sign-in and credentials; FlightDeck does not maintain a separate authorization.

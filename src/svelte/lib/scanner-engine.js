@@ -4,6 +4,7 @@ import { items, coldItems, scanners, connected, deletedItemIds } from './stores.
 import { addHistory } from './actions.js';
 import * as persistence from './persistence.js';
 import { usesRepository, rememberRepositoryThread } from './repository-context.js';
+import { rollbackThreadStores } from './mutation-rollback.js';
 const { savePersistentState } = persistence;
 import {
   releaseOperationGuards,
@@ -26,6 +27,7 @@ import { buildScannerPrompt } from './prompts.js';
 import { runWorkiqJson } from './json-parser.js';
 import { hydrateRadarColdItems } from './radar-navigation.js';
 import { disconnectWorkiq } from './connection.js';
+import { buildMatchBatches, shortlistThreadCandidates, matchSnapshot, validateMatchDecisions, combineThreads, activeMatchThread } from './thread-matching.js';
 
 const TICK_MS = 60_000; // 60s
 const MAX_CONCURRENT_SCANS = 5;
@@ -177,6 +179,12 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     return normalizeItem({
       ...item,
       workPlanChoice: undefined,
+      completedNextSteps: [],
+      updateHistory: undefined,
+      mergedRecords: [],
+      mergeHistory: [],
+      mergedSourceIdentities: [],
+      mergedComposer: null,
       ...(candidateId ? { id: candidateId } : {}),
       status: item.status || 'Inbound',
       scannerId: scanner.id,
@@ -218,6 +226,7 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     for (const identity of collectItemSourceIdentities(item)) {
       if (!sourceIdentityOwners.has(identity)) sourceIdentityOwners.set(identity, new Set());
       sourceIdentityOwners.get(identity).add(ownerScannerId);
+      if (item.mergedSourceIdentities?.includes(identity)) sourceIdentityOwners.get(identity).add('*merged*');
     }
   };
 
@@ -235,6 +244,7 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     for (const owner of retained.rows) {
       if (!sourceIdentityOwners.has(owner.identity)) sourceIdentityOwners.set(owner.identity, new Set());
       sourceIdentityOwners.get(owner.identity).add(owner.scannerId);
+      if (owner.merged) sourceIdentityOwners.get(owner.identity).add('*merged*');
     }
   }
 
@@ -248,7 +258,7 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
       const owners = sourceIdentityOwners.get(identity);
       if (!owners) return false;
       return [...owners].some((ownerScannerId) =>
-        ownerScannerId === scanner.id || (allowCrossScannerDedup && ownerScannerId !== scanner.id)
+        ownerScannerId === '*merged*' || ownerScannerId === scanner.id || (allowCrossScannerDedup && ownerScannerId !== scanner.id)
       );
     });
     if (sourceMatch) continue;
@@ -256,6 +266,42 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     unique.push(candidate);
     existingIds.add(candidate.id);
     addSourceIdentities(candidate, scanner.id);
+  }
+
+  const updates = [];
+  const cachedBefore = new Map([...get(coldItems), ...get(items)].map(item => [item.id, matchSnapshot(item)]));
+  const matches = usesRepository() && unique.length
+    ? await window.workiq.stateQuery('matchCandidates', { findings: unique })
+    : unique.map(finding => ({ findingId: finding.id, candidates: shortlistThreadCandidates(finding, currentItems) }));
+  const entries = unique.map(finding => ({
+    finding, candidates: matches.find(row => row.findingId === finding.id)?.candidates || [],
+  }));
+  for (const batch of buildMatchBatches(entries)) {
+    logInfo('scanner', 'Comparing possible thread updates', { scannerId: scanner.id, promptCharacters: batch.prompt.length, findings: batch.entries.length });
+    const decisions = await runWorkiqJson(batch.prompt,
+      response => validateMatchDecisions(response, batch.entries), 'scanner-thread-match',
+      { priority, key: `scanner:${scanner.id}:match` });
+    if (!validateMatchDecisions(decisions, batch.entries)) {
+      logError('scanner', 'Invalid thread matching decisions', { scannerId: scanner.id });
+      throw new Error('INVALID_THREAD_MATCH_RESPONSE');
+    }
+    for (const decision of decisions.decisions.filter(decision => decision.decision === 'update')) {
+      const entry = batch.entries.find(entry => entry.finding.id === decision.findingId);
+      const target = entry.candidates.find(item => item.id === decision.candidateId);
+      updates.push({ targetId: target.id, finding: entry.finding, reason: decision.reason,
+        expectedRecordRevision: target.repositoryRevision, targetSnapshot: matchSnapshot(target) });
+    }
+  }
+  if (!get(connected) || generation !== engineGeneration || !get(scanners).some(entry => entry.id === scanner.id)) return { ok: false, code: 'SUPERSEDED' };
+  for (const update of updates) {
+    const live = [...get(items), ...get(coldItems)].find(item => item.id === update.targetId);
+    if (get(deletedItemIds).includes(update.targetId) || (live && (!activeMatchThread(live)
+      || cachedBefore.get(live.id) !== matchSnapshot(live)))) throw new Error('MATCH_TARGET_CHANGED');
+    if (!usesRepository() && (!live || matchSnapshot(live) !== update.targetSnapshot)) throw new Error('MATCH_TARGET_CHANGED');
+  }
+  const updatedFindingIds = new Set(updates.map(update => update.finding.id));
+  for (let index = unique.length - 1; index >= 0; index--) {
+    if (updatedFindingIds.has(unique[index].id)) unique.splice(index, 1);
   }
 
   // Retain recent titles as scanner metadata; title history is not an acceptance filter.
@@ -286,17 +332,74 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
     }
   }
 
-  if (usesRepository() && unique.length) {
+  let insertedByTransaction = false;
+  if (usesRepository() && (unique.length || updates.length)) {
     if (!await persistence.flushPersistentState()) return { ok: false, code: 'PERSISTENCE_FAILED' };
-    const result = await persistence.executeRepositoryCommand('acceptScannerResults', { scannerId: scanner.id, items: unique });
+    const result = await persistence.executeRepositoryCommand('acceptScannerResults', { scannerId: scanner.id, items: unique, updates });
     if (!result.ok) return result;
-    const accepted = new Set(result.changedIds);
+    const acceptedFindings = result.acceptedFindings;
+    const skippedFindings = result.skippedFindings;
+    const submittedIds = [...unique.map(item => item.id), ...updates.map(update => update.finding.id)];
+    if (!Array.isArray(acceptedFindings) || !Array.isArray(skippedFindings)
+      || submittedIds.some(id => [...acceptedFindings, ...skippedFindings].filter(row => row.findingId === id).length !== 1)) {
+      throw new Error('INVALID_SCAN_RECEIPT');
+    }
+    const accepted = new Set(acceptedFindings.filter(row => row.disposition === 'inserted').map(row => row.findingId));
     for (let index = unique.length - 1; index >= 0; index--) {
       if (!accepted.has(unique[index].id)) unique.splice(index, 1);
       else rememberRepositoryThread(unique[index]);
     }
+    const retainedUpdates = updates.filter(update => acceptedFindings.some(row =>
+      row.findingId === update.finding.id && row.targetId === update.targetId && row.disposition === 'updated'));
+    updates.splice(0, updates.length, ...retainedUpdates);
+    for (const id of new Set(updates.map(update => update.targetId))) {
+      const updated = await window.workiq.stateQuery('getThread', { id });
+      if (!updated || get(deletedItemIds).includes(id)) throw new Error('MATCH_TARGET_UNAVAILABLE');
+      const live = [...get(items), ...get(coldItems)].find(item => item.id === id);
+      if (live && cachedBefore.get(id) !== matchSnapshot(live)) throw new Error('MATCH_PROJECTION_CHANGED');
+      rememberRepositoryThread(updated);
+      items.update(rows => [updated, ...rows.filter(row => row.id !== id)]);
+      coldItems.update(rows => rows.filter(row => row.id !== id));
+    }
+    deletedItemIds.update(ids => [...new Set([...ids, ...updates.map(update => update.finding.id)])]);
+  } else if (updates.length) {
+    const before = structuredClone({ hot: get(items), cold: get(coldItems), deleted: get(deletedItemIds) });
+    let applied;
+    let mutated = false;
+    const removedCold = updates.some(update => before.cold.some(item => item.id === update.targetId));
+    if (removedCold && typeof window.workiq?.setColdItems !== 'function') throw new Error('COLD_PERSISTENCE_UNAVAILABLE');
+    const transaction = await persistence.runPersistentStateTransaction({
+      mutate() {
+        const live = [...get(items), ...get(coldItems)];
+        if (updates.some(update => get(deletedItemIds).includes(update.targetId)
+          || !live.some(item => item.id === update.targetId && matchSnapshot(item) === update.targetSnapshot))) throw new Error('MATCH_TARGET_CHANGED');
+        let rows = [...get(items)];
+        for (const update of updates) {
+          const target = rows.find(item => item.id === update.targetId) || before.cold.find(item => item.id === update.targetId);
+          if (!target || before.deleted.includes(target.id)) throw new Error('MATCH_TARGET_CHANGED');
+          const merged = combineThreads(target, update.finding, { automatic: true, reason: update.reason });
+          rows = [merged, ...rows.filter(item => item.id !== target.id)];
+        }
+        mutated = true;
+        items.set([...unique, ...rows]);
+        coldItems.set(before.cold.filter(item => !updates.some(update => update.targetId === item.id)));
+        deletedItemIds.set([...new Set([...before.deleted, ...updatedFindingIds])]);
+        applied = structuredClone({ hot: get(items), cold: get(coldItems) });
+      },
+      rollback() {
+        if (!mutated) return;
+        const restored = rollbackThreadStores(before, applied, get(items), get(coldItems));
+        items.set(restored.hot);
+        coldItems.set(restored.cold);
+        deletedItemIds.update(ids => ids.filter(id => !updatedFindingIds.has(id) || before.deleted.includes(id)));
+      },
+      persistExternal: removedCold ? async () => persistence.isAcceptedPersistenceReceipt(await window.workiq.setColdItems(get(coldItems))) : null,
+      rollbackExternal: removedCold ? async () => persistence.isAcceptedPersistenceReceipt(await window.workiq.setColdItems(get(coldItems))) : null,
+    });
+    if (!transaction.ok) return transaction;
+    insertedByTransaction = true;
   }
-  if (unique.length) {
+  if (unique.length && !insertedByTransaction) {
     items.update(($i) => [...unique, ...$i]);
   }
 
@@ -347,7 +450,12 @@ export async function runScanner(scanner, { priority = 'interactive' } = {}) {
       }
     }
   }
-  return { ok: true, code: 'COMPLETED', newItemCount: unique.length, completedAt };
+  return { ok: true, code: 'COMPLETED', newItemCount: unique.length, updatedItemCount: updates.length, completedAt };
+  } catch (error) {
+    if (error.code === 'QUEUE_FULL') throw error;
+    logError('scanner', 'Scan failed before completion', { scannerId: scanner.id, code: error.code || error.message });
+    scanners.update(rows => rows.map(row => row.id === scanner.id ? { ...row, lastRunStatus: 'failed' } : row));
+    throw error;
   } finally {
     if (mainLease) {
       try { await savePersistentState(); } finally { await window.workiq.releaseEngine(engineKey); }
