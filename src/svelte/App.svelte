@@ -23,7 +23,6 @@
   import { refreshMeetings as fetchMeetings } from './lib/briefings.js';
   import Topbar from './components/Topbar.svelte';
   import TodayView from './components/TodayView.svelte';
-  import ActionQueue from './components/ActionQueue.svelte';
   import ConnectBanner from './components/ConnectBanner.svelte';
   import SummaryStrip from './components/SummaryStrip.svelte';
   import RadarView from './components/RadarView.svelte';
@@ -253,4 +252,3 @@
   oncancel={() => { confirmOpen = false; }} />
 
 <Toast />
-<ActionQueue />

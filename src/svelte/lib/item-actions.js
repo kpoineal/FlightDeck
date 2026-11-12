@@ -267,7 +267,7 @@ export function createActionEventId({ proposalId, event, timestamp, attempt = 0 
 export async function recordActionEvent(input) {
   const event = normalizeActionEvent(input);
   if (!event) return false;
-  if (usesRepository() && !get(items).some(item => item.id === event.itemId)) {
+  if (!get(items).some(item => item.id === event.itemId)) {
     const source = get(coldItems).find(item => item.id === event.itemId);
     if (source && !get(deletedItemIds).includes(source.id)) items.update(rows => [source, ...rows]);
   }

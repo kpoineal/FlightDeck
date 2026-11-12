@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { actionProposals, deletedItemIds, items } from './stores.js';
+import { actionProposals, coldItems, deletedItemIds, items } from './stores.js';
 import { buildOutlookDraftPayload, executeOutlookDraftAction, isConfirmedCommunication, isWorkPlanStepCompleted, transitionActionProposal } from './action-proposals.js';
 import { createActionEventId, recordActionEvent } from './item-actions.js';
 import { threadComposer } from './thread-composer.js';
@@ -27,7 +27,7 @@ export async function createOutlookDraftProposal(proposalId, { reviewed = false,
   let proposal = get(actionProposals).find((entry) => entry.id === proposalId);
   if (!proposal || proposal.auditOnly || proposal.archivedAt || proposal.channel !== 'outlook-draft'
     || proposal.executionCode === 'ACTION_UNCONFIRMED' || !buildOutlookDraftPayload(proposal).ok) return null;
-  const item = get(items).find((entry) => entry.id === proposal.sourceItemId);
+  const item = [...get(items), ...get(coldItems)].find((entry) => entry.id === proposal.sourceItemId);
   const composer = threadComposer.read(proposal.sourceItemId);
   if (isWorkPlanStepCompleted(item, proposal.sourceNextStep)
     || composer.teamsSendState.status === 'sending'

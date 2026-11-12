@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { connected, meetings, briefingsByMeetingId, briefingSeenAt, expandedBriefingMeetingIds, items, actionProposals, openActionsQueue, selectedProposalId, dayBriefingGenerating, dayBriefingError } from '../lib/stores.js';
+  import { connected, isDemo, meetings, briefingsByMeetingId, briefingSeenAt, expandedBriefingMeetingIds, items, coldItems, deletedItemIds, selectedProposalId, dayBriefingGenerating, dayBriefingError } from '../lib/stores.js';
   import { DAY_BRIEFING_KEY } from '../lib/constants.js';
   import { addHistory } from '../lib/actions.js';
   import { savePersistentState } from '../lib/persistence.js';
@@ -11,13 +11,17 @@
   import { runWorkiqJson } from '../lib/json-parser.js';
   import DayBriefingCard from './DayBriefingCard.svelte';
   import MeetingCard from './MeetingCard.svelte';
-  import { createActionProposal } from '../lib/action-proposals.js';
+  import { meetingFollowUpId, prepareMeetingFollowUp } from '../lib/meeting-follow-up.js';
+  import { navigateToRadarItem, resolveRadarItem, hydrateRadarColdItems } from '../lib/radar-navigation.js';
+  import { setItemField } from '../lib/item-actions.js';
 
   let { onrefresh } = $props();
 
   let now = $state(Date.now());
   let meetingGeneratingId = $state(null);
   let refreshing = $state(false);
+  let followUpPending = $state(false);
+  let followUpError = $state('');
 
   onMount(() => {
     const timer = setInterval(() => { now = Date.now(); }, 60_000);
@@ -173,39 +177,40 @@
     });
   }
 
-  function handlePropose(data) {
+  async function handlePropose(data) {
+    if (followUpPending) return;
     const meeting = $meetings.find((entry) => entry.id === data.meetingId);
-    const matchedItem = $items.find((item) => {
-      const haystack = `${meeting?.title || ''} ${meeting?.summary || ''}`.toLowerCase();
-      return String(item.title || '').split(/\s+[—-]\s+/)[0].toLowerCase().split(' ').some((word) => word.length > 5 && haystack.includes(word));
-    });
-    const briefing = getBriefing(meeting.id);
-    const sourceItem = matchedItem || {
-      id: `meeting_${meeting.id}`,
-      title: meeting.title,
-      sourceType: 'Meeting',
-      owner: meeting.organizer,
-      counterparties: [meeting.organizer].filter(Boolean),
-      summary: meeting.summary || briefing?.headline,
-      evidenceLinks: (briefing?.sources || []).map((source) => ({ label: source.label, url: source.url })),
-      severity: 'Observe',
-    };
-    const proposal = createActionProposal(
-      sourceItem,
-      `Prepare the follow-up for ${meeting?.title || sourceItem.title} using the generated briefing and linked evidence.`,
-      {
-        reason: `Meeting readiness follow-up proposed from ${meeting?.title || 'Briefings'}.`,
-        sourceDestination: 'Briefings',
-        sourceContextId: meeting.id,
+    if (!meeting) { followUpError = 'This meeting is no longer available. Refresh meetings and try again.'; return; }
+    followUpPending = true;
+    followUpError = '';
+    try {
+      await resolveRadarItem(meetingFollowUpId(meeting));
+      await hydrateRadarColdItems();
+      const prepared = prepareMeetingFollowUp(meeting, getBriefing(meeting.id), [...$items, ...$coldItems], $deletedItemIds);
+      if (prepared.created) {
+        items.update(entries => [{ ...prepared.item, suggestedNextSteps: prepared.suggestedNextSteps,
+          workPlanChoice: prepared.workPlanChoice }, ...entries]);
+        addHistory('action', `Added meeting follow-up thread "${prepared.item.title}"`, { itemId: prepared.item.id });
+      } else {
+        setItemField(prepared.item.id, 'summary', prepared.item.summary);
+        setItemField(prepared.item.id, 'evidenceLinks', prepared.item.evidenceLinks);
+        setItemField(prepared.item.id, 'suggestedNextSteps', prepared.suggestedNextSteps);
+        setItemField(prepared.item.id, 'workPlanChoice', prepared.workPlanChoice);
       }
-    );
-    actionProposals.update((entries) => [proposal, ...entries]);
-    selectedProposalId.set(proposal.id);
-    openActionsQueue(data.initiator);
+      selectedProposalId.set(null);
+      if (!await savePersistentState($isDemo)) throw new Error('The follow-up could not be saved. Resolve the save banner before continuing; the local thread is retained.');
+      if (!await navigateToRadarItem(prepared.item.id)) throw new Error('The follow-up thread could not be opened. Find it in Radar and try again.');
+    } catch (failure) {
+      followUpError = failure.message || 'Could not prepare the follow-up thread. Try again.';
+    } finally {
+      followUpPending = false;
+    }
   }
 </script>
 
 <div class="command-view briefing-command">
+  {#if followUpError}<p role="alert">{followUpError}</p>{/if}
+  {#if followUpPending}<p role="status">Opening the meeting follow-up Work plan…</p>{/if}
   <div class="command-view__heading briefings-header">
     <div>
       <span>BRIEFINGS</span>

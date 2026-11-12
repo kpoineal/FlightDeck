@@ -3,7 +3,6 @@
   import { get } from 'svelte/store';
   import {
     actionProposals,
-    openActionsQueue,
     coldItems,
     deletedItemIds,
     highlightedItemId,
@@ -60,6 +59,8 @@
   import { ITEM_DELETION_CONFIRMATION, itemDeletionFailureMessage } from '../lib/item-deletion-ui.js';
   import ActivityTimeline from './ActivityTimeline.svelte';
   import EmailDraft from './EmailDraft.svelte';
+  import SavedDrafts from './SavedDrafts.svelte';
+  import { selectThreadEmail } from '../lib/saved-drafts.js';
   import AddTaskModal from './AddTaskModal.svelte';
   import ConfirmModal from './ConfirmModal.svelte';
   import ScannerDeletionModal from './ScannerDeletionModal.svelte';
@@ -132,15 +133,20 @@
   let creatingEmailItemIds = $derived(new Set($actionProposals
     .filter((proposal) => proposal.channel === 'outlook-draft' && proposal.state === 'Executing')
     .map((proposal) => proposal.sourceItemId)));
-  let emailProposal = $derived(
-    workPlan.custom && !selectedNextMove ? null : $actionProposals.find((proposal) => proposal.id === synthesisState.emailProposalId
-      && proposal.sourceItemId === selectedId && draftMatchesWorkPlan(proposal.sourceNextStep, selectedNextMove))
-      || $actionProposals.filter((proposal) => proposal.sourceItemId === selectedId
-        && draftMatchesWorkPlan(proposal.sourceNextStep, selectedNextMove)
-        && proposal.channel === 'outlook-draft' && !proposal.archivedAt && !proposal.auditOnly)
-        .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0]
-      || null
-  );
+  let requestedProposal = $derived($actionProposals.find(entry => entry.id === $selectedProposalId
+    && entry.sourceItemId === selectedId && !entry.auditOnly));
+  let requestedEmailId = $derived(requestedProposal?.channel === 'outlook-draft' ? requestedProposal.id : null);
+  let emailProposal = $derived(workPlan.custom && !selectedNextMove && !requestedProposal ? null
+    : selectThreadEmail($actionProposals, selectedId, selectedNextMove, synthesisState.emailProposalId, requestedProposal?.id));
+
+  $effect(() => {
+    if (requestedEmailId) {
+      threadComposer.update(selectedId, { emailProposalId: requestedEmailId, emailOpen: true });
+      requestAnimationFrame(() => viewRoot?.querySelector('[data-testid="email-draft-editor"]')?.scrollIntoView({ block: 'nearest' }));
+    } else if (requestedProposal) {
+      threadComposer.update(selectedId, { emailOpen: false });
+    }
+  });
   let deleteRequest = $state(null);
   let deleteState = $state({ status: 'idle', message: '' });
   let contextMenu = $state(null);
@@ -286,6 +292,7 @@
 
   function chooseNextMove(mode, step = '') {
     if (!selected || moveEditingBlocked) return;
+    selectedProposalId.set(null);
     const id = selected.id;
     setItemField(id, 'workPlanChoice', { ...selected.workPlanChoice, mode, selectedNextStep: step });
     threadComposer.update(id, { selectedNextStep: step, emailOpen: false, viewedActionId: null });
@@ -296,6 +303,7 @@
 
   function editCustomNextMove(text) {
     if (!selected || moveEditingBlocked) return;
+    selectedProposalId.set(null);
     setItemField(selected.id, 'workPlanChoice', { ...selected.workPlanChoice, mode: 'custom', customText: text });
   }
 
@@ -594,6 +602,7 @@
     if (!sourceItem || creatingEmailItemIds.has(sourceItem.id)
       || (sourceItem.id === selectedId && workPlan.blockedReason)
       || isWorkPlanStepCompleted(sourceItem, requestedNextStep)) return;
+    selectedProposalId.set(null);
     const state = await threadComposer.generate({
       item: sourceItem,
       channel: requestedChannel,
@@ -647,10 +656,10 @@
     requestAnimationFrame(() => viewRoot?.querySelector('[data-testid="email-draft-recipient"]')?.focus());
   }
 
-  function openEmailActions(proposalId, initiator) {
+  function reviewSavedProposal(proposal) {
     if (multipleSelected || deletionBlocked || !pageReady) return;
-    selectedProposalId.set(proposalId);
-    openActionsQueue(initiator);
+    if (proposal?.channel === 'outlook-draft') reviewEmailProposal(proposal.id);
+    else threadComposer.update(selectedId, { emailOpen: false });
   }
 
   function canViewCommunication(entry) {
@@ -1837,6 +1846,8 @@
               <p>{synthesisState.result.noCommunicationReason || synthesisState.result.recommendation}</p>
             </div>
           {/if}
+          <SavedDrafts threadId={selected.id} blocked={multipleSelected || deletionBlocked || !pageReady}
+            onselect={reviewSavedProposal} />
           {#if emailProposal && !synthesisState.emailOpen && emailProposal.state !== 'Succeeded' && !isWorkPlanStepCompleted(selected, emailProposal.sourceNextStep)}
             <button type="button" class="small-btn" data-testid="radar-review-email"
               disabled={multipleSelected || deletionBlocked || !pageReady} title={multipleSelected ? draftSelectionReason : undefined}
@@ -1844,11 +1855,10 @@
               Review email draft
             </button>
           {/if}
-          {#if !multipleSelected && emailProposal && synthesisState.emailOpen && emailProposal.state !== 'Succeeded' && !isWorkPlanStepCompleted(selected, emailProposal.sourceNextStep)}
+          {#if !multipleSelected && emailProposal && synthesisState.emailOpen && (requestedProposal?.id === emailProposal.id || (emailProposal.state !== 'Succeeded' && !isWorkPlanStepCompleted(selected, emailProposal.sourceNextStep)))}
             <EmailDraft proposalId={emailProposal.id}
-              blocked={deletionBlocked || !pageReady || teamsSendState.status === 'sending' || (teamsSendState.status === 'unconfirmed' && teamsDraft?.nextStep && teamsDraft.nextStep === emailProposal.sourceNextStep)}
-              onclose={() => threadComposer.update(selectedId, { emailOpen: false })}
-              onopenActions={(event) => openEmailActions(emailProposal.id, event.currentTarget)} />
+              blocked={deletionBlocked || !pageReady || isWorkPlanStepCompleted(selected, emailProposal.sourceNextStep) || teamsSendState.status === 'sending' || (teamsSendState.status === 'unconfirmed' && teamsDraft?.nextStep && teamsDraft.nextStep === emailProposal.sourceNextStep)}
+              onclose={() => { selectedProposalId.set(null); threadComposer.update(selectedId, { emailOpen: false }); }} />
           {/if}
           {#if !multipleSelected && teamsDraft && teamsDraft.sourceItemId === selected.id && teamsSendState.status !== 'sent' && !isWorkPlanStepCompleted(selected, teamsDraft.nextStep)}
             <section class="radar-teams-draft" data-testid="teams-draft-editor">

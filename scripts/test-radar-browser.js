@@ -15,7 +15,11 @@ const EDGE_PATHS = [
 const FIXTURE_ITEM_ID = 'track_acme_renewal';
 const FIXTURE_ITEM_TITLE = 'Acme Corp — Master Services Agreement Renewal';
 const SCREENSHOT_DIR = path.join(ROOT, 'test-results', 'radar-acceptance');
-const SCENARIO_FILTER = String(process.env.FLIGHTDECK_BROWSER_SCENARIO || '').trim();
+const SCENARIO_FILTER = String(process.env.FLIGHTDECK_BROWSER_SCENARIO || (process.argv.includes('--drafts') ? [
+  'saved-drafts-workflow-1440', 'saved-drafts-workflow-360', 'meeting-follow-up-work-plan', 'saved-draft-execution',
+  'email-inline-create-success', 'email-inline-incomplete-edits-persist', 'email-inline-cancel', 'email-inline-unconfirmed',
+  'proposal-concurrent-thread-lifecycle', 'work-plan-completion-1440', 'work-plan-completion-360', 'teams-send-cancel-error-success',
+].join(',') : '')).trim();
 const results = [];
 const screenshotPaths = [];
 const totals = {
@@ -2093,7 +2097,7 @@ async function todayDashboardScenario(session, width) {
   await expect(progress).toContainText('Teams message sent');
   await expect(progress).toContainText('Outlook draft created');
   await expect(progress).not.toContainText('Reopened thread is not completed');
-  await expect(page.getByRole('button', { name: 'Review drafts (0)', exact: true })).toBeDisabled();
+  await expect(page.getByTestId('today-drafts').getByRole('button', { name: 'Pending (0)', exact: true })).toBeVisible();
   const hasEmDash = await page.getByTestId('today-dashboard').locator('h1, h2, header p, .today-meeting-row strong, .today-progress-row strong').evaluateAll(elements =>
     elements.some(element => element.textContent.includes('\u2014')));
   assert.equal(hasEmDash, false, 'Today titles or section subtitles still contain em dashes');
@@ -2159,7 +2163,7 @@ async function todayEmptyScenario(session) {
   await expect(session.page.getByTestId('today-scanner-chart')).toContainText('No active work to group yet');
   await expect(session.page.getByTestId('today-schedule')).toContainText('No meetings saved for today');
   await expect(session.page.getByTestId('today-progress')).toContainText('No completions recorded today yet');
-  await expect(session.page.getByRole('button', { name: 'Review drafts (0)', exact: true })).toBeDisabled();
+  await expect(session.page.getByTestId('today-drafts').getByRole('button', { name: 'Pending (0)', exact: true })).toBeVisible();
   await assertHealthy(session);
 }
 
@@ -2257,6 +2261,236 @@ async function assertDraftContextStyles(editor) {
   assert.equal(metrics.overflows, false, 'Draft explanation overflows its container');
 }
 
+async function assertSavedDraftStyles(session, section, state) {
+  const { page } = session;
+  const backgrounds = [];
+  for (const theme of ['dark', 'light']) {
+    await page.locator('html').evaluate((element, value) => element.setAttribute('data-theme', value), theme);
+    await section.scrollIntoViewIfNeeded();
+    const styles = await section.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const heading = getComputedStyle(element.querySelector('h4'));
+      const active = getComputedStyle(element.querySelector('.saved-drafts__filters [aria-pressed="true"]'));
+      const inactive = getComputedStyle(element.querySelector('.saved-drafts__filters [aria-pressed="false"]'));
+      const count = getComputedStyle(element.querySelector('.saved-drafts__count'));
+      const empty = element.querySelector('.saved-drafts__empty');
+      const row = element.querySelector('.saved-drafts__row[aria-pressed="true"]');
+      return {
+        background: style.backgroundColor, border: style.borderTopWidth, radius: style.borderRadius,
+        headingSize: heading.fontSize, headingCase: heading.textTransform,
+        active: active.backgroundColor, inactive: inactive.backgroundColor,
+        activeBorder: active.borderColor, count: count.fontVariantNumeric,
+        emptyColor: empty && getComputedStyle(empty).color,
+        headingColor: heading.color, rowBorder: row && getComputedStyle(row).borderColor,
+        overflow: element.scrollWidth > element.clientWidth + 1,
+        filtersOverflow: element.querySelector('.saved-drafts__filters').scrollWidth > element.clientWidth,
+      };
+    });
+    assert.ok(parseFloat(styles.border) >= 1 && parseFloat(styles.radius) >= 6, 'Saved drafts lost its inset section boundary');
+    assert.ok(parseFloat(styles.headingSize) <= 12 && styles.headingCase === 'uppercase', 'Saved drafts heading lost Radar context typography');
+    assert.notEqual(styles.background, 'rgba(0, 0, 0, 0)', 'Saved drafts has no themed surface');
+    assert.notEqual(styles.active, styles.inactive, 'Saved draft filters lack a visible selected state');
+    assert.equal(styles.count, 'tabular-nums', 'Draft counts lack numeric alignment');
+    if (styles.emptyColor) assert.equal(styles.emptyColor, styles.headingColor, 'Empty drafts lost muted text styling');
+    if (styles.rowBorder) assert.equal(styles.rowBorder, styles.activeBorder, 'Selected saved draft lost its accent boundary');
+    assert.equal(styles.overflow || styles.filtersOverflow, false, 'Saved drafts overflow at narrow widths');
+    backgrounds.push(styles.background);
+    await section.locator('h4').focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await section.locator('.saved-drafts__filters button').first().evaluate(element =>
+      element.matches(':focus-visible') && parseFloat(getComputedStyle(element).outlineWidth) >= 2), true,
+    'Saved draft filter lacks visible keyboard focus');
+    const screenshotPath = path.join(SCREENSHOT_DIR, `saved-drafts-${state}-${theme}-${page.viewportSize().width}.png`);
+    await section.screenshot({ path: screenshotPath, animations: 'disabled' });
+    screenshotPaths.push(screenshotPath);
+    process.stdout.write(`STYLES saved-drafts state=${state} theme=${theme} width=${page.viewportSize().width} ${JSON.stringify(styles)}\n`);
+  }
+  assert.notEqual(backgrounds[0], backgrounds[1], 'Saved drafts did not adapt to light theme');
+  await page.locator('html').evaluate(element => element.setAttribute('data-theme', 'dark'));
+}
+
+async function savedDraftWorkflowScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  await selectFixtureThread(page);
+  const empty = page.getByTestId('thread-saved-drafts');
+  await empty.getByRole('button', { name: /^Archived \(/ }).click();
+  await expect(empty.locator('.saved-drafts__empty')).toHaveText('No archived drafts.');
+  await assertSavedDraftStyles(session, empty, 'empty');
+  await page.evaluate(async (itemId) => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const now = new Date().toISOString();
+    const base = {
+      id: 'saved-active', sourceItemId: itemId, sourceTitle: 'Active saved email',
+      sourceType: 'Email', sourceDestination: 'Radar', sourceContextId: itemId,
+      channel: 'outlook-draft', target: 'alex@example.com', content: 'Active saved message',
+      reason: 'Existing work', evidence: ['Retained evidence'], risk: 'Review first', provenance: 'Browser fixture',
+      state: 'Drafted', outcome: null, executionCode: null, executionVerification: null,
+      dispatchStatus: 'not-started', archivedAt: null, archivedReason: null,
+      createdAt: now, updatedAt: now, localOnly: true,
+    };
+    state.actionProposals = [
+      base,
+      { ...base, id: 'saved-older', sourceTitle: 'Older saved email', sourceNextStep: 'Older hidden move', content: 'Older saved message' },
+      { ...base, id: 'saved-duplicate', sourceTitle: 'Older saved email', sourceNextStep: 'Older hidden move', content: 'Older saved message' },
+      { ...base, id: 'saved-archived', sourceTitle: 'Archived email', archivedAt: now, archivedReason: 'Dismissed' },
+      { ...base, id: 'saved-resolved', sourceTitle: 'Confirmed old email', state: 'Succeeded',
+        executionCode: 'DRAFT_SAVED', executionVerification: 'runtime-backend-confirmed', dispatchStatus: 'dispatched' },
+      { ...base, id: 'saved-queued', sourceTitle: 'Queued email', state: 'Queued' },
+      { ...base, id: 'saved-failed', sourceTitle: 'Unconfirmed email', state: 'Failed',
+        executionCode: 'ACTION_UNCONFIRMED', dispatchStatus: 'unknown' },
+      { ...base, id: 'saved-orphan', sourceItemId: 'missing-source', sourceTitle: 'Legacy orphan',
+        channel: 'planner', target: 'Old plan', content: 'Retained legacy instruction' },
+    ];
+    await window.workiq.storeSet('flightdeck.demo.v2', state);
+  }, FIXTURE_ITEM_ID);
+  await openApp(session, { reseed: false });
+  assert.equal(await page.getByRole('button', { name: /^Actions/ }).count(), 0);
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  const index = page.getByTestId('today-drafts');
+  await expect(index.getByRole('heading', { name: /^Drafts \(6 pending\)$/i })).toBeVisible();
+  await assertSavedDraftStyles(session, index, 'today');
+  assert.equal(await index.locator('input, textarea').count(), 0, 'Today became a second editor');
+  await index.locator('[data-proposal-id="saved-older"]').click();
+  await expect(page.locator('.radar-thread-detail h2')).toHaveText(FIXTURE_ITEM_TITLE);
+  const email = page.getByTestId('email-draft-editor');
+  await expect(email.getByTestId('email-draft-message')).toHaveValue('Older saved message');
+  const saved = page.getByTestId('thread-saved-drafts');
+  await expect(saved.getByTestId('draft-delete-duplicates')).toContainText('Delete 2 duplicates');
+  await assertSavedDraftStyles(session, saved, 'selected');
+  await saved.getByTestId('draft-manage').click();
+  const confirmation = page.getByTestId('confirm-modal');
+  await confirmation.getByTestId('confirm-cancel').click();
+  await expect(email.getByTestId('email-draft-message')).toBeEnabled();
+  await saved.getByTestId('draft-manage').click();
+  await confirmation.getByTestId('confirm-submit').click();
+  await expect(email).toHaveCount(0, { timeout: 5000 });
+  await saved.getByRole('button', { name: 'Archived (2)', exact: true }).click();
+  await saved.locator('[data-proposal-id="saved-older"]').click();
+  await expect(email.getByTestId('email-draft-message')).toBeDisabled();
+  await expect(email.getByTestId('email-draft-create')).toBeDisabled();
+  await saved.getByTestId('draft-manage').filter({ hasText: 'Restore' }).click();
+  await confirmation.getByTestId('confirm-submit').click();
+  await expect(email.getByTestId('email-draft-message')).toBeEnabled();
+  await email.getByTestId('email-draft-message').fill('Edited older message');
+  await saved.getByRole('button', { name: 'Resolved (1)', exact: true }).click();
+  await expect(email).toHaveCount(0, { timeout: 5000 });
+  await saved.locator('[data-proposal-id="saved-resolved"]').click();
+  await expect(email.getByTestId('email-draft-message')).toBeDisabled();
+  await expect(email.getByTestId('email-draft-create')).toBeDisabled();
+  await assertSavedDraftStyles(session, saved, 'resolved');
+  await saved.getByTestId('draft-delete').click();
+  await expect(confirmation.getByTestId('confirm-submit')).toBeDisabled();
+  await confirmation.getByTestId('confirm-cancel').click();
+  await saved.getByRole('button', { name: 'Pending (5)', exact: true }).click();
+  await saved.locator('[data-proposal-id="saved-failed"]').click();
+  await expect(email.getByTestId('email-draft-create')).toBeDisabled();
+  await saved.locator('[data-proposal-id="saved-queued"]').click();
+  await saved.getByTestId('draft-manage').filter({ hasText: 'Cancel proposal' }).click();
+  await confirmation.getByTestId('confirm-submit').click();
+  await expect(saved.getByRole('button', { name: 'Resolved (2)', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await expect(index.getByRole('heading', { name: /^Drafts \(5 pending\)$/i })).toBeVisible();
+  await index.locator('[data-proposal-id="saved-orphan"]').click();
+  await expect(index.getByTestId('saved-proposal-details')).toContainText('Source thread unavailable');
+  assert.equal(await index.locator('input, textarea').count(), 0);
+  assert.equal(await index.getByTestId('email-draft-create').count(), 0);
+  await index.getByTestId('draft-delete').click();
+  await confirmation.getByTestId('confirm-submit').click();
+  await expect(index.locator('[data-proposal-id="saved-orphan"]')).toHaveCount(0);
+  await index.locator('[data-proposal-id="saved-duplicate"]').click();
+  await saved.getByTestId('draft-delete').click();
+  await confirmation.getByTestId('confirm-submit').click();
+  await expect(saved.locator('[data-proposal-id="saved-duplicate"]')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(async () => (await window.workiq.storeGet('flightdeck.demo.v2'))
+    .actionProposals.find(entry => entry.id === 'saved-older')?.content)).toBe('Edited older message');
+  await openApp(session, { reseed: false });
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await expect(index.getByRole('heading', { name: /^Drafts \(3 pending\)$/i })).toBeVisible();
+  await index.locator('[data-proposal-id="saved-older"]').click();
+  await expect(email.getByTestId('email-draft-message')).toHaveValue('Edited older message');
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0],
+    'Navigation or management dispatched external content');
+  await assertHealthy(session, page.viewportSize().width > 960 ? 'desktop' : 'mobile');
+}
+
+async function savedDraftExecutionScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  await selectFixtureThread(page);
+  await page.getByTestId('radar-draft-email').click();
+  const email = page.getByTestId('email-draft-editor');
+  await email.getByTestId('email-draft-message').fill('Review from Today, execute only in Work plan.');
+  await expect.poll(() => page.evaluate(async () => (await window.workiq.storeGet('flightdeck.demo.v2'))
+    .actionProposals.some(entry => entry.content === 'Review from Today, execute only in Work plan.'))).toBe(true);
+  const savedId = await page.evaluate(async () => (await window.workiq.storeGet('flightdeck.demo.v2'))
+    .actionProposals.find(entry => entry.content === 'Review from Today, execute only in Work plan.').id);
+  const lifecycleBefore = await page.getByLabel('Work state').inputValue();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.getByTestId('today-drafts').locator(`[data-proposal-id="${savedId}"]`).click();
+  await expect(email).toBeVisible();
+  await email.getByTestId('email-draft-create').click();
+  await expect(email).toHaveCount(0, { timeout: 5000 });
+  assert.equal(await page.getByLabel('Work state').inputValue(), lifecycleBefore);
+  assert.equal(await page.evaluate(() => window.__draftCalls.length), 1);
+  await expect(page.getByTestId('action-timeline-entry').filter({ hasText: 'Outlook draft saved in Outlook Drafts. Nothing was sent.' })).toHaveCount(1);
+  const saved = page.getByTestId('thread-saved-drafts');
+  await saved.getByRole('button', { name: /^Resolved \(/ }).click();
+  await saved.locator(`[data-proposal-id="${savedId}"]`).click();
+  await expect(email.getByTestId('email-draft-message')).toBeDisabled();
+  await expect(email.getByTestId('email-draft-create')).toBeDisabled();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Source timeline & audit', exact: true })).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [1, 0]);
+  await assertHealthy(session);
+}
+
+async function meetingFollowUpScenario(session) {
+  const { page } = session;
+  await openApp(session);
+  await page.evaluate(async () => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    state.meetings = [{
+      id: 'unmatched-followup', title: 'Teams Planner unique follow-up', organizer: 'Alex',
+      startAt: new Date().toISOString(), endAt: new Date(Date.now() + 1800000).toISOString(),
+      summary: 'Confirm the remaining rollout blocker.',
+    }];
+    state.meetingsFetchedAt = new Date().toISOString();
+    state.briefingsByMeetingId['unmatched-followup'] = {
+      meetingId: 'unmatched-followup', headline: 'A rollout decision is needed.', bullets: ['Confirm the blocker.'],
+      generatedAt: new Date().toISOString(),
+      sources: [{ label: 'Decision', url: 'https://contoso.sharepoint.com/sites/project/Shared%20Documents/decision.docx' }],
+    };
+    await window.workiq.storeSet('flightdeck.demo.v2', state);
+  });
+  await openApp(session, { reseed: false });
+  await page.getByRole('button', { name: 'Briefings', exact: true }).click();
+  const meeting = page.locator('[data-briefing-meeting-id="unmatched-followup"]');
+  await meeting.locator('.meeting-card__header').click();
+  await meeting.getByRole('button', { name: 'Prepare follow-up in Radar', exact: true }).click();
+  await expect(page.locator('.radar-thread-detail h2')).toHaveText('Teams Planner unique follow-up');
+  await expect(page.getByTestId('radar-next-move-0')).toBeChecked();
+  assert.equal(await page.getByTestId('email-draft-editor').count(), 0, 'Preparation instruction became an executable email');
+  assert.deepEqual(await page.evaluate(() => [window.__proposalCalls.length, window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0, 0]);
+  await page.getByTestId('radar-draft-email').click();
+  await expect(page.getByTestId('email-draft-editor')).toBeVisible();
+  assert.equal(await page.evaluate(() => window.__proposalCalls.at(-1).requestedChannel), 'email');
+  const context = await page.evaluate(() => window.__proposalCalls.at(-1).thread);
+  assert.match(context.summary, /Confirm the remaining rollout blocker/);
+  assert.match(context.summary, /A rollout decision is needed/);
+  assert.ok(context.evidenceLabels.some(entry => entry.label === 'Decision'));
+  await expect.poll(() => page.evaluate(async () => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return state.items.filter(entry => entry.id === 'meeting_followup_unmatched-followup').length;
+  })).toBe(1);
+  await page.getByRole('button', { name: 'Briefings', exact: true }).click();
+  await meeting.getByRole('button', { name: 'Prepare follow-up in Radar', exact: true }).click();
+  await expect(page.locator('.radar-thread-detail h2')).toHaveText('Teams Planner unique follow-up');
+  await expect(page.getByTestId('email-draft-editor')).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => [window.__draftCalls.length, window.__teamsSendCalls.length]), [0, 0]);
+  await assertHealthy(session);
+}
+
 async function inlineEmailScenario(session, outcome = 'success') {
   const { page } = session;
   await openApp(session);
@@ -2309,11 +2543,10 @@ async function inlineEmailScenario(session, outcome = 'success') {
   assert.equal(await message.isDisabled(), true);
   assert.equal(await page.getByTestId('radar-draft-email').isDisabled(), true);
   assert.equal(await page.getByTestId('radar-draft-teams').isDisabled(), true);
-  await editor.getByTestId('email-open-actions').click();
-  const queue = page.getByTestId('action-queue');
-  await queue.getByText('Executing', { exact: true }).first().waitFor({ state: 'visible' });
-  assert.equal(await page.evaluate(() => window.__draftCalls.length), 1, 'Actions dispatched a duplicate inline operation');
-  await queue.getByRole('button', { name: 'Close actions' }).click();
+  const saved = page.getByTestId('thread-saved-drafts');
+  await expect(saved).toContainText('Executing');
+  assert.equal(await saved.getByTestId('draft-manage').count(), 0, 'Executing proposal exposed state management');
+  assert.equal(await page.evaluate(() => window.__draftCalls.length), 1, 'Saved history dispatched a duplicate operation');
   await page.getByRole('button', { name: 'Today', exact: true }).click();
   await page.evaluate((result) => window.__resolveInlineDraft(result), outcome === 'success'
     ? { ok: true, action: 'outlook-draft-created' }
@@ -2494,16 +2727,11 @@ async function concurrentThreadDraftsScenario(session) {
   await page.getByRole('button', { name: 'Radar', exact: true }).click();
   await select(FIXTURE_ITEM_ID);
   assert.equal(await actionStatus(FIXTURE_ITEM_ID).count(), 0, 'Background completion retained its spinner');
-  await page.getByTestId('email-open-actions').click();
-  const queue = page.getByTestId('action-queue');
-  await queue.waitFor({ state: 'visible' });
-  assert.equal(await queue.locator('textarea').inputValue(), `Please confirm ${FIXTURE_ITEM_ID}`);
-  await queue.getByTestId('action-segment-archived').click();
-  await queue.getByRole('button', { name: 'Close actions' }).click();
-  await page.getByTestId('email-open-actions').click();
-  assert.equal(await queue.getByTestId('action-segment-open').getAttribute('aria-selected'), 'true');
-  assert.equal(await queue.locator('textarea').inputValue(), `Please confirm ${FIXTURE_ITEM_ID}`);
-  await queue.getByRole('button', { name: 'Close actions' }).click();
+  const saved = page.getByTestId('thread-saved-drafts');
+  assert.equal(await page.getByTestId('email-draft-message').inputValue(), `Please confirm ${FIXTURE_ITEM_ID}`);
+  await saved.getByRole('button', { name: /^Archived \(/ }).click();
+  await saved.getByRole('button', { name: /^Pending \(/ }).click();
+  assert.equal(await page.getByTestId('email-draft-message').inputValue(), `Please confirm ${FIXTURE_ITEM_ID}`);
   await select(otherId);
   assert.equal(await editor.locator('textarea').inputValue(), 'Edited thread B draft');
   assert.equal(await editor.locator('input[type="text"]').inputValue(), 'Taylor');
@@ -2537,10 +2765,8 @@ async function concurrentThreadDraftsScenario(session) {
   await openApp(session, { reseed: false });
   await select(FIXTURE_ITEM_ID);
   await page.getByTestId('radar-review-email').click();
-  await page.getByTestId('email-open-actions').click();
-  assert.equal(await queue.locator('textarea').inputValue(), `Please confirm ${FIXTURE_ITEM_ID}`,
+  assert.equal(await page.getByTestId('email-draft-message').inputValue(), `Please confirm ${FIXTURE_ITEM_ID}`,
     'Persisted email lost its source-thread review action after reload');
-  await queue.getByRole('button', { name: 'Close actions' }).click();
   await assertHealthy(session);
 }
 
@@ -2628,8 +2854,6 @@ async function historySourceNavigationScenario(session) {
   await openApp(session);
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
-  await session.page.getByTestId('email-open-actions').click();
-  await session.page.getByTestId('action-queue').getByRole('button', { name: 'Return to source', exact: true }).click();
   await session.page.getByRole('button', { name: 'History', exact: true }).click();
   await session.page.getByRole('heading', { name: 'Source timeline & audit', exact: true }).waitFor({ state: 'visible' });
   await session.page.getByLabel('Context').selectOption(FIXTURE_ITEM_ID);
@@ -2685,8 +2909,8 @@ async function externalRadarNavigationScenario(session) {
   await openApp(session, { reseed: false });
   await selectFixtureThread(session.page);
   await session.page.getByTestId('radar-draft-email').click();
-  await session.page.getByTestId('email-open-actions').click();
-  await session.page.getByTestId('action-queue').getByRole('button', { name: 'Return to source', exact: true }).click();
+  await session.page.getByRole('button', { name: 'Today', exact: true }).click();
+  await session.page.getByTestId('today-drafts').locator('[data-proposal-id]').first().click();
   await assertExternalRadarSelection(session.page, { id: FIXTURE_ITEM_ID, title: FIXTURE_ITEM_TITLE });
 
   await session.page.getByRole('button', { name: 'History', exact: true }).click();
@@ -4261,28 +4485,13 @@ async function doneWhenEditingScenario(session, width) {
     await runScenario('context-menu-cold', browser, rendererServer.baseUrl, contextMenuColdScenario);
     await runScenario('criticality-edit-and-persist', browser, rendererServer.baseUrl, criticalityScenario);
     await runScenario('completed-view-and-active-restore', browser, rendererServer.baseUrl, completedRestoreScenario);
-    await runScenario('action-draft-cancel', browser, rendererServer.baseUrl, (session) => draftScenario(session, 'cancel'), { draftMode: 'cancel' });
-    await runScenario('action-draft-error-fail-closed', browser, rendererServer.baseUrl, (session) => draftScenario(session, 'error'), { draftMode: 'error' });
-    await runScenario('action-draft-success-and-persistence', browser, rendererServer.baseUrl, (session) => draftScenario(session, 'success'), { draftMode: 'success' });
-    await runScenario('action-queue-management-and-persistence', browser, rendererServer.baseUrl, actionQueueManagementScenario);
-    await runScenario('action-queue-state-eligibility', browser, rendererServer.baseUrl, actionQueueEligibilityScenario);
-    await runScenario('action-queue-executing-lockout', browser, rendererServer.baseUrl, actionQueueExecutingLockoutScenario, { draftMode: 'pending' });
-    await runScenario('action-queue-delete-one-duplicate', browser, rendererServer.baseUrl, actionQueueDeleteOneDuplicateScenario);
-    await runScenario('action-queue-delete-duplicate-group', browser, rendererServer.baseUrl, actionQueueDeleteDuplicateGroupScenario);
-    await runScenario('action-queue-delete-no-effect-rollback', browser, rendererServer.baseUrl, actionQueueDeleteNoEffectRollbackScenario);
-    await runScenario('action-queue-delete-confirmed-evidence', browser, rendererServer.baseUrl, actionQueueDeleteConfirmedScenario, { draftMode: 'success' });
-    await runScenario('action-queue-delete-late-result', browser, rendererServer.baseUrl, actionQueueDeleteLateResultScenario, { draftMode: 'deferred' });
-    for (const width of [1440, 760, 360]) {
-      await runScenario(`action-queue-delete-responsive-${width}`, browser, rendererServer.baseUrl,
-        (session) => actionQueueDeleteResponsiveScenario(session, width, true),
+    for (const width of [1440, 360]) {
+      await runScenario(`saved-drafts-workflow-${width}`, browser, rendererServer.baseUrl,
+        savedDraftWorkflowScenario,
         { viewport: { width, height: width === 1440 ? 1000 : 900 } });
     }
-    for (const width of [1440, 760, 360]) {
-      await runScenario(`action-queue-reliability-${width}`, browser, rendererServer.baseUrl,
-        (session) => actionQueueReliabilityScenario(session, width),
-        { viewport: { width, height: width === 1440 ? 1000 : 900 } });
-    }
-    await runScenario('action-queue-source-focus-restoration', browser, rendererServer.baseUrl, actionQueueSourceFocusScenario);
+    await runScenario('meeting-follow-up-work-plan', browser, rendererServer.baseUrl, meetingFollowUpScenario);
+    await runScenario('saved-draft-execution', browser, rendererServer.baseUrl, savedDraftExecutionScenario);
     for (const width of [1440, 760, 360]) {
       await runScenario(`today-dashboard-${width}`, browser, rendererServer.baseUrl,
         session => todayDashboardScenario(session, width),
@@ -4373,12 +4582,6 @@ async function doneWhenEditingScenario(session, width) {
         { viewport: { width, height: width === 1440 ? 1000 : 900 } });
     }
     await runScenario('mobile-list-detail-back-focus', browser, rendererServer.baseUrl, mobileScenario, { viewport: { width: 760, height: 900 } });
-    await runScenario('action-queue-and-timeline-desktop-capture', browser, rendererServer.baseUrl,
-      (session) => actionQueueScreenshotScenario(session, 'desktop'),
-      { viewport: { width: 1440, height: 1000 } });
-    await runScenario('action-queue-and-timeline-mobile-capture', browser, rendererServer.baseUrl,
-      (session) => actionQueueScreenshotScenario(session, 'mobile'),
-      { viewport: { width: 760, height: 900 } });
     for (const width of [1440, 760, 480, 360]) {
       await runScenario(`recommended-action-hierarchy-${width}`, browser, rendererServer.baseUrl,
         (session) => actionHierarchyScenario(session, width, width === 1440 || width === 360),

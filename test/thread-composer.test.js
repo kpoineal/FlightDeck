@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { get } from 'svelte/store';
 import { canAddressTeamsDraft, createThreadComposer, threadComposer } from '../src/svelte/lib/thread-composer.js';
 import { adaptEmailProposalsToActionQueue } from '../src/svelte/lib/proposal-synthesis.js';
-import { actionsQueueOpen, deletedItemIds, openActionsQueue, selectedProposalId } from '../src/svelte/lib/stores.js';
+import { deletedItemIds, selectedProposalId } from '../src/svelte/lib/stores.js';
 import { draftMatchesWorkPlan, resolveWorkPlan } from '../src/svelte/lib/work-plan.js';
 import { normalizeItem } from '../src/svelte/lib/models/item.js';
 import { isWorkPlanStepCompleted } from '../src/svelte/lib/action-proposals.js';
@@ -140,7 +140,6 @@ function harness(composer = createThreadComposer()) {
 }
 
 test.afterEach(() => {
-  actionsQueueOpen.set(false);
   selectedProposalId.set(null);
   deletedItemIds.set([]);
 });
@@ -244,18 +243,16 @@ test('email-only Teams targets retain the address and reviewed unconfirmed state
     'Regenerating a draft must not clear an unconfirmed send');
 });
 
-test('opening/selecting Action Queue never discards pending drafts on other threads', async () => {
+test('selecting saved draft history never discards pending drafts on other threads', async () => {
   const { composer, generate } = harness();
   const a = deferred();
   const pending = generate('a', 'teams', a);
   selectedProposalId.set('unrelated-proposal');
-  openActionsQueue('action-queue');
   a.resolve(response('teams'));
   await pending;
   assert.equal(composer.read('a').status, 'ready');
   assert.equal(composer.read('a').teamsDraft.sourceItemId, 'a');
   assert.equal(get(selectedProposalId), 'unrelated-proposal');
-  assert.equal(get(actionsQueueOpen), true);
 });
 
 test('duplicate clicks cannot start a second request; failures and retries stay thread-scoped', async () => {
