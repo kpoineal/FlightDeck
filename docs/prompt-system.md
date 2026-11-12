@@ -79,11 +79,46 @@ Each scanner run follows this pipeline:
 3. **Normalize items** — each returned `radarItem` is passed through `normalizeItem()` which sanitizes text, extracts inline citations, and sets defaults
 4. **Cap results** — enforce `maxItemsPerScan` limit (default 10, max 25)
 5. **Keyword filter** — exclude items matching any `excludeKeywords` strings
-6. **Dedup** — remove items matching existing IDs, titles, or recent titles
+6. **Dedup and thread matching** — retain exact ID/source protections, then compare plausible same-outcome updates against active threads (including cold storage). Titles/recent titles alone never suppress a finding.
 7. **Auto-monitor** — if `autoMonitorNewItems` is enabled, automatically enable monitoring on new items that meet the severity threshold
 8. **Merge** — prepend new items to the items store
 9. **Notify** — show in-app toast and/or desktop notification based on `notificationMode`
 10. **Update scanner metadata** — set `lastRunAt`, compute `nextRunAt`, update `itemCount`
+
+### Same-outcome thread matching
+
+After exact identity filtering, a local lexical shortlist considers every accessible
+active canonical thread, not only the scanner prompt's first 20 hints. Both records
+must carry source identity evidence and share specific work terms; names alone are
+insufficient. At most **5 candidates per finding** are retained. Completed/archived
+threads are never automatic destinations. This conservative shortlist can miss
+synonyms; use manual **Merge into…** when needed.
+
+Comparison requests use the existing `runWorkiqJson` WorkIQ ask path, priority and
+bounded retries. No candidates means no extra ask. Each request contains at most
+**2 findings** and a measured maximum of **24,000 JavaScript string characters**
+(including instructions and serialized data). Field limits are title 180, summary
+600, completion goal 300, two source identities of 300 each, and two evidence links
+with URL 300/label 100. Histories and merged originals are never sent. Oversize
+requests fail explicitly rather than truncating opaque IDs. This is an application
+budget, **not a verified WorkIQ context limit**; that limit is unknown.
+
+Retrieved strings are untrusted data. A strict complete/unique decision mapping
+accepts only `new`, `update`, or `uncertain`. Updates require a supplied candidate ID,
+high confidence, locally supported work overlap and exact 12–200 character
+deliverable excerpts from both supplied records. Reasons are limited to 500
+characters; unknown/extra fields, invented IDs, missing/duplicate decisions, or
+unsupported quotes fail the scan before acceptance. Valid uncertain/new findings
+remain separate. Invalid comparisons do not silently become successful scans.
+
+Updates append unread activity and evidence, refresh factual summary, severity and
+recommendations, and preserve the destination ID, custom next move, completed moves,
+drafts and user metadata. SQLite accepts new cards and updates in one transaction
+with record-revision checks; deletion, completion or changed targets fail rather
+than resurrecting or overwriting them. Retained source identities plus finding-ID
+tombstones guard repeated ingestion. Original merged records and overflow merge
+history remain local; merged overflow is available through the expandable timeline.
+No messages are sent automatically.
 
 ### Monitor Engine (`src/svelte/lib/monitor-engine.js`)
 

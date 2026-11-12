@@ -13,6 +13,7 @@
     scanners,
     selectedProposalId,
     repositoryRevision,
+    activeOperations,
   } from '../lib/stores.js';
   import {
     compareInboxThreads,
@@ -65,6 +66,9 @@
   import ScannerSettingsModal from './ScannerSettingsModal.svelte';
   import ScheduleControls from './ScheduleControls.svelte';
   import ThreadContextMenu from './ThreadContextMenu.svelte';
+  import MergeThreadModal from './MergeThreadModal.svelte';
+  import { mergeThreads } from '../lib/thread-merging.js';
+  import { activeMatchThread } from '../lib/thread-matching.js';
   import { showToast } from './Toast.svelte';
 
   const VIEWS = [
@@ -120,7 +124,7 @@
     message: '',
     returnFocus: null,
   });
-  let synthesisState = $derived($threadComposer.get(selectedId) || emptyThreadComposer());
+  let synthesisState = $derived($threadComposer.get(selectedId) || selected?.mergedComposer || emptyThreadComposer());
   let teamsDraft = $derived(synthesisState.teamsDraft && (!workPlan.custom || selectedNextMove)
     && draftMatchesWorkPlan(synthesisState.teamsDraft.nextStep, selectedNextMove) ? synthesisState.teamsDraft : null);
   let teamsCopyStatus = $derived(synthesisState.teamsCopyStatus);
@@ -140,6 +144,10 @@
   let deleteRequest = $state(null);
   let deleteState = $state({ status: 'idle', message: '' });
   let contextMenu = $state(null);
+  let mergeSource = $state(null);
+  let mergeTarget = $state(null);
+  let mergeOrigin = null;
+  let mergeError = $state('');
   let contextTarget = $derived(threads.find((item) => item.id === contextMenu?.id) || null);
   let contextEntries = $derived(contextTarget ? threadMenuEntries(contextTarget) : []);
 
@@ -260,7 +268,7 @@
   let workPlanCompleted = $derived(workPlan.completed);
   let moveEditingBlocked = $derived(multipleSelected || deletionBlocked || !pageReady || synthesisState.status === 'generating'
     || teamsSendState.status === 'sending' || creatingEmailItemIds.has(selectedId));
-  let timeline = $derived([...(selected?.updateHistory || [])].sort((a, b) => Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0)));
+  let timeline = $derived([...(selected?.updateHistory || []), ...(selected?.mergeHistory || [])].sort((a, b) => Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0)));
   let viewedAction = $derived(timeline.find((entry) => entry.eventId === synthesisState.viewedActionId && canViewCommunication(entry)) || null);
   let viewedMessage = $derived(viewedAction ? $actionProposals.find((proposal) => proposal.id === viewedAction.proposalId
     && proposal.sourceItemId === selected?.id && proposal.channel === viewedAction.channel && isConfirmedCommunication(proposal)) || null : null);
@@ -389,6 +397,8 @@
       }
     }
     if (markRead && isMailboxUnread(item)) markItemRead(item.id);
+    const detail = [...get(items), ...get(coldItems)].find(row => row.id === item.id);
+    if (detail?.mergedComposer && !get(threadComposer).has(item.id)) threadComposer.update(item.id, detail.mergedComposer);
   }
 
   function changeRowSelection(item, event) {
@@ -871,7 +881,7 @@
   }
 
   function threadDraft(item, channel) {
-    const composer = $threadComposer.get(item.id) || emptyThreadComposer();
+    const composer = $threadComposer.get(item.id) || item.mergedComposer || emptyThreadComposer();
     const proposal = $actionProposals.find((entry) => entry.sourceItemId === item.id
       && entry.channel === 'outlook-draft' && !entry.archivedAt && !entry.auditOnly
       && !['Succeeded', 'Rejected'].includes(entry.state) && !isWorkPlanStepCompleted(item, entry.sourceNextStep));
@@ -916,6 +926,7 @@
           disabled: multipleSelected || blocked || draft.unavailable,
           reason: multipleSelected ? draftSelectionReason : draft.reason };
       }),
+      { id: 'merge', label: 'Merge into…', disabled: blocked || multipleSelected || !activeMatchThread(item) || $activeOperations.size > 0 },
       { id: 'delete', label: selectedIds.includes(item.id) && selectedIds.length > 1
         ? `Delete ${selectedIds.length} selected cards…` : 'Delete from FlightDeck…',
         danger: true, disabled: blocked },
@@ -974,6 +985,10 @@
     const targets = threadActionTargets(item);
     if (deletionBlocked || !pageReady || (action.startsWith('draft:') && multipleSelected)) return;
     closeThreadMenu(false);
+    if (action === 'merge') {
+      if (!multipleSelected) await openMerge(item, menu.origin);
+      return;
+    }
     if (action === 'delete') {
       if (selectedIds.includes(item.id) && selectedIds.length > 1) requestDeleteRows(selectedIds, menu.origin);
       else requestDeleteThread(item, menu.origin);
@@ -1014,6 +1029,48 @@
     const returnFocus = menu?.querySelector('summary') || event.currentTarget;
     if (menu) menu.open = false;
     requestDeleteThread(selected, returnFocus);
+  }
+
+  async function openMerge(item, origin) {
+    if (multipleSelected || deletionBlocked || $activeOperations.size || !activeMatchThread(item)) return;
+    mergeError = '';
+    mergeOrigin = origin;
+    try { mergeSource = structuredClone(await resolveRadarItem(item.id)); }
+    catch (_) { mergeError = 'Could not load thread. No cards changed.'; }
+  }
+
+  async function chooseMergeDestination(id) {
+    try {
+      const target = await resolveRadarItem(id);
+      if (!target || target.id === mergeSource.id || !activeMatchThread(target)) throw new Error('Unavailable');
+      mergeTarget = structuredClone(target);
+    } catch (_) { mergeError = 'Destination unavailable. No cards changed.'; }
+  }
+
+  function cancelMerge() {
+    mergeSource = null; mergeTarget = null;
+    queueMicrotask(() => mergeOrigin?.isConnected && mergeOrigin.focus());
+  }
+
+  async function confirmMerge() {
+    if (!mergeSource || !mergeTarget || deletionBlocked || multipleSelected || $activeOperations.size) return;
+    localActionBusy = true;
+    const source = mergeSource, target = mergeTarget;
+    mergeSource = null; mergeTarget = null;
+    try {
+      const result = await mergeThreads(source, target);
+      if (!result.ok) {
+        mergeError = result.code === 'DRAFT_PLAN_CONFLICT'
+          ? 'Merge cancelled: a reviewed draft would be hidden by the destination Work plan. Keep both threads, or resolve the draft / choose a compatible next move before merging. No drafts changed or messages sent.'
+          : `Merge not confirmed (${result.code}). Review current local state and resolve any save banner before retrying. Conflicting drafts must be resolved first. No external messages were sent.`;
+        showToast(mergeError, { icon: '!', durationMs: 9000 });
+        return;
+      }
+      selectedIds = [];
+      selectedId = target.id;
+      highlightedItemId.set(target.id);
+      showToast('Threads merged. No external messages sent.');
+    } finally { localActionBusy = false; }
   }
 
   function requestDeleteThread(item, returnFocus) {
@@ -1619,6 +1676,9 @@
                   title="Snooze this item for one day" on:click={snoozeSelected}>Snooze</button>
                 <button type="button" class="radar-more-menu__item" data-testid="radar-archive"
                   title="Archive this item" on:click={() => setItemLifecycle(selected.id, 'archived')}>Archive</button>
+                <button type="button" class="radar-more-menu__item" data-testid="radar-merge"
+                  disabled={deletionBlocked || multipleSelected || !pageReady || !activeMatchThread(selected) || $activeOperations.size > 0}
+                  on:click={(event) => { event.currentTarget.closest('details').open = false; openMerge(selected, event.currentTarget.closest('details').querySelector('summary')); }}>Merge into…</button>
                 <button type="button" class="radar-more-menu__item radar-more-menu__item--delete" data-testid="radar-delete"
                   title="Delete this local FlightDeck card" disabled={deletionBlocked || !pageReady}
                   on:click={requestDeleteSelected}>Delete from FlightDeck…</button>
@@ -1970,3 +2030,14 @@
   returnFocus={deleteRequest?.returnFocus || null}
   onconfirm={confirmDeleteSelected}
   oncancel={() => { deleteRequest = null; }} />
+
+{#if mergeSource && !mergeTarget}
+  <MergeThreadModal source={mergeSource} onselect={chooseMergeDestination} oncancel={cancelMerge} />
+{/if}
+<ConfirmModal open={Boolean(mergeSource && mergeTarget)}
+  title="Merge these threads?"
+  summary="The destination survives. Activity, sources, completed moves, and proposal references are combined. Original custom text is retained in the merge provenance. Conflicting open composer drafts must be resolved first. Nothing is sent externally."
+  targets={`${mergeSource?.title || ''} → ${mergeTarget?.title || ''}`}
+  confirmLabel="Merge threads" returnFocus={mergeOrigin}
+  onconfirm={confirmMerge} oncancel={cancelMerge} />
+{#if mergeError}<p class="panel-sub" role="alert">{mergeError}</p>{/if}

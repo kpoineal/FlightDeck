@@ -92,6 +92,8 @@ export function normalizeActionProposal(proposal) {
   return {
     id,
     sourceItemId: nullableString(proposal.sourceItemId),
+    ...(nullableString(proposal.originalSourceItemId) ? { originalSourceItemId: nullableString(proposal.originalSourceItemId) } : {}),
+    ...(nullableString(proposal.originalSourceContextId) ? { originalSourceContextId: nullableString(proposal.originalSourceContextId) } : {}),
     sourceTitle: String(proposal.channel === 'outlook-draft'
       ? proposal.sourceTitle ?? 'Local proposal' : proposal.sourceTitle || 'Local proposal').trim(),
     sourceType: String(proposal.sourceType || 'FlightDeck').trim(),

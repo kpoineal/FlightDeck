@@ -689,6 +689,72 @@ async function openThreadContext(page, id = FIXTURE_ITEM_ID, action = null) {
   return menu;
 }
 
+async function threadMergeScenario(session, width) {
+  const { page } = session;
+  await page.setViewportSize({ width, height: 900 });
+  await openApp(session);
+  const mergeFixture = await page.evaluate(async () => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    const base = state.items.find(item => item.id === 'track_acme_renewal');
+    const custom = customText => ({ mode: 'custom', customText, selectedNextStep: '' });
+    state.items = [
+      { ...base, id: 'merge-source', title: 'Bass Pro pilot RDP blocker', summary: 'Five pilot machines need RDP testing.',
+        lifecycleStatus: 'in-progress', archived: false, workPlanChoice: custom('Source custom move'),
+        completedNextSteps: ['Source completed move'], evidenceLinks: [{ type: 'email', label: 'Pilot blocker', url: 'https://outlook.office.com/mail/deeplink/read/pilot-blocker' }] },
+      { ...base, id: 'merge-target', title: 'Bass Pro pilot migration', summary: 'Move five pilot machines.',
+        lifecycleStatus: 'in-progress', archived: false, workPlanChoice: custom('Keep this custom move'),
+        completedNextSteps: ['Destination completed move'], evidenceLinks: [{ type: 'email', label: 'Pilot migration', url: 'https://outlook.office.com/mail/deeplink/read/pilot-migration' }] },
+    ];
+    state.actionProposals = [];
+    state.deletedItemIds = [];
+    return state;
+  });
+  // Seed before the next renderer starts, so pending saves from the fixture page cannot overwrite it.
+  await page.addInitScript(state => {
+    if (sessionStorage.getItem('__mergeFixtureSeeded')) return;
+    localStorage.setItem('__flightdeck_browser_acceptance__:flightdeck.demo.v2', JSON.stringify(state));
+    sessionStorage.setItem('__mergeFixtureSeeded', '1');
+  }, mergeFixture);
+  await openApp(session, { reseed: false });
+  const sourceRow = () => page.locator('[data-thread-id="merge-source"]');
+  await openThreadContext(page, 'merge-source', 'Merge into…');
+  await expect(page.getByTestId('merge-picker')).toBeVisible();
+  await expect(page.getByTestId('merge-destination')).toHaveCount(1);
+  await page.getByTestId('merge-search').fill('does not exist');
+  await expect(page.getByTestId('merge-destination')).toHaveCount(0);
+  await page.getByTestId('merge-search').fill('pilot migration');
+  await expect(page.getByTestId('merge-destination')).toHaveCount(1);
+  await page.getByTestId('merge-destination').click();
+  await expect(page.getByTestId('confirm-modal')).toBeVisible();
+  await page.getByTestId('confirm-cancel').click();
+  await expect(sourceRow()).toBeVisible();
+  await openThreadContext(page, 'merge-source', 'Merge into…');
+  await page.getByTestId('merge-destination').click();
+  await page.evaluate(() => { window.__failNextStoreSet = true; });
+  await page.getByTestId('confirm-submit').click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Merge not confirmed' })).toBeVisible();
+  await expect(sourceRow()).toBeVisible();
+  await openThreadContext(page, 'merge-source', 'Merge into…');
+  await page.getByTestId('merge-destination').click();
+  await page.getByTestId('confirm-submit').click();
+  await page.waitForFunction(async () => {
+    const state = await window.workiq.storeGet('flightdeck.demo.v2');
+    return state.deletedItemIds.includes('merge-source') && !state.items.some(item => item.id === 'merge-source');
+  });
+  await openApp(session, { reseed: false });
+  assert.equal(await sourceRow().count(), 0);
+  const saved = await page.evaluate(async () => (await window.workiq.storeGet('flightdeck.demo.v2')).items.find(item => item.id === 'merge-target'));
+  assert.equal(saved.workPlanChoice.customText, 'Keep this custom move');
+  assert.equal(saved.mergedRecords[0].workPlanChoice.customText, 'Source custom move');
+  assert.equal(saved.evidenceLinks.length, 2);
+  assert.ok(saved.completedNextSteps.includes('Source completed move'));
+  assert.ok(saved.completedNextSteps.includes('Destination completed move'));
+  await page.locator('[data-thread-id="merge-target"]').click();
+  await expect(page.locator('.radar-thread-detail')).toContainText('Original custom next move: Source custom move');
+  assert.equal(await page.evaluate(() => window.__teamsSendCalls.length + window.__draftCalls.length), 0);
+  await assertHealthy(session, width <= 760 ? 'mobile' : 'desktop');
+}
+
 async function contextMenuAppearanceScenario(session) {
   const { page } = session;
   await openApp(session);
@@ -4186,6 +4252,8 @@ async function doneWhenEditingScenario(session, width) {
     await runScenario('scanner-delete-all', browser, rendererServer.baseUrl, scannerDeletionDeleteAllScenario);
     await runScenario('scanner-delete-unhydrated-archive', browser, rendererServer.baseUrl, scannerDeletionUnhydratedArchiveScenario);
     await runScenario('context-menu-appearance', browser, rendererServer.baseUrl, contextMenuAppearanceScenario);
+    await runScenario('thread-merge-desktop', browser, rendererServer.baseUrl, session => threadMergeScenario(session, 1440));
+    await runScenario('thread-merge-mobile', browser, rendererServer.baseUrl, session => threadMergeScenario(session, 390));
     await runScenario('context-menu-interaction', browser, rendererServer.baseUrl, contextMenuInteractionScenario);
     await runScenario('context-menu-persistence', browser, rendererServer.baseUrl, contextMenuPersistenceScenario);
     await runScenario('context-menu-delete', browser, rendererServer.baseUrl, contextMenuDeleteScenario);

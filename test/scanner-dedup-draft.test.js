@@ -17,7 +17,13 @@ const toastStub = `data:text/javascript,${encodeURIComponent(`
   export function showToast() {}
 `)}`;
 const jsonParserStub = `data:text/javascript,${encodeURIComponent(`
-  export async function runWorkiqJson() {
+  export async function runWorkiqJson(prompt) {
+    if (prompt.includes('\\nDATA:\\n')) {
+      const entries = JSON.parse(prompt.split('\\nDATA:\\n')[1]);
+      return { decisions: entries.map(entry => ({ findingId: entry.finding.id, decision: 'new',
+        candidateId: null, confidence: 'high', reason: 'Different deliverables despite related words.',
+        findingQuote: '', candidateQuote: '' })) };
+    }
     return globalThis.__scannerDedupPayloads?.shift() || { radarItems: [] };
   }
 `)}`;
