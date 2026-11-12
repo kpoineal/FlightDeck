@@ -32,7 +32,6 @@ let createActionEventId;
 let findActionProposalDuplicateGroups;
 let filterActionProposalsByView;
 let actionProposals;
-let actionsQueueOpen;
 let createActionProposal;
 let density;
 let get;
@@ -78,7 +77,6 @@ before(async () => {
   ({ get } = await import('svelte/store'));
   ({
     actionProposals,
-    actionsQueueOpen,
     density,
     history,
     items,
@@ -131,7 +129,6 @@ beforeEach(() => {
   actionProposals.set([]);
   history.set([]);
   items.set([]);
-  actionsQueueOpen.set(false);
   selectedProposalId.set(null);
   globalThis.window = {
     workiq: {
@@ -650,7 +647,6 @@ describe('action proposal persistence', () => {
     await loadPersistentState();
     assert.equal(get(actionProposals)[0].state, 'Approved');
 
-    actionsQueueOpen.set(true);
     selectedProposalId.set(proposal.id);
     await savePersistentState();
 
@@ -963,17 +959,14 @@ describe('permanent action proposal deletion', () => {
 
   it('keeps mounted audit-only consumers out of counts, approvals, selection, management, and source navigation', () => {
     const componentRoot = path.join(__dirname, '..', 'src', 'svelte', 'components');
-    const actionQueue = fs.readFileSync(path.join(componentRoot, 'ActionQueue.svelte'), 'utf8');
+    const savedDrafts = fs.readFileSync(path.join(componentRoot, 'SavedDrafts.svelte'), 'utf8');
     const todayView = fs.readFileSync(path.join(componentRoot, 'TodayView.svelte'), 'utf8');
     const topbar = fs.readFileSync(path.join(componentRoot, 'Topbar.svelte'), 'utf8');
 
-    assert.match(actionQueue, /visibleProposals = \$derived\(filterActionProposalsByView\(\$actionProposals, activeView\)\)/);
-    assert.match(actionQueue, /selected = \$derived\(visibleProposals\.find\(/);
-    assert.match(actionQueue, /function selectProposal\(id\)[\s\S]*?proposal\?\.auditOnly === true\) return;/);
-    assert.match(actionQueue, /function returnToSource\(\)[\s\S]*?selected\.auditOnly === true\) return;/);
-    assert.match(actionQueue, /function managementForProposal\(proposal\)[\s\S]*?proposal\.auditOnly === true\) return null;/);
-    assert.match(todayView, /approvals = \$derived\(\$actionProposals\.filter\(\(proposal\) => proposal\.auditOnly !== true/);
-    assert.match(topbar, /actionCount = \$derived\(\$actionProposals\.filter\(\(proposal\) => proposal\.auditOnly !== true/);
+    assert.match(savedDrafts, /visible = \$derived\(filterActionProposalsByView\(scoped, activeView\)\)/);
+    assert.match(savedDrafts, /selected = \$derived\(scoped\.find\([\s\S]*?!entry\.auditOnly/);
+    assert.match(todayView, /<SavedDrafts \/>/);
+    assert.doesNotMatch(topbar, /actionCount|actionsQueue/);
   });
 
   it('normalizes durable dispatch status and classifies effect without trusting localOnly', () => {

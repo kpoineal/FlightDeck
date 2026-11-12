@@ -29,7 +29,7 @@ test('Inbox bulk intent is aggregate, with uniform submenu indicators and all-ta
 
 test('Radar guards draft generation, review and editor visibility during multi-selection', () => {
   const source = fs.readFileSync(new URL('../src/svelte/components/RadarView.svelte', import.meta.url), 'utf8');
-  for (const name of ['draftMessage', 'reviewEmailProposal', 'openEmailActions', 'sendTeamsDraft']) {
+  for (const name of ['draftMessage', 'reviewEmailProposal', 'reviewSavedProposal', 'sendTeamsDraft']) {
     const body = source.match(new RegExp(`(?:async )?function ${name}\\(.*?\\n  \\}`, 's'))?.[0] || '';
     assert.match(body, /if \([^)]*multipleSelected[^)]*\) return/, `${name} must not operate on a multi-selection`);
   }
@@ -190,11 +190,11 @@ test('RadarView external navigation focuses and scrolls the matching rendered ro
   assert.doesNotMatch(source, /window\.workiq\?\.getColdItems|window\.workiq\.getColdItems/);
 });
 
-test('Today, History, and Action Queue retain the shared Radar external navigation request', () => {
+test('Today, History, and saved drafts retain the shared Radar external navigation request', () => {
   const sources = [
     fs.readFileSync(new URL('../src/svelte/components/TodayView.svelte', import.meta.url), 'utf8'),
     fs.readFileSync(new URL('../src/svelte/components/HistoryView.svelte', import.meta.url), 'utf8'),
-    fs.readFileSync(new URL('../src/svelte/components/ActionQueue.svelte', import.meta.url), 'utf8'),
+    fs.readFileSync(new URL('../src/svelte/lib/saved-drafts.js', import.meta.url), 'utf8'),
   ];
 
   for (const source of sources) {

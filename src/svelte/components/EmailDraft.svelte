@@ -3,7 +3,7 @@
   import { buildOutlookDraftPayload, updateActionProposal } from '../lib/action-proposals.js';
   import { createOutlookDraftProposal } from '../lib/outlook-draft.js';
 
-  let { proposalId, onclose, onopenActions, blocked = false } = $props();
+  let { proposalId, onclose, blocked = false } = $props();
   let proposal = $derived($actionProposals.find((entry) => entry.id === proposalId));
   let editable = $derived(canEdit(proposal));
   let creating = $derived(proposal?.state === 'Executing');
@@ -70,7 +70,6 @@
         on:click={() => createOutlookDraftProposal(proposalId, { reviewed: true, createDraft: window.workiq?.createOutlookDraft })}>
         {creating ? 'Creating Outlook draft...' : proposal.state === 'Succeeded' ? 'Outlook draft saved' : 'Create Outlook draft'}
       </button>
-      <button type="button" class="small-btn" data-testid="email-open-actions" on:click={onopenActions}>Open in Actions</button>
       <button type="button" class="small-btn" disabled={creating} on:click={onclose}>Close</button>
     </div>
     {#if proposal.outcome}

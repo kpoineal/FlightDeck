@@ -91,7 +91,7 @@
         <button class="small-btn primary" class:is-loading={generating} disabled={generating || !$connected} on:click={handleGenerate}>
           {generating ? 'Generating...' : buttonLabel}
         </button>
-        <button class="small-btn" on:click={(event) => onpropose?.({ meetingId: meeting.id, initiator: event.currentTarget })}>Review follow-up</button>
+        <button class="small-btn" on:click={(event) => onpropose?.({ meetingId: meeting.id, initiator: event.currentTarget })}>Prepare follow-up in Radar</button>
       </div>
       {#if generating}
         <div class="meeting-card__generating">Generating briefing…</div>

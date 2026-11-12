@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { mode, connected, actionProposals, actionsQueueOpen, openActionsQueue } from '../lib/stores.js';
+  import { mode, connected } from '../lib/stores.js';
   import { queuePresentation, watchWorkiqQueue } from '../lib/workiq-queue-status.js';
   import { setMode } from '../lib/actions.js';
   import SearchOverlay from './SearchOverlay.svelte';
@@ -39,7 +39,6 @@
   let queueStatus = $state(null);
   onMount(() => watchWorkiqQueue(window.workiq, (snapshot) => { queueStatus = snapshot; }));
   let queueView = $derived(queuePresentation(queueStatus, $connected));
-  let actionCount = $derived($actionProposals.filter((proposal) => proposal.auditOnly !== true && !proposal.archivedAt).length);
 </script>
 
 <header class="topbar">
@@ -77,10 +76,6 @@
       on:click={() => handleModeClick('Radar')}>Radar</button>
     <button type="button" class="mode-btn" class:active={$mode === 'Briefings'} aria-pressed={$mode === 'Briefings'}
       on:click={() => handleModeClick('Briefings')}>Briefings</button>
-    <button type="button" class="mode-btn action-nav-btn" aria-haspopup="dialog"
-      aria-expanded={$actionsQueueOpen} on:click={(event) => openActionsQueue(event.currentTarget)}>
-      Actions <span class="action-nav-count">{actionCount}</span>
-    </button>
     <button type="button" class="mode-btn" class:active={$mode === 'History'} aria-pressed={$mode === 'History'}
       on:click={() => handleModeClick('History')}>History</button>
   </nav>

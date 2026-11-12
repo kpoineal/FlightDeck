@@ -1,11 +1,12 @@
 <script>
   import { onMount, tick } from 'svelte';
-  import { actionProposals, coldItems, deletedItemIds, expandedBriefingMeetingIds, items, meetings, mode, openActionsQueue, scanners, selectedProposalId, repositoryRevision } from '../lib/stores.js';
+  import { coldItems, deletedItemIds, expandedBriefingMeetingIds, items, meetings, mode, scanners, repositoryRevision } from '../lib/stores.js';
   import { usesRepository } from '../lib/persistence.js';
   import { safeDate } from '../lib/utils.js';
   import { navigateToRadarItem } from '../lib/radar-navigation.js';
   import { buildTodayOverview, formatTodayTitle, todaySelectionItems } from '../lib/today.js';
   import TodayThreadCard from './TodayThreadCard.svelte';
+  import SavedDrafts from './SavedDrafts.svelte';
 
   const eventKinds = [
     { key: 'discovery', label: 'New signals' }, { key: 'update', label: 'Updates' },
@@ -56,9 +57,6 @@
   let schedule = $derived([...dashboard.schedule].sort((left, right) =>
     Number(Date.parse(left.endAt || left.startAt) < now) - Number(Date.parse(right.endAt || right.startAt) < now)
       || Date.parse(left.startAt) - Date.parse(right.startAt)));
-  let approvals = $derived($actionProposals.filter((proposal) => proposal.auditOnly !== true
-    && !proposal.archivedAt && !$deletedItemIds.includes(proposal.sourceItemId)
-    && ['Drafted', 'Awaiting review', 'Approved'].includes(proposal.state)));
   let progress = $derived([
     ...dashboard.completed.map(entry => ({ ...entry, id: `thread:${entry.item.id}`, label: 'Thread completed' })),
     ...dashboard.confirmed.map(entry => ({
@@ -125,12 +123,6 @@
     selectBucket('status', bucket, event.currentTarget);
   }
 
-  function reviewDrafts(initiator) {
-    if (!approvals.length) return;
-    selectedProposalId.set(approvals[0].id);
-    openActionsQueue(initiator);
-  }
-
   async function openMeeting(meetingId) {
     expandedBriefingMeetingIds.update(ids => ids.includes(meetingId) ? ids : [...ids, meetingId]);
     mode.set('Briefings');
@@ -150,10 +142,11 @@
       <p>{activeCount} active threads · {dueToday} deadlines remaining today · {dashboard.schedule.length} meetings on your saved calendar.</p>
     </div>
     <div class="command-buttons">
-      <button type="button" class="small-btn" disabled={!approvals.length} onclick={event => reviewDrafts(event.currentTarget)}>Review drafts ({approvals.length})</button>
       <button type="button" class="small-btn" onclick={() => mode.set('Radar')}>Open Radar</button>
     </div>
   </header>
+
+  <SavedDrafts />
 
   <dl class="today-stats" aria-label="Today's work at a glance">
     <div><dt>Active threads</dt><dd data-testid="today-active-count">{activeCount}</dd><dd class="today-stat-caption">Excludes snoozed and finished work</dd></div>

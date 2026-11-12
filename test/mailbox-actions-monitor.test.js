@@ -97,7 +97,7 @@ describe('shared Outlook draft execution', () => {
     return proposal;
   }
 
-  it('uses the same pending operation and audited review for inline and Actions creation', async () => {
+  it('uses the same pending operation and audited review for current and saved email creation', async () => {
     const proposal = seed();
     const calls = [];
     let resolve;
@@ -162,6 +162,22 @@ describe('shared Outlook draft execution', () => {
     } finally {
       threadComposer.forget(proposal.sourceItemId);
     }
+  });
+
+  it('retains thread and global activity and step completion when executing a saved cold-thread email', async () => {
+    const proposal = seed({ sourceNextStep: 'Confirm the deployment window.' });
+    const cold = get(items)[0];
+    items.set([]);
+    coldItems.set([cold]);
+    const completed = await createOutlookDraftProposal(proposal.id, {
+      reviewed: true, createDraft: async () => ({ ok: true, action: 'outlook-draft-created' }),
+    });
+    assert.equal(completed.state, 'Succeeded');
+    const restored = get(items).find(item => item.id === cold.id);
+    assert.equal(restored.lifecycleStatus, cold.lifecycleStatus, 'Communication completed the whole thread');
+    assert.ok(restored.completedNextSteps.includes(proposal.sourceNextStep));
+    assert.equal(restored.updateHistory.filter(entry => entry.proposalId === proposal.id && entry.event === 'succeeded').length, 1);
+    assert.equal(get(history).filter(entry => entry.payload?.proposalId === proposal.id && entry.payload?.event === 'succeeded').length, 1);
   });
 
   it('keeps cancelled or uncertain email drafts open and leaves their next moves available', async () => {

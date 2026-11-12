@@ -35,13 +35,6 @@ export const activeOperations = writable(new Map());
 /** Backward-compatible loading flag — true when any operation is active */
 export const loading = derived(activeOperations, ($ops) => $ops.size > 0);
 export const mode = writable('Today');
-export const actionsQueueOpen = writable(false);
-export const actionsQueueFocusOrigin = writable(null);
-export function openActionsQueue(initiator = null) {
-  const activeElement = typeof document === 'undefined' ? null : document.activeElement;
-  actionsQueueFocusOrigin.set(initiator || activeElement);
-  actionsQueueOpen.set(true);
-}
 export const selectedProposalId = writable(null);
 export const density = writable('full');
 export const filter = writable('all');
